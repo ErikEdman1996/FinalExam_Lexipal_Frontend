@@ -661,6 +661,19 @@ export const updateBook = async (bookId: string | number, request: UpdateBookReq
     }
 };
 
+export const deleteBook = async (bookId: string | number) => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/books/${bookId}`, {
+            method: 'DELETE',
+            headers: await buildAuthHeaders(),
+        });
+        if (!res.ok) throw new Error('Failed to delete book');
+    } catch (error) {
+        console.error('Error deleting book:', error);
+        throw error;
+    }
+};
+
 
 export const createSession = async (payload: CreateSessionPayload) => {
     try {

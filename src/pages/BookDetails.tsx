@@ -1,14 +1,15 @@
-import { useEffect, useState } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Clock, BookOpen, Play } from 'lucide-react';
-import { ProgressBar } from '../components/ProgressBar';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate, useParams } from 'react-router-dom';
+import { ArrowLeft, Clock, FileText, Play, Trash2 } from 'lucide-react';
 import { Button } from '../components/Button';
-import { getBook, getSessionsByBook, type ApiBook, type ApiSession } from '../api/api';
+import { deleteBook, getBook, getSessionsByBook, type ApiBook, type ApiSession } from '../api/api';
 
 interface SessionData {
   id: string;
   date: string;
-  duration: number;
+  createdAtMs: number;
+  durationSeconds: number;
+  pagesRead: number;
   startPage: number;
   endPage: number;
   reflection: string;
@@ -18,25 +19,35 @@ function formatSessionDate(session: ApiSession) {
   const parsed = new Date(session.sessionDate);
 
   if (Number.isNaN(parsed.getTime())) {
-    return session.sessionDate;
+    return session.sessionDate || 'Unknown date';
   }
 
   return parsed.toLocaleDateString('en-US', {
-    month: 'long',
+    month: 'short',
     day: 'numeric',
     year: 'numeric',
   });
 }
 
 function mapApiSessionToSessionData(session: ApiSession): SessionData {
+  const parsedDate = new Date(session.sessionDate);
+
   return {
     id: String(session.id),
     date: formatSessionDate(session),
-    duration: Math.ceil(session.durationSeconds / 60),
+    createdAtMs: Number.isNaN(parsedDate.getTime()) ? 0 : parsedDate.getTime(),
+    durationSeconds: Math.max(0, session.durationSeconds),
+    pagesRead: Math.max(0, session.pagesRead || session.endPage - session.startPage),
     startPage: session.startPage,
     endPage: session.endPage,
-    reflection: session.reflection,
+    reflection: session.reflection?.trim() || '',
   };
+}
+
+function formatDuration(totalSeconds: number) {
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}m ${seconds}s`;
 }
 
 function calculateCompletionPercentage(book: ApiBook) {
@@ -44,23 +55,28 @@ function calculateCompletionPercentage(book: ApiBook) {
     return 0;
   }
 
-  return Math.round((book.readPages / book.totalPages) * 100);
+  return (book.readPages / book.totalPages) * 100;
 }
 
 export default function BookDetails() {
   const { bookId } = useParams();
   const navigate = useNavigate();
-  const [expandedReflection, setExpandedReflection] = useState<string | null>(null);
   const [book, setBook] = useState<ApiBook | null>(null);
   const [sessions, setSessions] = useState<SessionData[]>([]);
+  const [selectedSession, setSelectedSession] = useState<SessionData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
+    let isMounted = true;
+
     const loadBookDetails = async () => {
       if (!bookId) {
-        setErrorMessage('Missing book id.');
-        setIsLoading(false);
+        if (isMounted) {
+          setErrorMessage('Missing book id.');
+          setIsLoading(false);
+        }
         return;
       }
 
@@ -73,45 +89,73 @@ export default function BookDetails() {
           getSessionsByBook(bookId),
         ]);
 
-        const completedSessions = sessionsResponse.filter((session) => session.status === 'COMPLETED');
+        const completedSessions = sessionsResponse
+          .filter((session) => session.status === 'COMPLETED')
+          .map(mapApiSessionToSessionData)
+          .sort((left, right) => right.createdAtMs - left.createdAtMs);
 
-        setBook(bookResponse);
-        setSessions(completedSessions.map(mapApiSessionToSessionData));
+        if (isMounted) {
+          setBook(bookResponse);
+          setSessions(completedSessions);
+          setSelectedSession(null);
+        }
       } catch (error) {
         console.error('Error loading book details:', error);
-        setErrorMessage('Could not load book details.');
+
+        if (isMounted) {
+          setErrorMessage('Could not load book details.');
+        }
       } finally {
-        setIsLoading(false);
+        if (isMounted) {
+          setIsLoading(false);
+        }
       }
     };
 
-    loadBookDetails();
+    void loadBookDetails();
+
+    return () => {
+      isMounted = false;
+    };
   }, [bookId]);
-  
-  const formatDuration = (minutes: number) => {
-    return `${minutes} min${minutes !== 1 ? 's' : ''}`;
+
+  const handleDeleteBook = async () => {
+    if (!bookId || isDeleting) {
+      return;
+    }
+
+    try {
+      setIsDeleting(true);
+      await deleteBook(bookId);
+      navigate('/library');
+    } catch (error) {
+      console.error('Error deleting book:', error);
+      setErrorMessage('Could not delete this book right now.');
+      setIsDeleting(false);
+    }
   };
-  
-  const startNewSession = () => {
-    navigate(`/book/${bookId}/session/new`);
-  };
+
+  const completionPercentage = useMemo(
+    () => (book ? calculateCompletionPercentage(book) : 0),
+    [book],
+  );
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#FAFBFC] pb-6">
-        <div className="max-w-[480px] mx-auto px-6 py-10 text-center text-[#6C757D]">Loading book details...</div>
+      <div className="min-h-screen bg-[linear-gradient(180deg,#F7FBF8_0%,#F6F9FF_55%,#F8F5FF_100%)] pb-24">
+        <div className="mx-auto max-w-lg px-4 py-16 text-center text-[#6A7687]">Loading book details...</div>
       </div>
     );
   }
 
   if (errorMessage || !book) {
     return (
-      <div className="min-h-screen bg-[#FAFBFC] pb-6">
-        <div className="max-w-[480px] mx-auto px-6 py-10 text-center">
-          <p className="text-[#FF6B6B] text-lg">{errorMessage ?? 'Book not found.'}</p>
+      <div className="min-h-screen bg-[linear-gradient(180deg,#F7FBF8_0%,#F6F9FF_55%,#F8F5FF_100%)] pb-24">
+        <div className="mx-auto max-w-lg px-4 py-16 text-center">
+          <p className="text-lg text-[#FF6B6B]">{errorMessage ?? 'Book not found.'}</p>
           <button
             onClick={() => navigate('/library')}
-            className="mt-4 text-[#6C757D] hover:text-[#2C3E50]"
+            className="mt-4 text-sm text-[#6A7687] transition-colors hover:text-[#22324A]"
           >
             Go back to Library
           </button>
@@ -120,116 +164,118 @@ export default function BookDetails() {
     );
   }
 
-  const completionPercentage = calculateCompletionPercentage(book);
-  
   return (
-    <div className="min-h-screen bg-[#FAFBFC] pb-6">
-      {/* Header */}
-      <div className="bg-white border-b border-[rgba(0,0,0,0.08)] sticky top-0 z-10">
-        <div className="max-w-[480px] mx-auto px-6 py-4">
-          <div className="flex items-center gap-4 mb-4">
-            <button
-              onClick={() => navigate('/library')}
-              className="w-10 h-10 rounded-full hover:bg-[#F0F2F5] flex items-center justify-center transition-colors"
-            >
-              <ArrowLeft size={20} className="text-[#2C3E50]" />
-            </button>
-            <div className="flex-1">
-              <h1 className="font-semibold text-[#2C3E50]">{book.title}</h1>
-              <p className="text-sm text-[#6C757D]">{book.author}</p>
+    <div className="min-h-screen bg-[linear-gradient(180deg,#F7FBF8_0%,#F6F9FF_55%,#F8F5FF_100%)] pb-24">
+      <div className="mx-auto max-w-lg px-4 py-6">
+        <button
+          onClick={() => navigate('/library')}
+          className="inline-flex items-center gap-2 text-sm text-[#6A7687] transition-colors hover:text-[#22324A]"
+        >
+          <ArrowLeft size={16} />
+          Back
+        </button>
+
+        <section className="mt-5 rounded-[30px] border border-[rgba(36,52,71,0.08)] bg-white/92 p-6 shadow-[0_18px_36px_rgba(31,41,55,0.07)]">
+          <h1 className="text-3xl font-semibold tracking-[-0.03em] text-[#22324A]">{book.title}</h1>
+          <p className="mt-1 text-sm text-[#6A7687]">{book.author}</p>
+
+          <div className="mt-5">
+            <div className="flex items-center justify-between text-sm text-[#6A7687]">
+              <span>{book.readPages} / {book.totalPages} pages</span>
+              <span>{Math.round(completionPercentage)}%</span>
             </div>
-          </div>
-          
-          {/* Overall Progress */}
-          <div className="mb-4">
-            <div className="flex justify-between text-sm mb-2">
-              <span className="text-[#6C757D]">Overall Progress</span>
-              <span className="text-[#A8E6CF] font-medium">{completionPercentage}%</span>
-            </div>
-            <ProgressBar current={book.readPages} total={book.totalPages} color="mint" height="lg" />
-            <p className="text-xs text-[#6C757D] mt-2">
-              {book.readPages} / {book.totalPages} pages
-            </p>
-          </div>
-          
-          <Button variant="primary" className="w-full h-12" onClick={startNewSession}>
-            <Play size={20} className="mr-2" />
-            Start New Session
-          </Button>
-        </div>
-      </div>
-      
-      {/* Session Timeline */}
-      <div className="max-w-[480px] mx-auto px-6 py-6">
-        <h2 className="text-lg font-semibold text-[#2C3E50] mb-4">Session History</h2>
-        
-        {sessions.length === 0 ? (
-          <div className="text-center py-10">
-            <p className="text-[#6C757D]">No sessions yet for this book.</p>
-          </div>
-        ) : (
-        <div className="space-y-4">
-          {sessions.map((session) => {
-            const pagesRead = Math.max(0, session.endPage - session.startPage);
-            const isExpanded = expandedReflection === session.id;
-            const reflectionPreview = session.reflection.slice(0, 100);
-            const needsTruncation = session.reflection.length > 100;
-            
-            return (
+            <div className="mt-2 h-3 overflow-hidden rounded-full bg-[#E8EEF5]">
               <div
-                key={session.id}
-                className="bg-white rounded-[24px] p-5 shadow-[0_2px_8px_rgba(0,0,0,0.04)] border border-[rgba(0,0,0,0.05)]"
-              >
-                {/* Session Header */}
-                <div className="flex items-start justify-between mb-4">
-                  <div>
-                    <h3 className="font-semibold text-[#2C3E50]">Session {session.id}</h3>
-                    <p className="text-sm text-[#6C757D]">{session.date}</p>
-                  </div>
-                  <div className="flex items-center gap-1 text-[#A8E6CF]">
-                    <Clock size={16} />
-                    <span className="text-sm font-medium">{formatDuration(session.duration)}</span>
-                  </div>
-                </div>
-                
-                {/* Progress */}
-                <div className="bg-[#F8F9FA] rounded-[16px] p-4 mb-4">
-                  <div className="flex justify-between text-sm mb-2">
-                    <span className="text-[#6C757D]">Pages {session.startPage} - {session.endPage}</span>
-                    <span className="text-[#A8E6CF] font-medium">{pagesRead} pages</span>
-                  </div>
-                  <ProgressBar
-                    current={pagesRead}
-                    total={book.totalPages}
-                    color="blue"
-                    height="sm"
-                  />
-                </div>
-                
-                {/* Reflection */}
-                <div className="mb-4">
-                  <h4 className="text-sm font-medium text-[#2C3E50] mb-2 flex items-center gap-2">
-                    <BookOpen size={16} className="text-[#D4C5F9]" />
-                    Reflection
-                  </h4>
-                  <p className="text-sm text-[#6C757D] leading-relaxed">
-                    {isExpanded ? session.reflection : reflectionPreview}
-                    {needsTruncation && !isExpanded && '...'}
-                  </p>
-                  {needsTruncation && (
-                    <button
-                      onClick={() => setExpandedReflection(isExpanded ? null : session.id)}
-                      className="text-sm text-[#A8E6CF] hover:text-[#C8F5E1] mt-2 font-medium"
-                    >
-                      {isExpanded ? 'Read Less' : 'Read More'}
-                    </button>
-                  )}
-                </div>
-                
+                className="h-full rounded-full bg-[linear-gradient(90deg,#A8E6CF_0%,#92D9C8_100%)] transition-[width] duration-500"
+                style={{ width: `${Math.max(completionPercentage, 4)}%` }}
+              />
+            </div>
+          </div>
+
+          <div className="mt-5 flex gap-3">
+            <Button
+              onClick={() => navigate(`/book/${book.id}/session/new`)}
+              className="flex-1 rounded-full shadow-[0_12px_24px_rgba(76,167,132,0.18)]"
+            >
+              <span className="inline-flex items-center gap-2">
+                <Play size={16} />
+                Start Session
+              </span>
+            </Button>
+            <button
+              onClick={() => void handleDeleteBook()}
+              disabled={isDeleting}
+              className="inline-flex h-11 w-11 items-center justify-center rounded-full border border-[#F5C6BF] bg-white text-[#C96C61] transition-colors hover:bg-[#FFF5F3] disabled:cursor-not-allowed disabled:opacity-60"
+              aria-label="Delete book"
+            >
+              <Trash2 size={16} />
+            </button>
+          </div>
+        </section>
+
+        {selectedSession ? (
+          <section className="mt-6 rounded-[28px] border border-[rgba(36,52,71,0.08)] bg-white/90 p-5 shadow-[0_16px_32px_rgba(31,41,55,0.06)]">
+            <button
+              onClick={() => setSelectedSession(null)}
+              className="inline-flex items-center gap-2 text-sm text-[#6A7687] transition-colors hover:text-[#22324A]"
+            >
+              <ArrowLeft size={14} />
+              All sessions
+            </button>
+
+            <h2 className="mt-4 text-xl font-semibold text-[#22324A]">Session Details</h2>
+
+            <div className="mt-4 grid grid-cols-2 gap-3 text-center">
+              <div className="rounded-[20px] bg-[#DCEFFF]/60 p-4">
+                <Clock size={16} className="mx-auto mb-2 text-[#4B93D1]" />
+                <p className="text-base font-semibold text-[#22324A]">{formatDuration(selectedSession.durationSeconds)}</p>
+                <p className="mt-1 text-xs text-[#6A7687]">Duration</p>
               </div>
-            );
-          })}
-        </div>
+              <div className="rounded-[20px] bg-[#DFF5EA]/60 p-4">
+                <FileText size={16} className="mx-auto mb-2 text-[#3D9B7A]" />
+                <p className="text-base font-semibold text-[#22324A]">{selectedSession.pagesRead}</p>
+                <p className="mt-1 text-xs text-[#6A7687]">Pages</p>
+              </div>
+            </div>
+
+            <div className="mt-4 rounded-[22px] bg-[#F7F9FC] p-4">
+              <p className="text-xs uppercase tracking-[0.22em] text-[#8A94A6]">Reflection</p>
+              <p className="mt-3 text-sm leading-relaxed text-[#4B647C]">
+                {selectedSession.reflection || 'No reflection recorded.'}
+              </p>
+            </div>
+          </section>
+        ) : (
+          <section className="mt-6 space-y-3">
+            <h2 className="text-xs font-semibold uppercase tracking-[0.24em] text-[#8A94A6]">
+              Sessions ({sessions.length})
+            </h2>
+
+            {sessions.length === 0 ? (
+              <div className="rounded-[26px] border border-[rgba(36,52,71,0.08)] bg-white/88 px-4 py-8 text-center text-sm text-[#6A7687] shadow-[0_12px_26px_rgba(31,41,55,0.05)]">
+                No sessions yet. Start reading to build your history.
+              </div>
+            ) : (
+              sessions.map((session, index) => (
+                <button
+                  key={session.id}
+                  onClick={() => setSelectedSession(session)}
+                  className="flex w-full items-center gap-4 rounded-[24px] border border-[rgba(36,52,71,0.08)] bg-white/92 p-4 text-left shadow-[0_12px_26px_rgba(31,41,55,0.05)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-white"
+                  style={{ animationDelay: `${index * 50}ms` }}
+                >
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#FFE6D5] text-sm font-semibold text-[#B56A42]">
+                    {sessions.length - index}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="text-sm font-medium text-[#22324A]">
+                      {formatDuration(session.durationSeconds)} • {session.pagesRead} pages
+                    </p>
+                    <p className="mt-1 text-xs text-[#6A7687]">{session.date}</p>
+                  </div>
+                </button>
+              ))
+            )}
+          </section>
         )}
       </div>
     </div>

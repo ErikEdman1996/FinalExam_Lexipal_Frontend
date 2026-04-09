@@ -1,13 +1,14 @@
 import { useEffect, useState, type ComponentType } from 'react';
-import { BookMarked, CalendarDays, Flame, Sparkles, Target, TrendingUp } from 'lucide-react';
+import { BookOpen, Brain, Flame, Target, Trophy, Zap } from 'lucide-react';
 import { BottomNav } from '../components/BottomNav';
 import {
   getProfile,
   type DailyActivityReadResponseDTO,
   type ProfileReadResponseDTO,
   type ProfileStatsResponseDTO,
-  type StreakMetaDataReadResponseDTO,
 } from '../api/api';
+
+const XP_PER_LEVEL = 100;
 
 const formatMemberSince = (value: string) => {
   const parsed = new Date(value);
@@ -31,7 +32,6 @@ const formatActivityDate = (value: string) => {
   }
 
   return parsed.toLocaleDateString('en-US', {
-    weekday: 'short',
     month: 'short',
     day: 'numeric',
   });
@@ -56,74 +56,63 @@ const isNewUserProfile = (stats: ProfileStatsResponseDTO) => {
   );
 };
 
+const getLevelMeta = (totalXp: number) => {
+  const safeXp = Math.max(0, totalXp);
+  const level = Math.floor(safeXp / XP_PER_LEVEL) + 1;
+  const xpIntoLevel = safeXp % XP_PER_LEVEL;
+  const progressPercent = (xpIntoLevel / XP_PER_LEVEL) * 100;
+
+  return {
+    level,
+    xpIntoLevel,
+    progressPercent,
+  };
+};
+
 interface ProfileStatCardProps {
   label: string;
-  value: number;
-  accentClassName: string;
+  value: string | number;
   icon: ComponentType<{ size?: number; className?: string }>;
+  iconWrapClassName: string;
+  iconClassName: string;
+  delayMs: number;
 }
 
-function ProfileStatCard({ label, value, accentClassName, icon: Icon }: ProfileStatCardProps) {
+function ProfileStatCard({
+  label,
+  value,
+  icon: Icon,
+  iconWrapClassName,
+  iconClassName,
+  delayMs,
+}: ProfileStatCardProps) {
   return (
-    <div className={`rounded-[26px] border p-5 bg-gradient-to-br shadow-[0_10px_24px_rgba(15,23,42,0.04)] ${accentClassName}`}>
-      <div className="w-11 h-11 rounded-[16px] bg-white/75 flex items-center justify-center">
-        <Icon size={20} className="text-[#2C3E50]" />
+    <div
+      className="rounded-[28px] border border-[rgba(36,52,71,0.08)] bg-white/90 p-5 shadow-[0_14px_30px_rgba(31,41,55,0.06)]"
+      style={{ animationDelay: `${delayMs}ms` }}
+    >
+      <div className={`flex h-12 w-12 items-center justify-center rounded-[16px] ${iconWrapClassName}`}>
+        <Icon size={22} className={iconClassName} />
       </div>
-      <p className="text-sm text-[#52606D] mt-4">{label}</p>
-      <p className="text-3xl font-semibold text-[#2C3E50] mt-1">{value}</p>
+      <p className="mt-5 text-[2rem] font-semibold leading-none text-[#22324A]">{value}</p>
+      <p className="mt-2 text-sm text-[#6A7687]">{label}</p>
     </div>
   );
 }
 
-interface StreakCardProps {
-  streak: StreakMetaDataReadResponseDTO | null;
+interface DetailCardProps {
+  title: string;
+  value: string;
+  description: string;
 }
 
-function StreakCard({ streak }: StreakCardProps) {
-  const hasStreakData = streak && (streak.currentStreak > 0 || streak.longestStreak > 0 || !!streak.lastActivityDate);
-
+function DetailCard({ title, value, description }: DetailCardProps) {
   return (
-    <section className="rounded-[32px] bg-gradient-to-br from-[#FFF4EA] via-[#FFE9D7] to-[#FFE1C8] border border-[rgba(255,176,109,0.22)] p-6 shadow-[0_14px_32px_rgba(180,92,30,0.08)]">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs uppercase tracking-[0.22em] text-[#A1632A]">Streak</p>
-          <h2 className="text-2xl font-semibold text-[#2C3E50] mt-2">Keep your reading fire alive</h2>
-        </div>
-        <div className="w-14 h-14 rounded-[20px] bg-white/70 flex items-center justify-center shrink-0">
-          <Flame size={24} className="text-[#C7661F]" />
-        </div>
-      </div>
-
-      {hasStreakData ? (
-        <>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-6">
-            <div className="rounded-[22px] bg-white/72 p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-[#A1632A]">Current</p>
-              <p className="text-3xl font-semibold text-[#2C3E50] mt-2">{streak?.currentStreak ?? 0}</p>
-              <p className="text-sm text-[#6C757D] mt-1">day streak</p>
-            </div>
-            <div className="rounded-[22px] bg-white/72 p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-[#A1632A]">Longest</p>
-              <p className="text-3xl font-semibold text-[#2C3E50] mt-2">{streak?.longestStreak ?? 0}</p>
-              <p className="text-sm text-[#6C757D] mt-1">best run</p>
-            </div>
-            <div className="rounded-[22px] bg-white/72 p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-[#A1632A]">Last Active</p>
-              <p className="text-lg font-semibold text-[#2C3E50] mt-2">
-                {streak?.lastActivityDate ? formatActivityDate(streak.lastActivityDate) : 'No activity yet'}
-              </p>
-            </div>
-          </div>
-        </>
-      ) : (
-        <div className="rounded-[24px] bg-white/72 p-5 mt-6">
-          <p className="text-[#2C3E50] font-medium">No streak yet</p>
-          <p className="text-sm text-[#6C757D] mt-2 leading-relaxed">
-            Complete reading sessions on consecutive days to start building your streak.
-          </p>
-        </div>
-      )}
-    </section>
+    <div className="rounded-[26px] border border-[rgba(36,52,71,0.08)] bg-white/88 p-5 shadow-[0_12px_26px_rgba(31,41,55,0.05)]">
+      <p className="text-xs uppercase tracking-[0.22em] text-[#8A94A6]">{title}</p>
+      <p className="mt-3 text-lg font-semibold text-[#22324A]">{value}</p>
+      <p className="mt-2 text-sm leading-relaxed text-[#6A7687]">{description}</p>
+    </div>
   );
 }
 
@@ -133,51 +122,38 @@ interface RecentActivitySectionProps {
 
 function RecentActivitySection({ activities }: RecentActivitySectionProps) {
   return (
-    <section className="rounded-[32px] bg-white border border-[rgba(0,0,0,0.05)] p-6 shadow-[0_12px_28px_rgba(15,23,42,0.04)]">
+    <section className="rounded-[30px] border border-[rgba(36,52,71,0.08)] bg-white/90 p-6 shadow-[0_16px_34px_rgba(31,41,55,0.06)]">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-xs uppercase tracking-[0.22em] text-[#7B8794]">Recent Activity</p>
-          <h2 className="text-2xl font-semibold text-[#2C3E50] mt-2">Your latest reading milestones</h2>
+          <p className="text-xs uppercase tracking-[0.24em] text-[#8A94A6]">Recent Activity</p>
+          <h2 className="mt-2 text-2xl font-semibold text-[#22324A]">Latest milestones</h2>
         </div>
-        <div className="w-12 h-12 rounded-[18px] bg-[#EEF7F3] flex items-center justify-center shrink-0">
-          <TrendingUp size={20} className="text-[#2D725B]" />
+        <div className="flex h-12 w-12 items-center justify-center rounded-[18px] bg-[#FDECD9]">
+          <Zap size={20} className="text-[#DD8A3D]" />
         </div>
       </div>
 
       {activities.length === 0 ? (
-        <div className="rounded-[24px] bg-[#F8F9FA] p-5 mt-6">
-          <p className="text-[#2C3E50] font-medium">No recent activity yet</p>
-          <p className="text-sm text-[#6C757D] mt-2 leading-relaxed">
-            Once you complete sessions and earn XP, your latest activity will appear here.
-          </p>
+        <div className="mt-5 rounded-[22px] bg-[#F7F9FC] px-4 py-5 text-sm leading-relaxed text-[#6A7687]">
+          Your recent sessions and XP moments will appear here once you start reading.
         </div>
       ) : (
-        <div className="mt-6 space-y-4">
-          {activities.map((activity, index) => (
-            <div key={activity.id} className="flex gap-4">
-              <div className="flex flex-col items-center shrink-0">
-                <div className="w-11 h-11 rounded-[16px] bg-[#FFF2E6] flex items-center justify-center">
-                  <Sparkles size={18} className="text-[#B35C1E]" />
-                </div>
-                {index !== activities.length - 1 ? (
-                  <div className="w-px flex-1 bg-[linear-gradient(to_bottom,rgba(179,92,30,0.24),rgba(45,114,91,0.14))] mt-2" />
-                ) : null}
+        <div className="mt-5 space-y-3">
+          {activities.slice(0, 4).map((activity) => (
+            <div
+              key={activity.id}
+              className="flex items-center justify-between gap-4 rounded-[22px] bg-[#F7F9FC] px-4 py-4"
+            >
+              <div className="min-w-0">
+                <p className="text-sm font-medium text-[#22324A]">{toReadableActivityLabel(activity.activityType)}</p>
+                <p className="mt-1 text-sm text-[#6A7687]">
+                  {formatActivityDate(activity.activityDate)}
+                  {activity.sessionId != null ? ` • Session #${activity.sessionId}` : ''}
+                </p>
               </div>
-
-              <div className="flex-1 rounded-[24px] bg-[#FCFCFD] border border-[rgba(0,0,0,0.04)] p-4">
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <p className="text-sm font-medium text-[#2C3E50]">
-                    {toReadableActivityLabel(activity.activityType)}
-                  </p>
-                  <span className="text-xs px-3 py-1 rounded-full bg-[#EAF7F1] text-[#2D725B] font-medium">
-                    +{activity.xpEarned} XP
-                  </span>
-                </div>
-                <p className="text-sm text-[#6C757D] mt-2">{formatActivityDate(activity.activityDate)}</p>
-                {activity.sessionId != null ? (
-                  <p className="text-sm text-[#52606D] mt-2">Session #{activity.sessionId}</p>
-                ) : null}
-              </div>
+              <span className="shrink-0 rounded-full bg-[#E8F7EF] px-3 py-1 text-sm font-medium text-[#2F7D5F]">
+                +{activity.xpEarned} XP
+              </span>
             </div>
           ))}
         </div>
@@ -225,8 +201,8 @@ export default function Profile() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[#F7F8F5] pb-20">
-        <div className="max-w-[1120px] mx-auto px-6 py-16 text-center text-[#6C757D]">
+      <div className="min-h-screen bg-[linear-gradient(180deg,#F7FBF8_0%,#F8F5FF_100%)] pb-24">
+        <div className="mx-auto max-w-3xl px-5 py-16 text-center text-[#6A7687]">
           Loading your profile...
         </div>
         <BottomNav />
@@ -236,10 +212,10 @@ export default function Profile() {
 
   if (errorMessage || !profile) {
     return (
-      <div className="min-h-screen bg-[#F7F8F5] pb-20">
-        <div className="max-w-[1120px] mx-auto px-6 py-16 text-center">
-          <p className="text-[#FF6B6B] text-lg">{errorMessage ?? 'Profile not found.'}</p>
-          <p className="text-sm text-[#6C757D] mt-2">Check backend connection and try again.</p>
+      <div className="min-h-screen bg-[linear-gradient(180deg,#F7FBF8_0%,#F8F5FF_100%)] pb-24">
+        <div className="mx-auto max-w-3xl px-5 py-16 text-center">
+          <p className="text-lg text-[#FF6B6B]">{errorMessage ?? 'Profile not found.'}</p>
+          <p className="mt-2 text-sm text-[#6A7687]">Check backend connection and try again.</p>
         </div>
         <BottomNav />
       </div>
@@ -247,99 +223,129 @@ export default function Profile() {
   }
 
   const { stats, streak, recentDailyActivities, createdAt, status } = profile;
+  const { level, xpIntoLevel, progressPercent } = getLevelMeta(stats.totalXpEarned);
   const showNewUserState = isNewUserProfile(stats);
+  const currentStreak = streak?.currentStreak ?? 0;
+  const longestStreak = streak?.longestStreak ?? 0;
+  const lastActive = streak?.lastActivityDate ? formatActivityDate(streak.lastActivityDate) : 'No activity yet';
+
+  const statCards = [
+    {
+      label: 'Current Streak',
+      value: `${currentStreak} days`,
+      icon: Flame,
+      iconWrapClassName: 'bg-[#FFE6D5]',
+      iconClassName: 'text-[#F27847]',
+    },
+    {
+      label: 'Longest Streak',
+      value: `${longestStreak} days`,
+      icon: Trophy,
+      iconWrapClassName: 'bg-[#FFF1BF]',
+      iconClassName: 'text-[#D8A100]',
+    },
+    {
+      label: 'Books Read',
+      value: stats.totalBooksRead,
+      icon: BookOpen,
+      iconWrapClassName: 'bg-[#DFF5EA]',
+      iconClassName: 'text-[#3D9B7A]',
+    },
+    {
+      label: 'Pages Read',
+      value: stats.totalPagesRead,
+      icon: Target,
+      iconWrapClassName: 'bg-[#DCEFFF]',
+      iconClassName: 'text-[#4B93D1]',
+    },
+    {
+      label: 'Words Captured',
+      value: stats.totalCapturedWords,
+      icon: Brain,
+      iconWrapClassName: 'bg-[#EDE0FF]',
+      iconClassName: 'text-[#8A61D7]',
+    },
+    {
+      label: 'Sessions',
+      value: stats.totalSessionsCompleted,
+      icon: Zap,
+      iconWrapClassName: 'bg-[#FFDDEA]',
+      iconClassName: 'text-[#D85B9C]',
+    },
+  ];
 
   return (
-    <div className="min-h-screen bg-[#F7F8F5] pb-20">
-      <div className="bg-[radial-gradient(circle_at_top_left,#FFF2E6_0%,#F7F8F5_48%,#EEF6F2_100%)] border-b border-[rgba(0,0,0,0.06)]">
-        <div className="max-w-[1120px] mx-auto px-6 pt-10 pb-8">
-          <div className="grid grid-cols-1 lg:grid-cols-[1.2fr_0.8fr] gap-6 items-start">
-            <section className="rounded-[34px] bg-white/82 backdrop-blur-sm border border-[rgba(255,255,255,0.7)] p-7 shadow-[0_18px_40px_rgba(15,23,42,0.06)]">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.24em] text-[#7B8794]">Your Profile</p>
-                  <h1 className="text-4xl sm:text-5xl font-semibold text-[#2C3E50] mt-3 leading-none">
-                    Reading in motion
-                  </h1>
-                  <p className="text-sm sm:text-base text-[#52606D] mt-4 max-w-xl leading-relaxed">
-                    Track how your library habits, saved words, and streaks are growing over time.
-                  </p>
-                </div>
-                <div className="w-16 h-16 rounded-[24px] bg-gradient-to-br from-[#FFF3E7] to-[#DFF2E8] flex items-center justify-center shrink-0">
-                  <BookMarked size={28} className="text-[#2C3E50]" />
-                </div>
-              </div>
-
-              <div className="flex flex-wrap gap-3 mt-6">
-                <div className="inline-flex items-center gap-2 rounded-full bg-[#F8F9FA] px-4 py-2 text-sm text-[#52606D]">
-                  <CalendarDays size={16} />
-                  <span>Member since {formatMemberSince(createdAt)}</span>
-                </div>
-                <div className="inline-flex items-center gap-2 rounded-full bg-[#EEF6F2] px-4 py-2 text-sm text-[#2D725B]">
-                  <Target size={16} />
-                  <span>Status: {status}</span>
-                </div>
-              </div>
-
-              {showNewUserState ? (
-                <div className="rounded-[26px] bg-gradient-to-r from-[#FFF4EA] to-[#EDF8F2] border border-[rgba(0,0,0,0.05)] p-5 mt-6">
-                  <p className="text-[#2C3E50] font-medium">Your journey is just getting started</p>
-                  <p className="text-sm text-[#6C757D] mt-2 leading-relaxed">
-                    Finish your first reading session to start filling out your profile with pages, XP, activity, and streak progress.
-                  </p>
-                </div>
-              ) : null}
-            </section>
-
-            <StreakCard streak={streak} />
-          </div>
+    <div className="min-h-screen bg-[linear-gradient(180deg,#F7FBF8_0%,#F6F9FF_52%,#F8F4FF_100%)] pb-24">
+      <div className="mx-auto max-w-3xl px-5 py-8 sm:px-6 sm:py-10">
+        <div className="mb-6">
+          <h1 className="text-4xl font-semibold tracking-[-0.03em] text-[#22324A]">Profile</h1>
+          <p className="mt-2 max-w-xl text-sm leading-relaxed text-[#6A7687]">
+            Track your reading level, streaks, and milestones in one place.
+          </p>
         </div>
-      </div>
 
-      <div className="max-w-[1120px] mx-auto px-6 py-8 space-y-8">
-        <section>
-          <div className="flex items-center justify-between gap-4 mb-4">
-            <div>
-              <p className="text-xs uppercase tracking-[0.22em] text-[#7B8794]">Stats</p>
-              <h2 className="text-2xl font-semibold text-[#2C3E50] mt-2">A snapshot of your progress</h2>
+        <section className="rounded-[32px] border border-[rgba(36,52,71,0.08)] bg-white/92 px-6 py-7 text-center shadow-[0_18px_36px_rgba(31,41,55,0.07)] sm:px-8">
+          <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-[radial-gradient(circle_at_top,#DDF7EE_0%,#C8EFE1_55%,#BDE8D8_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.65)]">
+            <span className="text-4xl font-semibold text-[#3E9D7B]">{level}</span>
+          </div>
+          <h2 className="mt-5 text-3xl font-semibold text-[#22324A]">Level {level}</h2>
+          <p className="mt-2 text-sm text-[#6A7687]">{stats.totalXpEarned} total XP</p>
+
+          <div className="mt-5">
+            <div className="h-3.5 overflow-hidden rounded-full bg-[#F7D8BE]">
+              <div
+                className="h-full rounded-full bg-[linear-gradient(90deg,#FFC79C_0%,#F7B58A_40%,#F4C1A5_100%)] transition-[width] duration-500"
+                style={{ width: `${Math.max(progressPercent, 6)}%` }}
+              />
             </div>
+            <p className="mt-2 text-xs text-[#6A7687]">{xpIntoLevel}/{XP_PER_LEVEL} XP to next level</p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-4">
-            <ProfileStatCard
-              label="Pages Read"
-              value={stats.totalPagesRead}
-              icon={BookMarked}
-              accentClassName="from-[#FFF8EE] to-[#FFE7D1] border-[rgba(255,186,122,0.24)]"
-            />
-            <ProfileStatCard
-              label="Books Completed"
-              value={stats.totalBooksRead}
-              icon={Target}
-              accentClassName="from-[#EFFAF5] to-[#DDF4EC] border-[rgba(61,163,122,0.22)]"
-            />
-            <ProfileStatCard
-              label="Sessions Completed"
-              value={stats.totalSessionsCompleted}
-              icon={CalendarDays}
-              accentClassName="from-[#F8F5FF] to-[#EEE6FF] border-[rgba(117,81,196,0.14)]"
-            />
-            <ProfileStatCard
-              label="Saved Words"
-              value={stats.totalCapturedWords}
-              icon={Sparkles}
-              accentClassName="from-[#FFF6EB] to-[#FFEBD6] border-[rgba(179,92,30,0.16)]"
-            />
-            <ProfileStatCard
-              label="Total XP"
-              value={stats.totalXpEarned}
-              icon={TrendingUp}
-              accentClassName="from-[#EEF8F4] to-[#DFF2E8] border-[rgba(45,114,91,0.18)]"
-            />
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-2 text-sm text-[#6A7687]">
+            <span className="rounded-full bg-[#F5F7FB] px-3 py-1.5">Member since {formatMemberSince(createdAt)}</span>
+            <span className="rounded-full bg-[#EAF7F1] px-3 py-1.5 text-[#2F7D5F]">Status: {status}</span>
           </div>
         </section>
 
-        <RecentActivitySection activities={recentDailyActivities} />
+        {showNewUserState ? (
+          <section className="mt-6 rounded-[28px] border border-[rgba(36,52,71,0.08)] bg-[linear-gradient(135deg,#FFF6EA_0%,#F0FBF6_100%)] p-5 shadow-[0_14px_30px_rgba(31,41,55,0.05)]">
+            <p className="text-base font-medium text-[#22324A]">Your journey is just getting started</p>
+            <p className="mt-2 text-sm leading-relaxed text-[#6A7687]">
+              Finish your first reading session to begin earning XP, building streaks, and filling out your profile.
+            </p>
+          </section>
+        ) : null}
+
+        <section className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          {statCards.map((card, index) => (
+            <ProfileStatCard
+              key={card.label}
+              label={card.label}
+              value={card.value}
+              icon={card.icon}
+              iconWrapClassName={card.iconWrapClassName}
+              iconClassName={card.iconClassName}
+              delayMs={index * 80}
+            />
+          ))}
+        </section>
+
+        <section className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <DetailCard
+            title="Last Active"
+            value={lastActive}
+            description="Your most recent recorded reading activity."
+          />
+          <DetailCard
+            title="Reading Momentum"
+            value={currentStreak > 0 ? `${currentStreak} day streak` : 'Start your streak'}
+            description="Read on consecutive days to build consistency and improve your longest run."
+          />
+        </section>
+
+        <div className="mt-6">
+          <RecentActivitySection activities={recentDailyActivities} />
+        </div>
       </div>
 
       <BottomNav />

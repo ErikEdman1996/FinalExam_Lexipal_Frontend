@@ -1,15 +1,38 @@
 import { useEffect, useState } from 'react';
+import { BookOpen, Plus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { createBook, getBooks, type ApiBook, type CreateBookRequest } from '../api/api';
+import { AddBookModal } from '../components/AddBookModal.tsx';
 import { BookCard, type BookData } from '../components/BookCard.tsx';
 import { BottomNav } from '../components/BottomNav.tsx';
-import { AddBookModal } from '../components/AddBookModal.tsx';
-import { Plus } from 'lucide-react';
-import { createBook, getBooks, type ApiBook, type CreateBookRequest } from '../api/api';
 
 type BookStatus = 'active' | 'completed' | 'archived';
 
 interface LibraryBook extends BookData {
   status: BookStatus;
+}
+
+interface LibrarySectionProps {
+  title: string;
+  books: LibraryBook[];
+  onOpenBook: (bookId: string) => void;
+}
+
+function LibrarySection({ title, books, onOpenBook }: LibrarySectionProps) {
+  if (books.length === 0) {
+    return null;
+  }
+
+  return (
+    <section className="space-y-3">
+      <h2 className="text-xs font-semibold uppercase tracking-[0.24em] text-[#8A94A6]">{title}</h2>
+      <div className="space-y-3">
+        {books.map((book) => (
+          <BookCard key={book.id} book={book} onClick={() => onOpenBook(book.id)} />
+        ))}
+      </div>
+    </section>
+  );
 }
 
 function mapApiStatusToUiStatus(status: ApiBook['status']): BookStatus {
@@ -46,7 +69,6 @@ function mapBackendBookToLibraryBook(book: ApiBook): LibraryBook {
 
 export default function Library() {
   const navigate = useNavigate();
-  const [activeTab, setActiveTab] = useState<BookStatus>('active');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [books, setBooks] = useState<LibraryBook[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -66,6 +88,7 @@ export default function Library() {
         }
       } catch (error) {
         console.error('Error loading books:', error);
+
         if (isMounted) {
           setErrorMessage('Could not load books from backend.');
         }
@@ -76,93 +99,85 @@ export default function Library() {
       }
     };
 
-    loadBooks();
+    void loadBooks();
 
     return () => {
       isMounted = false;
     };
   }, []);
-  
+
   const handleAddBook = async (newBook: CreateBookRequest) => {
     const createdBook = await createBook(newBook);
     setBooks((previousBooks) => [...previousBooks, mapBackendBookToLibraryBook(createdBook)]);
-    setActiveTab('active');
   };
-  
-  const tabs: { id: BookStatus; label: string }[] = [
-    { id: 'active', label: 'Active' },
-    { id: 'completed', label: 'Completed' },
-    { id: 'archived', label: 'Archived' },
-  ];
-  
-  const filteredBooks = books.filter((book) => book.status === activeTab);
-  
+
+  const activeBooks = books.filter((book) => book.status === 'active');
+  const completedBooks = books.filter((book) => book.status === 'completed');
+  const archivedBooks = books.filter((book) => book.status === 'archived');
+
   return (
-    <div className="min-h-screen bg-[#FAFBFC] pb-20">
-      {/* Header */}
-      <div className="bg-white border-b border-[rgba(0,0,0,0.08)] sticky top-0 z-10">
-        <div className="max-w-[480px] mx-auto px-6 py-4">
+    <div className="min-h-screen bg-[linear-gradient(180deg,#F7FBF8_0%,#F6F9FF_55%,#F8F5FF_100%)] pb-24">
+      <div className="mx-auto max-w-lg px-4 py-6">
+        <div className="flex items-center justify-between gap-4">
           <div>
-            <h1 className="text-2xl font-semibold text-[#2C3E50]">My Library</h1>
-            <p className="text-sm text-[#6C757D] mt-1">Keep reading! 📚</p>
+            <h1 className="text-3xl font-semibold tracking-[-0.03em] text-[#22324A]">My Library</h1>
+            <p className="mt-1 text-sm text-[#6A7687]">Keep your reading shelf tidy and moving.</p>
           </div>
-          
-          {/* Tabs */}
-          <div className="flex gap-2 mt-4">
-            {tabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`px-4 py-2 rounded-[12px] transition-all duration-200 ${
-                  activeTab === tab.id
-                    ? 'bg-[#A8E6CF] text-[#2C3E50] font-medium shadow-[0_2px_8px_rgba(168,230,207,0.3)]'
-                    : 'bg-transparent text-[#6C757D] hover:bg-[#F0F2F5]'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="inline-flex h-11 items-center gap-2 rounded-full border border-[rgba(36,52,71,0.08)] bg-white/90 px-4 text-sm font-medium text-[#22324A] shadow-[0_10px_20px_rgba(31,41,55,0.06)] transition-all duration-200 hover:bg-white"
+          >
+            <Plus size={16} />
+            <span>Add Book</span>
+          </button>
         </div>
-      </div>
-      
-      {/* Books Grid */}
-      <div className="max-w-[480px] mx-auto px-6 py-6">
+
+        <div className="mt-6 flex flex-wrap gap-2">
+          <span className="rounded-full bg-white/88 px-3 py-1.5 text-sm text-[#6A7687] shadow-[0_8px_18px_rgba(31,41,55,0.04)]">
+            {books.length} total books
+          </span>
+          <span className="rounded-full bg-[#EAF7F1] px-3 py-1.5 text-sm text-[#2F7D5F]">
+            {activeBooks.length} currently reading
+          </span>
+          <span className="rounded-full bg-[#FFF2D6] px-3 py-1.5 text-sm text-[#B4831F]">
+            {completedBooks.length} completed
+          </span>
+        </div>
+
         {isLoading ? (
-          <div className="text-center py-16">
-            <p className="text-[#6C757D] text-lg">Loading books...</p>
-          </div>
+          <div className="py-20 text-center text-[#6A7687]">Loading books...</div>
         ) : errorMessage ? (
-          <div className="text-center py-16">
-            <p className="text-[#FF6B6B] text-lg">{errorMessage}</p>
-            <p className="text-sm text-[#6C757D] mt-2">Check backend connection and try again.</p>
+          <div className="py-20 text-center">
+            <p className="text-lg text-[#FF6B6B]">{errorMessage}</p>
+            <p className="mt-2 text-sm text-[#6A7687]">Check backend connection and try again.</p>
           </div>
-        ) : filteredBooks.length === 0 ? (
-          <div className="text-center py-16">
-            <p className="text-[#6C757D] text-lg">No books in {activeTab} list</p>
-            <p className="text-sm text-[#6C757D] mt-2">Add a new book to get started!</p>
+        ) : books.length === 0 ? (
+          <div className="py-20 text-center">
+            <div className="mx-auto mb-5 flex h-20 w-20 items-center justify-center rounded-full bg-[#DFF5EA]">
+              <BookOpen size={36} className="text-[#3D9B7A]" />
+            </div>
+            <h2 className="text-2xl font-semibold text-[#22324A]">No books yet</h2>
+            <p className="mx-auto mt-2 max-w-sm text-sm leading-relaxed text-[#6A7687]">
+              Add your first book to start building your reading habit.
+            </p>
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="mt-5 inline-flex h-11 items-center gap-2 rounded-full bg-[#A8E6CF] px-5 text-sm font-medium text-[#22324A] shadow-[0_10px_22px_rgba(76,167,132,0.18)] transition-all duration-200 hover:bg-[#9CDEC5]"
+            >
+              <Plus size={16} />
+              <span>Add your first book</span>
+            </button>
           </div>
         ) : (
-          <div className="space-y-4">
-            {filteredBooks.map((book) => (
-              <BookCard key={book.id} book={book} onClick={() => navigate(`/book/${book.id}`)} />
-            ))}
+          <div className="mt-6 space-y-6">
+            <LibrarySection title="Currently Reading" books={activeBooks} onOpenBook={(bookId) => navigate(`/book/${bookId}`)} />
+            <LibrarySection title="Completed" books={completedBooks} onOpenBook={(bookId) => navigate(`/book/${bookId}`)} />
+            <LibrarySection title="Archived" books={archivedBooks} onOpenBook={(bookId) => navigate(`/book/${bookId}`)} />
           </div>
         )}
       </div>
-      
-      {/* FAB - Add Book */}
-      <button
-        onClick={() => setIsModalOpen(true)}
-        className="fixed bottom-24 right-6 w-14 h-14 bg-[#FFD3B6] rounded-full flex items-center justify-center shadow-[0_4px_16px_rgba(255,211,182,0.4)] hover:shadow-[0_6px_20px_rgba(255,211,182,0.5)] active:scale-95 transition-all duration-200 z-40"
-      >
-        <Plus size={28} className="text-[#2C3E50]" strokeWidth={2.5} />
-      </button>
-      
-      {/* Bottom Navigation */}
+
       <BottomNav />
-      
-      {/* Add Book Modal */}
       <AddBookModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onAdd={handleAddBook} />
     </div>
   );

@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
-import { ArrowLeft, BookOpen } from 'lucide-react';
-import { CircularTimer, type CircularTimerHandle } from '../components/CircularTimer.tsx';
+import { useNavigate, useParams } from 'react-router-dom';
+import { ArrowLeft, BookOpen, Pause, Play, Search, Square } from 'lucide-react';
 import { Button } from '../components/Button';
 import { WordLookupModal } from '../components/WordLookupModal';
-import { createSession, updateSession } from '../api/api';
+import { createSession, getBook, updateSession, type ApiBook } from '../api/api';
 
 interface SessionCodexEntry {
   lemma: string;
@@ -12,15 +11,27 @@ interface SessionCodexEntry {
   synonyms: string[];
 }
 
+const formatTime = (totalSeconds: number) => {
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+
+  return `${hours > 0 ? `${hours.toString().padStart(2, '0')}:` : ''}${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+};
+
 export default function ReadingSession() {
   const { bookId } = useParams();
   const navigate = useNavigate();
+  const [book, setBook] = useState<ApiBook | null>(null);
+  const [isLoadingBook, setIsLoadingBook] = useState(true);
   const [showReflectionModal, setShowReflectionModal] = useState(false);
   const [showWordLookupModal, setShowWordLookupModal] = useState(false);
-  const [sessionDurationSeconds, setSessionDurationSeconds] = useState(0);
+  const [seconds, setSeconds] = useState(0);
+  const [isRunning, setIsRunning] = useState(false);
   const [codexEntries, setCodexEntries] = useState<SessionCodexEntry[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<number | null>(null);
-  const timerRef = useRef<CircularTimerHandle | null>(null);
+  const [sessionError, setSessionError] = useState<string | null>(null);
+  const intervalRef = useRef<number | null>(null);
   const shouldResumeAfterLookupRef = useRef(false);
   const sessionInitializationRef = useRef<Promise<number> | null>(null);
 
@@ -49,51 +60,89 @@ export default function ReadingSession() {
   }, [activeSessionId]);
 
   useEffect(() => {
-    const initializeSession = async () => {
+    let isMounted = true;
+
+    const loadSessionContext = async () => {
       if (!bookId) {
+        navigate('/library');
         return;
       }
 
       const parsedBookId = Number(bookId);
 
       if (!Number.isFinite(parsedBookId) || parsedBookId <= 0) {
+        navigate('/library');
         return;
       }
 
       try {
-        await ensureSessionInitialized(parsedBookId);
+        setIsLoadingBook(true);
+        setSessionError(null);
+        const [loadedBook] = await Promise.all([
+          getBook(parsedBookId),
+          ensureSessionInitialized(parsedBookId),
+        ]);
+
+        if (isMounted) {
+          setBook(loadedBook);
+        }
       } catch (error) {
-        console.error('Error initializing session:', error);
+        console.error('Error loading reading session:', error);
+
+        if (isMounted) {
+          setSessionError('Could not start this reading session right now.');
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingBook(false);
+        }
       }
     };
 
-    void initializeSession();
-  }, [bookId, ensureSessionInitialized]);
+    void loadSessionContext();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [bookId, ensureSessionInitialized, navigate]);
+
+  useEffect(() => {
+    if (isRunning) {
+      intervalRef.current = window.setInterval(() => {
+        setSeconds((currentSeconds) => currentSeconds + 1);
+      }, 1000);
+    } else if (intervalRef.current != null) {
+      window.clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+
+    return () => {
+      if (intervalRef.current != null) {
+        window.clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+    };
+  }, [isRunning]);
 
   useEffect(() => {
     if (showWordLookupModal) {
-      const wasRunning = timerRef.current?.isRunning() ?? false;
-      shouldResumeAfterLookupRef.current = wasRunning;
-
-      if (wasRunning) {
-        timerRef.current?.pause();
-      }
-
+      shouldResumeAfterLookupRef.current = true;
+      setIsRunning(false);
       return;
     }
 
-    if (shouldResumeAfterLookupRef.current) {
-      timerRef.current?.resume();
+    if (shouldResumeAfterLookupRef.current && !showReflectionModal) {
+      setIsRunning(true);
       shouldResumeAfterLookupRef.current = false;
     }
-  }, [showWordLookupModal]);
-  
-  const handleStopSession = (durationSeconds: number) => {
-    setSessionDurationSeconds(durationSeconds);
+  }, [isRunning, showReflectionModal, showWordLookupModal]);
+
+  const handleStopSession = () => {
+    setIsRunning(false);
     setShowReflectionModal(true);
   };
 
-  const handleSaveSession = async (reflection: string, _startPage: number, endPage: number) => {
+  const handleSaveSession = async (reflection: string, startPage: number, endPage: number) => {
     if (!bookId) {
       throw new Error('Missing book id');
     }
@@ -104,8 +153,16 @@ export default function ReadingSession() {
       throw new Error('Invalid book id');
     }
 
-    if (sessionDurationSeconds <= 0) {
+    if (seconds <= 0) {
       throw new Error('Session duration must be greater than 0');
+    }
+
+    if (!Number.isInteger(startPage) || startPage < 0) {
+      throw new Error('Start page must be zero or greater');
+    }
+
+    if (!Number.isInteger(endPage) || endPage < 0) {
+      throw new Error('End page must be zero or greater');
     }
 
     const trimmedReflection = reflection.trim();
@@ -114,14 +171,10 @@ export default function ReadingSession() {
       throw new Error('Reflection must be 2000 characters or fewer');
     }
 
-    if (!Number.isInteger(endPage) || endPage < 0) {
-      throw new Error('End page must be zero or greater');
-    }
-
     const sessionId = await ensureSessionInitialized(parsedBookId);
 
     await updateSession(sessionId, {
-      durationSeconds: sessionDurationSeconds,
+      durationSeconds: seconds,
       endPage,
       reflection: trimmedReflection,
       status: 'COMPLETED',
@@ -143,45 +196,168 @@ export default function ReadingSession() {
       return [...previousEntries, codexEntry];
     });
   };
-  
+
+  const handleToggleTimer = () => {
+    setIsRunning((currentValue) => !currentValue);
+  };
+
+  if (isLoadingBook) {
+    return (
+      <div className="min-h-screen bg-[linear-gradient(180deg,#F7FBF8_0%,#F6F9FF_58%,#F8F5FF_100%)] pb-24">
+        <div className="mx-auto flex min-h-screen max-w-lg items-center justify-center px-5 text-[#6A7687]">
+          Preparing your reading session...
+        </div>
+      </div>
+    );
+  }
+
+  if (sessionError || !book) {
+    return (
+      <div className="min-h-screen bg-[linear-gradient(180deg,#F7FBF8_0%,#F6F9FF_58%,#F8F5FF_100%)] pb-24">
+        <div className="mx-auto flex min-h-screen max-w-lg items-center justify-center px-5">
+          <div className="text-center">
+            <p className="text-lg text-[#FF6B6B]">{sessionError ?? 'Session not found.'}</p>
+            <button
+              onClick={() => navigate('/library')}
+              className="mt-4 inline-flex h-11 items-center rounded-full bg-[#A8E6CF] px-5 text-sm font-medium text-[#22324A]"
+            >
+              Back to library
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const progressPercent = book.totalPages > 0
+    ? Math.min(100, Math.max(0, (book.readPages / book.totalPages) * 100))
+    : 0;
+
   return (
-    <div className="min-h-screen bg-[#FAFBFC] flex flex-col">
-      {/* Header */}
-      <div className="bg-white border-b border-[rgba(0,0,0,0.08)] px-6 py-4">
-        <div className="max-w-[480px] mx-auto flex items-center gap-4">
+    <div className="min-h-screen bg-[linear-gradient(180deg,#F7FBF8_0%,#F6F9FF_58%,#F8F5FF_100%)] px-4 py-6">
+      <div className="mx-auto max-w-lg">
+        <div className="flex items-center gap-4">
           <button
             onClick={() => navigate(-1)}
-            className="w-10 h-10 rounded-full hover:bg-[#F0F2F5] flex items-center justify-center transition-colors"
+            className="flex h-11 w-11 items-center justify-center rounded-full border border-[rgba(36,52,71,0.08)] bg-white/90 text-[#22324A] shadow-[0_10px_20px_rgba(31,41,55,0.05)] transition-colors hover:bg-white"
           >
-            <ArrowLeft size={20} className="text-[#2C3E50]" />
+            <ArrowLeft size={20} />
           </button>
-          <div className="flex-1">
-            <h1 className="font-semibold text-[#2C3E50]">Reading Session</h1>
-            <p className="text-sm text-[#6C757D]">Focus mode</p>
-          </div>
-          <BookOpen size={24} className="text-[#A8E6CF]" />
-        </div>
-      </div>
-      
-      {/* Main Content */}
-      <div className="flex-1 flex flex-col items-center justify-center px-6 py-8">
-        <div className="max-w-[480px] w-full">
-          {/* Timer */}
-          <CircularTimer ref={timerRef} onStop={handleStopSession} />
-          
-          {/* Word Capture Section */}
-          <div className="mt-12 space-y-4">
-            <Button variant="outline" className="w-full h-12" onClick={() => setShowWordLookupModal(true)}>
-              Look Up Word
-            </Button>
-            <p className="text-sm text-[#6C757D] text-center">
-              {codexEntries.length} words captured this session
-            </p>
+          <div className="min-w-0 flex-1">
+            <p className="text-xs uppercase tracking-[0.22em] text-[#8A94A6]">Reading Session</p>
+            <h1 className="truncate text-2xl font-semibold text-[#22324A]">{book.title}</h1>
+            <p className="mt-1 truncate text-sm text-[#6A7687]">{book.author}</p>
           </div>
         </div>
+
+        <div className="mt-5 rounded-[28px] border border-[rgba(36,52,71,0.08)] bg-white/90 p-5 shadow-[0_14px_30px_rgba(31,41,55,0.06)]">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.22em] text-[#8A94A6]">Book Progress</p>
+              <p className="mt-2 text-sm text-[#6A7687]">
+                {book.readPages} / {book.totalPages} pages
+              </p>
+            </div>
+            <div className="flex h-12 w-12 items-center justify-center rounded-[18px] bg-[#DFF5EA]">
+              <BookOpen size={22} className="text-[#3D9B7A]" />
+            </div>
+          </div>
+          <div className="mt-4 h-3 overflow-hidden rounded-full bg-[#E8EEF5]">
+            <div
+              className="h-full rounded-full bg-[linear-gradient(90deg,#A8E6CF_0%,#92D9C8_100%)]"
+              style={{ width: `${Math.max(progressPercent, 4)}%` }}
+            />
+          </div>
+        </div>
+
+        <section className="mt-6 rounded-[32px] border border-[rgba(36,52,71,0.08)] bg-white/92 px-6 py-8 text-center shadow-[0_18px_38px_rgba(31,41,55,0.07)]">
+          <p className="text-sm text-[#6A7687]">Focus timer</p>
+          <div
+            className={`mt-4 text-6xl font-semibold tabular-nums tracking-[-0.05em] text-[#22324A] transition-all duration-300 sm:text-7xl ${
+              isRunning ? 'scale-[1.01]' : ''
+            }`}
+          >
+            {formatTime(seconds)}
+          </div>
+          <p className="mt-3 text-sm text-[#6A7687]">{isRunning ? 'Reading in progress' : seconds === 0 ? 'Ready when you are' : 'Timer paused'}</p>
+
+          <div className="mt-7 flex flex-wrap justify-center gap-3">
+            {seconds === 0 ? (
+              <Button
+                className="h-12 rounded-full px-8 shadow-[0_12px_24px_rgba(76,167,132,0.18)]"
+                onClick={handleToggleTimer}
+              >
+                <span className="inline-flex items-center gap-2">
+                  <Play size={18} />
+                  Start
+                </span>
+              </Button>
+            ) : (
+              <>
+                <Button
+                  className="h-12 rounded-full px-8 shadow-[0_12px_24px_rgba(76,167,132,0.18)]"
+                  onClick={handleToggleTimer}
+                >
+                  <span className="inline-flex items-center gap-2">
+                    {isRunning ? <Pause size={18} /> : <Play size={18} />}
+                    {isRunning ? 'Pause' : 'Resume'}
+                  </span>
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-12 rounded-full border-[#F2B9AE] bg-white text-[#B75B50] hover:bg-[#FFF6F4]"
+                  onClick={handleStopSession}
+                >
+                  <span className="inline-flex items-center gap-2">
+                    <Square size={18} />
+                    Stop
+                  </span>
+                </Button>
+              </>
+            )}
+          </div>
+
+          <button
+            onClick={() => setShowWordLookupModal(true)}
+            className="mt-5 inline-flex h-11 items-center gap-2 rounded-full bg-[#EFF4FF] px-5 text-sm font-medium text-[#375B87] transition-colors hover:bg-[#E5EEFF]"
+          >
+            <Search size={16} />
+            Capture Word
+          </button>
+        </section>
+
+        <section className="mt-6 rounded-[28px] border border-[rgba(36,52,71,0.08)] bg-white/90 p-5 shadow-[0_14px_30px_rgba(31,41,55,0.06)]">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-xs uppercase tracking-[0.22em] text-[#8A94A6]">Captured Words</p>
+              <p className="mt-2 text-sm text-[#6A7687]">
+                {codexEntries.length === 0 ? 'No words captured yet' : `${codexEntries.length} words captured this session`}
+              </p>
+            </div>
+            <div className="rounded-full bg-[#F4F7FB] px-3 py-1 text-sm font-medium text-[#4B647C]">
+              {codexEntries.length}
+            </div>
+          </div>
+
+          {codexEntries.length === 0 ? (
+            <div className="mt-4 rounded-[22px] bg-[#F7F9FC] px-4 py-5 text-sm leading-relaxed text-[#6A7687]">
+              Pause for interesting vocabulary as you read, and your captured words will show up here.
+            </div>
+          ) : (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {codexEntries.map((entry) => (
+                <div
+                  key={entry.lemma}
+                  className="rounded-full border border-[rgba(138,97,215,0.14)] bg-[#F3EDFF] px-3 py-1.5 text-sm font-medium text-[#6E53B5]"
+                >
+                  {entry.lemma}
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
       </div>
 
-      {/* Word Lookup Modal */}
       <WordLookupModal
         isOpen={showWordLookupModal}
         onClose={() => setShowWordLookupModal(false)}
@@ -189,49 +365,52 @@ export default function ReadingSession() {
         sessionId={activeSessionId}
         onCapture={handleCaptureWord}
       />
-      
-      {/* Reflection Modal */}
-      {showReflectionModal && (
+
+      {showReflectionModal ? (
         <ReflectionModal
+          durationSeconds={seconds}
+          book={book}
+          wordsCount={codexEntries.length}
           onClose={() => setShowReflectionModal(false)}
           onSubmit={handleSaveSession}
-          wordsCount={codexEntries.length}
         />
-      )}
+      ) : null}
     </div>
   );
 }
 
 interface ReflectionModalProps {
-  onClose: () => void;
-  onSubmit: (reflection: string, startPage: number, endPage: number) => void;
+  durationSeconds: number;
+  book: ApiBook;
   wordsCount: number;
+  onClose: () => void;
+  onSubmit: (reflection: string, startPage: number, endPage: number) => Promise<void>;
 }
 
-function ReflectionModal({ onClose, onSubmit, wordsCount }: ReflectionModalProps) {
+function ReflectionModal({
+  durationSeconds,
+  book,
+  wordsCount,
+  onClose,
+  onSubmit,
+}: ReflectionModalProps) {
   const [reflection, setReflection] = useState('');
-  const [startPage, setStartPage] = useState('');
-  const [endPage, setEndPage] = useState('');
+  const [startPage, setStartPage] = useState(String(book.readPages));
+  const [endPage, setEndPage] = useState(String(book.readPages));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
-    const trimmedReflection = reflection.trim();
+
+  const trimmedReflectionLength = reflection.trim().length;
+  const isValidReflection = trimmedReflectionLength >= 50 && trimmedReflectionLength <= 2000;
+
+  const handleSubmit = async (event: FormEvent) => {
+    event.preventDefault();
+
     const parsedStartPage = Number(startPage);
     const parsedEndPage = Number(endPage);
+    const trimmedReflection = reflection.trim();
 
-    if (trimmedReflection.length < 50) {
-      setSubmitError('Reflection must be at least 50 characters.');
-      return;
-    }
-
-    if (trimmedReflection.length > 2000) {
-      setSubmitError('Reflection must be 2000 characters or fewer.');
-      return;
-    }
-
-    if (!startPage || !endPage || !Number.isInteger(parsedStartPage) || !Number.isInteger(parsedEndPage)) {
+    if (!Number.isInteger(parsedStartPage) || !Number.isInteger(parsedEndPage)) {
       setSubmitError('Enter valid whole numbers for start and end page.');
       return;
     }
@@ -246,6 +425,16 @@ function ReflectionModal({ onClose, onSubmit, wordsCount }: ReflectionModalProps
       return;
     }
 
+    if (trimmedReflection.length < 50) {
+      setSubmitError('Reflection must be at least 50 characters.');
+      return;
+    }
+
+    if (trimmedReflection.length > 2000) {
+      setSubmitError('Reflection must be 2000 characters or fewer.');
+      return;
+    }
+
     try {
       setIsSubmitting(true);
       setSubmitError(null);
@@ -257,68 +446,83 @@ function ReflectionModal({ onClose, onSubmit, wordsCount }: ReflectionModalProps
       setIsSubmitting(false);
     }
   };
-  
-  const charCount = reflection.trim().length;
-  const isValid = charCount >= 50 && charCount <= 2000;
-  
+
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-[32px] w-full max-w-md p-6 shadow-[0_8px_32px_rgba(0,0,0,0.12)] animate-in fade-in zoom-in duration-200">
-        <h2 className="text-xl font-semibold text-[#2C3E50] mb-2">Session Complete! 🎉</h2>
-        <p className="text-sm text-[#6C757D] mb-6">You captured {wordsCount} words</p>
-        
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="flex gap-3">
-            <div className="flex-1">
-              <label className="block text-sm text-[#2C3E50] mb-2">Start Page</label>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-[32px] border border-white/70 bg-white/95 p-6 shadow-[0_24px_48px_rgba(17,24,39,0.18)]">
+        <div className="text-center">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#DFF5EA]">
+            <BookOpen size={28} className="text-[#3D9B7A]" />
+          </div>
+          <h2 className="mt-4 text-2xl font-semibold text-[#22324A]">Session Complete</h2>
+          <p className="mt-2 text-sm text-[#6A7687]">
+            {formatTime(durationSeconds)} • {wordsCount} words captured
+          </p>
+        </div>
+
+        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+          <div className="rounded-[24px] bg-[#F7F9FC] p-4">
+            <p className="text-xs uppercase tracking-[0.22em] text-[#8A94A6]">Book</p>
+            <p className="mt-2 text-base font-semibold text-[#22324A]">{book.title}</p>
+            <p className="mt-1 text-sm text-[#6A7687]">{book.author}</p>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="mb-2 block text-sm font-medium text-[#22324A]">Start Page</label>
               <input
                 type="number"
                 value={startPage}
-                onChange={(e) => setStartPage(e.target.value)}
-                className="w-full px-4 py-3 rounded-[16px] bg-[#F8F9FA] border border-[rgba(0,0,0,0.08)] focus:outline-none focus:ring-2 focus:ring-[#A8E6CF] focus:border-transparent transition-all"
+                onChange={(event) => setStartPage(event.target.value)}
+                className="w-full rounded-[16px] border border-[rgba(36,52,71,0.08)] bg-[#F7F9FC] px-4 py-3 text-[#22324A] outline-none transition-all focus:border-[#A8E6CF] focus:bg-white focus:ring-2 focus:ring-[#CFEFDF]"
                 required
               />
             </div>
-            <div className="flex-1">
-              <label className="block text-sm text-[#2C3E50] mb-2">End Page</label>
+            <div>
+              <label className="mb-2 block text-sm font-medium text-[#22324A]">End Page</label>
               <input
                 type="number"
                 value={endPage}
-                onChange={(e) => setEndPage(e.target.value)}
-                className="w-full px-4 py-3 rounded-[16px] bg-[#F8F9FA] border border-[rgba(0,0,0,0.08)] focus:outline-none focus:ring-2 focus:ring-[#A8E6CF] focus:border-transparent transition-all"
+                onChange={(event) => setEndPage(event.target.value)}
+                className="w-full rounded-[16px] border border-[rgba(36,52,71,0.08)] bg-[#F7F9FC] px-4 py-3 text-[#22324A] outline-none transition-all focus:border-[#A8E6CF] focus:bg-white focus:ring-2 focus:ring-[#CFEFDF]"
                 required
               />
             </div>
           </div>
-          
+
           <div>
-            <label className="block text-sm text-[#2C3E50] mb-2">
-              Reflection (min. 50 characters)
-            </label>
+            <label className="mb-2 block text-sm font-medium text-[#22324A]">Reflection</label>
             <textarea
               value={reflection}
-              onChange={(e) => setReflection(e.target.value)}
-              className="w-full px-4 py-3 rounded-[16px] bg-[#F8F9FA] border border-[rgba(0,0,0,0.08)] focus:outline-none focus:ring-2 focus:ring-[#A8E6CF] focus:border-transparent transition-all min-h-[120px] resize-none"
-              placeholder="What did you think about what you read? What stood out to you?"
-              required
+              onChange={(event) => setReflection(event.target.value)}
+              placeholder="What stood out in this session? What did you notice, learn, or enjoy?"
+              className="min-h-[140px] w-full resize-none rounded-[18px] border border-[rgba(36,52,71,0.08)] bg-[#F7F9FC] px-4 py-3 text-[#22324A] outline-none transition-all focus:border-[#A8E6CF] focus:bg-white focus:ring-2 focus:ring-[#CFEFDF]"
             />
-            <div className={`text-xs mt-2 ${isValid ? 'text-[#A8E6CF]' : 'text-[#6C757D]'}`}>
-              {charCount}/50 characters
-            </div>
+            <p className={`mt-2 text-xs ${isValidReflection ? 'text-[#3D9B7A]' : 'text-[#6A7687]'}`}>
+              {trimmedReflectionLength}/50 characters minimum
+            </p>
           </div>
-          
-          <div className="flex gap-3 mt-6">
-            <Button type="button" variant="outline" className="flex-1" onClick={onClose} disabled={isSubmitting}>
+
+          {submitError ? <p className="text-sm text-[#FF6B6B]">{submitError}</p> : null}
+
+          <div className="flex gap-3 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1 rounded-full"
+              onClick={onClose}
+              disabled={isSubmitting}
+            >
               Cancel
             </Button>
-            <Button type="submit" variant="primary" className="flex-1" disabled={!isValid || isSubmitting}>
+            <Button
+              type="submit"
+              className="flex-1 rounded-full shadow-[0_12px_24px_rgba(76,167,132,0.18)]"
+              disabled={!isValidReflection || isSubmitting}
+            >
               {isSubmitting ? 'Saving...' : 'Save Session'}
             </Button>
           </div>
-
-          {submitError ? (
-            <p className="text-sm text-[#FF6B6B] mt-2">{submitError}</p>
-          ) : null}
         </form>
       </div>
     </div>
