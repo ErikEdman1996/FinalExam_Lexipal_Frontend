@@ -262,7 +262,7 @@ export default function Profile() {
                     Reading in motion
                   </h1>
                   <p className="text-sm sm:text-base text-[#52606D] mt-4 max-w-xl leading-relaxed">
-                    Track how your library habits, captured words, and streaks are growing over time.
+                    Track how your library habits, saved words, and streaks are growing over time.
                   </p>
                 </div>
                 <div className="w-16 h-16 rounded-[24px] bg-gradient-to-br from-[#FFF3E7] to-[#DFF2E8] flex items-center justify-center shrink-0">
@@ -325,7 +325,7 @@ export default function Profile() {
               accentClassName="from-[#F8F5FF] to-[#EEE6FF] border-[rgba(117,81,196,0.14)]"
             />
             <ProfileStatCard
-              label="Captured Words"
+              label="Saved Words"
               value={stats.totalCapturedWords}
               icon={Sparkles}
               accentClassName="from-[#FFF6EB] to-[#FFEBD6] border-[rgba(179,92,30,0.16)]"

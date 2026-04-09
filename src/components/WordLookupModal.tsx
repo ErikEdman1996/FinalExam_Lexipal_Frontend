@@ -2,17 +2,17 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Sparkles, X } from 'lucide-react';
 import { Button } from './Button';
 import {
+  createCodexEntry,
   extractDefinitionFromDefinitions,
   extractSynonymsFromDefinitions,
   getDictionaryWord,
-  searchAndCaptureWord,
 } from '../api/api';
 
 interface WordLookupModalProps {
   isOpen: boolean;
   onClose: () => void;
   onCapture: (word: { lemma: string; definition: string; synonyms: string[] }, newCapture: boolean) => void;
-  capturedLemmas: string[];
+  codexEntryLemmas: string[];
   sessionId?: number | null;
 }
 
@@ -65,7 +65,7 @@ export function WordLookupModal({
   isOpen,
   onClose,
   onCapture,
-  capturedLemmas,
+  codexEntryLemmas,
   sessionId,
 }: WordLookupModalProps) {
   const [word, setWord] = useState('');
@@ -77,7 +77,7 @@ export function WordLookupModal({
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   const searchInFlightRef = useRef(false);
 
-  const capturedLemmaSet = useMemo(() => new Set(capturedLemmas.map((lemma) => lemma.toLowerCase())), [capturedLemmas]);
+  const codexEntryLemmaSet = useMemo(() => new Set(codexEntryLemmas.map((lemma) => lemma.toLowerCase())), [codexEntryLemmas]);
 
   useEffect(() => {
     if (!isOpen || typeof window === 'undefined') {
@@ -142,26 +142,26 @@ export function WordLookupModal({
       let nextResult: LookupResult;
 
       if (sessionId) {
-        const capturedResponse = await searchAndCaptureWord(sessionId, {
+        const codexEntryResponse = await createCodexEntry(sessionId, {
           lemma: trimmedWord,
         });
 
-        const capturedWord = capturedResponse.capturedWord.word;
-        const mappedDefinition = extractDefinitionFromDefinitions(capturedWord.definitions);
-        const mappedSynonyms = extractSynonymsFromDefinitions(capturedWord.definitions);
+        const codexEntry = codexEntryResponse.codexEntry;
+        const mappedDefinition = extractDefinitionFromDefinitions(codexEntry.definitions);
+        const mappedSynonyms = extractSynonymsFromDefinitions(codexEntry.definitions);
 
         nextResult = {
-          lemma: capturedWord.lemma ?? trimmedWord,
+          lemma: codexEntry.lemma ?? trimmedWord,
           definition: mappedDefinition || 'No definition available right now.',
           synonyms: mappedSynonyms,
-          newCapture: capturedResponse.newCapture,
-          rarityTier: (capturedResponse.rarityTier as LookupResult['rarityTier']) ?? 'COMMON',
-          xpValue: capturedResponse.capturedWord.xpValue ?? 0,
+          newCapture: codexEntryResponse.newCapture,
+          rarityTier: (codexEntryResponse.rarityTier as LookupResult['rarityTier']) ?? 'COMMON',
+          xpValue: codexEntry.xpValue ?? 0,
         };
       } else {
         const fetchedWord = await getDictionaryWord(trimmedWord);
         const normalizedLemma = (fetchedWord.lemma ?? trimmedWord).toLowerCase();
-        const fallbackNewCapture = !capturedLemmaSet.has(normalizedLemma);
+        const fallbackNewCapture = !codexEntryLemmaSet.has(normalizedLemma);
 
         nextResult = {
           lemma: fetchedWord.lemma ?? trimmedWord,
@@ -186,7 +186,7 @@ export function WordLookupModal({
         nextResult.newCapture,
       );
     } catch (error) {
-      console.error('Error searching and capturing word:', error);
+      console.error('Error creating codex entry:', error);
       setLookupError('Could not capture this word right now. Please try again.');
     } finally {
       searchInFlightRef.current = false;

@@ -6,7 +6,7 @@ import { Button } from '../components/Button';
 import { WordLookupModal } from '../components/WordLookupModal';
 import { createSession, updateSession } from '../api/api';
 
-interface CapturedWord {
+interface SessionCodexEntry {
   lemma: string;
   definition: string;
   synonyms: string[];
@@ -18,7 +18,7 @@ export default function ReadingSession() {
   const [showReflectionModal, setShowReflectionModal] = useState(false);
   const [showWordLookupModal, setShowWordLookupModal] = useState(false);
   const [sessionDurationSeconds, setSessionDurationSeconds] = useState(0);
-  const [capturedWords, setCapturedWords] = useState<CapturedWord[]>([]);
+  const [codexEntries, setCodexEntries] = useState<SessionCodexEntry[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<number | null>(null);
   const timerRef = useRef<CircularTimerHandle | null>(null);
   const shouldResumeAfterLookupRef = useRef(false);
@@ -130,17 +130,17 @@ export default function ReadingSession() {
     navigate(`/book/${bookId}`);
   };
 
-  const handleCaptureWord = (capturedWord: CapturedWord, newCapture: boolean) => {
+  const handleCaptureWord = (codexEntry: SessionCodexEntry, newCapture: boolean) => {
     if (!newCapture) {
       return;
     }
 
-    setCapturedWords((previousWords) => {
-      if (previousWords.some((word) => word.lemma.toLowerCase() === capturedWord.lemma.toLowerCase())) {
-        return previousWords;
+    setCodexEntries((previousEntries) => {
+      if (previousEntries.some((word) => word.lemma.toLowerCase() === codexEntry.lemma.toLowerCase())) {
+        return previousEntries;
       }
 
-      return [...previousWords, capturedWord];
+      return [...previousEntries, codexEntry];
     });
   };
   
@@ -175,7 +175,7 @@ export default function ReadingSession() {
               Look Up Word
             </Button>
             <p className="text-sm text-[#6C757D] text-center">
-              {capturedWords.length} words captured this session
+              {codexEntries.length} words captured this session
             </p>
           </div>
         </div>
@@ -185,7 +185,7 @@ export default function ReadingSession() {
       <WordLookupModal
         isOpen={showWordLookupModal}
         onClose={() => setShowWordLookupModal(false)}
-        capturedLemmas={capturedWords.map((capturedWord) => capturedWord.lemma)}
+        codexEntryLemmas={codexEntries.map((codexEntry) => codexEntry.lemma)}
         sessionId={activeSessionId}
         onCapture={handleCaptureWord}
       />
@@ -195,7 +195,7 @@ export default function ReadingSession() {
         <ReflectionModal
           onClose={() => setShowReflectionModal(false)}
           onSubmit={handleSaveSession}
-          wordsCount={capturedWords.length}
+          wordsCount={codexEntries.length}
         />
       )}
     </div>

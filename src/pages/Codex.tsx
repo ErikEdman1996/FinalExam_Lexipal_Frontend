@@ -6,8 +6,8 @@ import {
   extractDefinitionFromDefinitions,
   extractPhoneticText,
   extractSynonymsFromDefinitions,
-  getCapturedWords,
-  type ApiCapturedWordEntry,
+  getCodexEntries,
+  type CodexEntryReadResponseDTO,
 } from '../api/api';
 
 type RarityFilter = 'ALL' | 'COMMON' | 'RARE' | 'MYTHIC';
@@ -27,7 +27,7 @@ const sortOptions: { id: SortOption; label: string }[] = [
   { id: 'ALPHABETICAL', label: 'A-Z' },
 ];
 
-const getRarityTier = (word: ApiCapturedWordEntry): Exclude<RarityFilter, 'ALL'> => {
+const getRarityTier = (word: CodexEntryReadResponseDTO): Exclude<RarityFilter, 'ALL'> => {
   if (word.rarityTier === 'MYTHIC' || word.rarityTier === 'RARE') {
     return word.rarityTier;
   }
@@ -59,12 +59,12 @@ const getRarityCardAccentClassName = (rarity: Exclude<RarityFilter, 'ALL'>) => {
   return 'from-[#FFFFFF] to-[#F6F7F9] border-[rgba(0,0,0,0.06)]';
 };
 
-const getSpecificOrFallbackDefinition = (word: ApiCapturedWordEntry) => {
+const getSpecificOrFallbackDefinition = (word: CodexEntryReadResponseDTO) => {
   return word.specificDefinition || extractDefinitionFromDefinitions(word.definitions) || 'No definition available yet.';
 };
 
-const formatCapturedDate = (capturedAt: string) => {
-  const parsed = new Date(capturedAt);
+const formatCreatedDate = (createdAt: string) => {
+  const parsed = new Date(createdAt);
 
   if (Number.isNaN(parsed.getTime())) {
     return 'Unknown date';
@@ -90,7 +90,7 @@ const getSortWeight = (rarity: Exclude<RarityFilter, 'ALL'>) => {
 };
 
 interface CodexWordDetailsProps {
-  word: ApiCapturedWordEntry | null;
+  word: CodexEntryReadResponseDTO | null;
   onClose: () => void;
 }
 
@@ -115,7 +115,7 @@ function CodexWordDetails({ word, onClose }: CodexWordDetailsProps) {
         <div className="sticky top-0 bg-white border-b border-[rgba(0,0,0,0.05)] px-6 py-4 rounded-t-[32px]">
           <div className="flex items-center justify-between gap-4">
             <div>
-              <p className="text-xs uppercase tracking-[0.24em] text-[#7B8794]">Captured Word</p>
+              <p className="text-xs uppercase tracking-[0.24em] text-[#7B8794]">Codex Entry</p>
               <h2 id="codex-word-title" className="text-2xl font-semibold text-[#2C3E50] mt-1">
                 {word.lemma}
               </h2>
@@ -123,7 +123,7 @@ function CodexWordDetails({ word, onClose }: CodexWordDetailsProps) {
             <button
               onClick={onClose}
               className="w-10 h-10 rounded-full hover:bg-[#F0F2F5] flex items-center justify-center transition-colors"
-              aria-label="Close captured word details"
+              aria-label="Close codex entry details"
             >
               <X size={20} className="text-[#6C757D]" />
             </button>
@@ -134,17 +134,19 @@ function CodexWordDetails({ word, onClose }: CodexWordDetailsProps) {
           <div className={`rounded-[24px] border bg-gradient-to-br p-5 ${getRarityCardAccentClassName(rarity)}`}>
             <div className="flex items-start justify-between gap-4">
               <div>
-                <p className="text-sm text-[#6C757D]">Saved from session #{word.sessionId}</p>
+                <p className="text-sm text-[#6C757D]">
+                  {word.sourceSessionId != null ? `Saved from session #${word.sourceSessionId}` : 'Saved to your codex'}
+                </p>
                 <div className="flex items-center gap-2 mt-2">
                   <span className={`text-xs px-3 py-1 rounded-full font-medium ${getRarityBadgeClassName(rarity)}`}>
                     {rarity}
                   </span>
-                  <span className="text-sm text-[#52606D]">{formatCapturedDate(word.capturedAt)}</span>
+                  <span className="text-sm text-[#52606D]">{formatCreatedDate(word.createdAt)}</span>
                 </div>
               </div>
               <div className="rounded-[18px] bg-white/70 px-4 py-3 text-right">
                 <p className="text-xs uppercase tracking-[0.18em] text-[#7B8794]">XP</p>
-                <p className="text-xl font-semibold text-[#2C3E50]">{word.xpValue}</p>
+                <p className="text-xl font-semibold text-[#2C3E50]">{word.xpValue ?? 0}</p>
               </div>
             </div>
 
@@ -200,29 +202,29 @@ function CodexWordDetails({ word, onClose }: CodexWordDetailsProps) {
 }
 
 export default function Codex() {
-  const [capturedWords, setCapturedWords] = useState<ApiCapturedWordEntry[]>([]);
+  const [codexEntries, setCodexEntries] = useState<CodexEntryReadResponseDTO[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [rarityFilter, setRarityFilter] = useState<RarityFilter>('ALL');
   const [sortBy, setSortBy] = useState<SortOption>('NEWEST');
-  const [selectedWord, setSelectedWord] = useState<ApiCapturedWordEntry | null>(null);
+  const [selectedWord, setSelectedWord] = useState<CodexEntryReadResponseDTO | null>(null);
   const deferredSearchQuery = useDeferredValue(searchQuery);
 
   useEffect(() => {
     let isMounted = true;
 
-    const loadCapturedWords = async () => {
+    const loadCodexEntries = async () => {
       try {
         setIsLoading(true);
         setErrorMessage(null);
-        const words = await getCapturedWords();
+        const entries = await getCodexEntries();
 
         if (isMounted) {
-          setCapturedWords(words);
+          setCodexEntries(entries);
         }
       } catch (error) {
-        console.error('Error loading captured words:', error);
+        console.error('Error loading codex entries:', error);
 
         if (isMounted) {
           setErrorMessage('Could not load your codex right now.');
@@ -234,7 +236,7 @@ export default function Codex() {
       }
     };
 
-    void loadCapturedWords();
+    void loadCodexEntries();
 
     return () => {
       isMounted = false;
@@ -242,16 +244,16 @@ export default function Codex() {
   }, []);
 
   const normalizedQuery = deferredSearchQuery.trim().toLowerCase();
-  const totalXp = capturedWords.reduce((sum, word) => sum + Math.max(0, word.xpValue), 0);
-  const mythicCount = capturedWords.filter((word) => getRarityTier(word) === 'MYTHIC').length;
-  const rareCount = capturedWords.filter((word) => getRarityTier(word) === 'RARE').length;
-  const commonCount = capturedWords.filter((word) => getRarityTier(word) === 'COMMON').length;
+  const totalXp = codexEntries.reduce((sum, word) => sum + Math.max(0, word.xpValue ?? 0), 0);
+  const mythicCount = codexEntries.filter((word) => getRarityTier(word) === 'MYTHIC').length;
+  const rareCount = codexEntries.filter((word) => getRarityTier(word) === 'RARE').length;
+  const commonCount = codexEntries.filter((word) => getRarityTier(word) === 'COMMON').length;
 
-  const filteredWords = capturedWords
+  const filteredWords = codexEntries
     .filter((word) => {
       const rarity = getRarityTier(word);
       const definition = getSpecificOrFallbackDefinition(word).toLowerCase();
-      const source = word.source.toLowerCase();
+      const source = (word.source ?? '').toLowerCase();
       const matchesFilter = rarityFilter === 'ALL' || rarity === rarityFilter;
       const matchesSearch = !normalizedQuery
         || word.lemma.toLowerCase().includes(normalizedQuery)
@@ -266,7 +268,7 @@ export default function Codex() {
       }
 
       if (sortBy === 'HIGHEST_XP') {
-        return right.xpValue - left.xpValue;
+        return (right.xpValue ?? 0) - (left.xpValue ?? 0);
       }
 
       if (sortBy === 'RAREST') {
@@ -279,8 +281,8 @@ export default function Codex() {
         return (right.rarityScore ?? 0) - (left.rarityScore ?? 0);
       }
 
-      const leftTime = new Date(left.capturedAt).getTime();
-      const rightTime = new Date(right.capturedAt).getTime();
+      const leftTime = new Date(left.createdAt).getTime();
+      const rightTime = new Date(right.createdAt).getTime();
       return rightTime - leftTime;
     });
 
@@ -291,7 +293,7 @@ export default function Codex() {
           <div className="flex items-start justify-between gap-4">
             <div>
               <h1 className="text-2xl font-semibold text-[#2C3E50]">Codex</h1>
-              <p className="text-sm text-[#6C757D] mt-1">Every word you have captured, organized and searchable.</p>
+              <p className="text-sm text-[#6C757D] mt-1">Every word you have saved, organized and searchable.</p>
             </div>
             <div className="w-12 h-12 rounded-[18px] bg-[#FFF0E1] flex items-center justify-center shadow-[0_6px_18px_rgba(255,208,163,0.28)]">
               <BookOpen size={22} className="text-[#B35C1E]" />
@@ -300,8 +302,8 @@ export default function Codex() {
 
           <div className="grid grid-cols-2 gap-3 mt-5">
             <div className="rounded-[22px] bg-gradient-to-br from-[#FFF5EB] to-[#FFE6CF] p-4 border border-[rgba(255,186,122,0.26)]">
-              <p className="text-xs uppercase tracking-[0.18em] text-[#9A6A43]">Captured</p>
-              <p className="text-2xl font-semibold text-[#2C3E50] mt-2">{capturedWords.length}</p>
+              <p className="text-xs uppercase tracking-[0.18em] text-[#9A6A43]">Saved</p>
+              <p className="text-2xl font-semibold text-[#2C3E50] mt-2">{codexEntries.length}</p>
             </div>
             <div className="rounded-[22px] bg-gradient-to-br from-[#EDF9F3] to-[#DDF4EC] p-4 border border-[rgba(61,163,122,0.22)]">
               <p className="text-xs uppercase tracking-[0.18em] text-[#477A65]">Total XP</p>
@@ -381,12 +383,12 @@ export default function Codex() {
             <p className="text-[#FF6B6B] text-lg">{errorMessage}</p>
             <p className="text-sm text-[#6C757D] mt-2">Check backend connection and try again.</p>
           </div>
-        ) : capturedWords.length === 0 ? (
+        ) : codexEntries.length === 0 ? (
           <div className="rounded-[28px] bg-white border border-[rgba(0,0,0,0.05)] p-8 text-center shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
             <div className="w-16 h-16 mx-auto rounded-[22px] bg-[#FFF0E1] flex items-center justify-center">
               <Sparkles size={28} className="text-[#B35C1E]" />
             </div>
-            <p className="text-[#2C3E50] text-lg font-medium mt-5">No captured words yet</p>
+            <p className="text-[#2C3E50] text-lg font-medium mt-5">No codex entries yet</p>
             <p className="text-sm text-[#6C757D] mt-2 leading-relaxed">
               Start a reading session and use word lookup to begin building your Codex.
             </p>
@@ -422,11 +424,11 @@ export default function Codex() {
                           {rarity}
                         </span>
                       </div>
-                      <p className="text-sm text-[#52606D] mt-1">{formatCapturedDate(word.capturedAt)}</p>
+                      <p className="text-sm text-[#52606D] mt-1">{formatCreatedDate(word.createdAt)}</p>
                     </div>
                     <div className="rounded-[18px] bg-white/80 px-3 py-2 flex items-center gap-2 shrink-0">
                       <Star size={14} className="text-[#D9923B]" />
-                      <span className="text-sm font-medium text-[#2C3E50]">{word.xpValue} XP</span>
+                      <span className="text-sm font-medium text-[#2C3E50]">{word.xpValue ?? 0} XP</span>
                     </div>
                   </div>
 
@@ -436,7 +438,9 @@ export default function Codex() {
 
                   <div className="flex items-center justify-between gap-3 mt-4 text-sm text-[#52606D]">
                     <span className="truncate">Source: {word.source || 'Unknown source'}</span>
-                    <span className="shrink-0">Session #{word.sessionId}</span>
+                    <span className="shrink-0">
+                      {word.sourceSessionId != null ? `Session #${word.sourceSessionId}` : 'No session source'}
+                    </span>
                   </div>
                 </button>
               );

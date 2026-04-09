@@ -89,23 +89,23 @@ export interface ApiWord {
     phonetics: ApiJsonValue | null;
 }
 
-export interface SearchAndCapturePayload {
+export interface CodexEntryCreateRequestDTO {
     lemma: string;
 }
 
-export interface ApiCapturedWordEntry {
+export interface CodexEntryReadResponseDTO {
     id: number;
     wordId: number;
-    sessionId: number;
+    sourceSessionId: number | null;
     lemma: string;
-    specificDefinition: string;
-    xpValue: number;
-    capturedAt: string;
+    specificDefinition: string | null;
+    xpValue: number | null;
+    createdAt: string;
     rarityScore: number | null;
     rarityTier: 'COMMON' | 'RARE' | 'MYTHIC' | string;
-    source: string;
-    definitions: ApiJsonValue | null;
-    phonetics: ApiJsonValue | null;
+    source: string | null;
+    definitions: unknown;
+    phonetics: unknown;
 }
 
 export interface ProfileStatsResponseDTO {
@@ -141,14 +141,8 @@ export interface ProfileReadResponseDTO {
     recentDailyActivities: DailyActivityReadResponseDTO[];
 }
 
-export interface ApiCapturedWord {
-    id: number;
-    xpValue: number | null;
-    word: ApiWord;
-}
-
-export interface SearchAndCaptureResponse {
-    capturedWord: ApiCapturedWord;
+export interface CodexEntryCreateResponseDTO {
+    codexEntry: CodexEntryReadResponseDTO;
     newCapture: boolean;
     rarityTier: 'COMMON' | 'RARE' | 'MYTHIC' | string;
 }
@@ -206,7 +200,7 @@ const isBookLikeRecord = (value: unknown): value is Record<string, unknown> => {
     );
 };
 
-const isCapturedWordLikeRecord = (value: unknown): value is Record<string, unknown> => {
+const isCodexEntryLikeRecord = (value: unknown): value is Record<string, unknown> => {
     if (!isRecord(value)) {
         return false;
     }
@@ -240,24 +234,20 @@ const toApiBook = (value: Record<string, unknown>): ApiBook => {
     };
 };
 
-const toApiCapturedWordEntry = (value: Record<string, unknown>): ApiCapturedWordEntry => {
-    const rarityScore = toFiniteNumber(value.rarityScore);
-    const definitions = isApiJsonValue(value.definitions) ? value.definitions : null;
-    const phonetics = isApiJsonValue(value.phonetics) ? value.phonetics : null;
-
+const toCodexEntry = (value: Record<string, unknown>): CodexEntryReadResponseDTO => {
     return {
         id: toFiniteNumber(value.id) ?? 0,
         wordId: toFiniteNumber(value.wordId) ?? 0,
-        sessionId: toFiniteNumber(value.sessionId) ?? 0,
+        sourceSessionId: value.sourceSessionId == null ? null : (toFiniteNumber(value.sourceSessionId) ?? null),
         lemma: typeof value.lemma === 'string' ? value.lemma : '',
-        specificDefinition: typeof value.specificDefinition === 'string' ? value.specificDefinition : '',
-        xpValue: toFiniteNumber(value.xpValue) ?? 0,
-        capturedAt: typeof value.capturedAt === 'string' ? value.capturedAt : '',
-        rarityScore,
+        specificDefinition: typeof value.specificDefinition === 'string' ? value.specificDefinition : null,
+        xpValue: toFiniteNumber(value.xpValue),
+        createdAt: typeof value.createdAt === 'string' ? value.createdAt : '',
+        rarityScore: toFiniteNumber(value.rarityScore),
         rarityTier: typeof value.rarityTier === 'string' ? value.rarityTier : 'COMMON',
-        source: typeof value.source === 'string' ? value.source : '',
-        definitions,
-        phonetics,
+        source: typeof value.source === 'string' ? value.source : null,
+        definitions: isApiJsonValue(value.definitions) ? value.definitions : null,
+        phonetics: isApiJsonValue(value.phonetics) ? value.phonetics : null,
     };
 };
 
@@ -488,24 +478,24 @@ const normalizeBookResponse = (value: ApiBookResponse): ApiBook => {
     throw new Error('Unexpected book response shape.');
 };
 
-const normalizeCapturedWordsResponse = (value: unknown): ApiCapturedWordEntry[] => {
+const normalizeCodexEntriesResponse = (value: unknown): CodexEntryReadResponseDTO[] => {
     if (Array.isArray(value)) {
         return value
-            .filter(isCapturedWordLikeRecord)
-            .map(toApiCapturedWordEntry);
+            .filter(isCodexEntryLikeRecord)
+            .map(toCodexEntry);
     }
 
     if (!isRecord(value)) {
         return [];
     }
 
-    const collections = [value.words, value.content, value.data, value.items];
+    const collections = [value.codexEntries, value.words, value.content, value.data, value.items];
 
     for (const collection of collections) {
         if (Array.isArray(collection)) {
             return collection
-                .filter(isCapturedWordLikeRecord)
-                .map(toApiCapturedWordEntry);
+                .filter(isCodexEntryLikeRecord)
+                .map(toCodexEntry);
         }
     }
 
@@ -623,16 +613,16 @@ export const getSession = async (sessionId: string | number) => {
     }
 };
 
-export const getCapturedWords = async () => {
+export const getCodexEntries = async () => {
     try {
-        const res = await fetch(`${API_BASE_URL}/capturedWords/all`, {
+        const res = await fetch(`${API_BASE_URL}/codexEntries`, {
             headers: await buildAuthHeaders(),
         });
-        if (!res.ok) throw new Error('Failed to fetch captured words');
+        if (!res.ok) throw new Error('Failed to fetch codex entries');
         const data = await res.json();
-        return normalizeCapturedWordsResponse(data);
+        return normalizeCodexEntriesResponse(data);
     } catch (error) {
-        console.error('Error fetching captured words:', error);
+        console.error('Error fetching codex entries:', error);
         throw error;
     }
 };
@@ -768,8 +758,8 @@ const collectAllStrings = (value: ApiJsonValue, collected: string[]) => {
     }
 };
 
-export const extractDefinitionFromDefinitions = (definitions: ApiJsonValue | null) => {
-    if (!definitions) {
+export const extractDefinitionFromDefinitions = (definitions: unknown) => {
+    if (!isApiJsonValue(definitions)) {
         return '';
     }
 
@@ -785,8 +775,8 @@ export const extractDefinitionFromDefinitions = (definitions: ApiJsonValue | nul
     return allStrings[0] ?? '';
 };
 
-export const extractSynonymsFromDefinitions = (definitions: ApiJsonValue | null) => {
-    if (!definitions) {
+export const extractSynonymsFromDefinitions = (definitions: unknown) => {
+    if (!isApiJsonValue(definitions)) {
         return [];
     }
 
@@ -797,8 +787,8 @@ export const extractSynonymsFromDefinitions = (definitions: ApiJsonValue | null)
     return Array.from(new Set(synonymCandidates));
 };
 
-export const extractPhoneticText = (phonetics: ApiJsonValue | null) => {
-    if (!phonetics) {
+export const extractPhoneticText = (phonetics: unknown) => {
+    if (!isApiJsonValue(phonetics)) {
         return '';
     }
 
@@ -815,9 +805,9 @@ export const extractPhoneticText = (phonetics: ApiJsonValue | null) => {
 };
 
 
-export const searchAndCaptureWord = async (sessionId: number, payload: SearchAndCapturePayload) => {
+export const createCodexEntry = async (sessionId: number, payload: CodexEntryCreateRequestDTO) => {
     try {
-        const res = await fetch(`${API_BASE_URL}/capturedWords/${sessionId}`, {
+        const res = await fetch(`${API_BASE_URL}/codexEntries/${sessionId}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -825,10 +815,10 @@ export const searchAndCaptureWord = async (sessionId: number, payload: SearchAnd
             },
             body: JSON.stringify(payload),
         });
-        if (!res.ok) throw new Error('Failed to search and capture word');
-        return await res.json() as SearchAndCaptureResponse;
+        if (!res.ok) throw new Error('Failed to create codex entry');
+        return await res.json() as CodexEntryCreateResponseDTO;
     } catch (error) {
-        console.error('Error searching and capturing word:', error);
+        console.error('Error creating codex entry:', error);
         throw error;
     }
 };
