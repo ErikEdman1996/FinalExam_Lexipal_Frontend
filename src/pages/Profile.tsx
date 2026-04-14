@@ -1,6 +1,8 @@
 import { useEffect, useState, type ComponentType } from 'react';
-import { BookOpen, Brain, Flame, Target, Trophy, Zap } from 'lucide-react';
+import { BookOpen, Brain, Flame, LogOut, Target, Trophy, Zap } from 'lucide-react';
 import { BottomNav } from '../components/BottomNav';
+import { Button } from '../components/Button';
+import { useAuth } from '../features/auth/AuthProvider';
 import {
   getProfile,
   type DailyActivityReadResponseDTO,
@@ -163,6 +165,7 @@ function RecentActivitySection({ activities }: RecentActivitySectionProps) {
 }
 
 export default function Profile() {
+  const { logout, username } = useAuth();
   const [profile, setProfile] = useState<ProfileReadResponseDTO | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -277,11 +280,22 @@ export default function Profile() {
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#F7FBF8_0%,#F6F9FF_52%,#F8F4FF_100%)] pb-24">
       <div className="mx-auto max-w-3xl px-5 py-8 sm:px-6 sm:py-10">
-        <div className="mb-6">
-          <h1 className="text-4xl font-semibold tracking-[-0.03em] text-[#22324A]">Profile</h1>
-          <p className="mt-2 max-w-xl text-sm leading-relaxed text-[#6A7687]">
-            Track your reading level, streaks, and milestones in one place.
-          </p>
+        <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h1 className="text-4xl font-semibold tracking-[-0.03em] text-[#22324A]">Profile</h1>
+            <p className="mt-2 max-w-xl text-sm leading-relaxed text-[#6A7687]">
+              Track your reading level, streaks, and milestones in one place.
+            </p>
+            {username ? (
+              <p className="mt-2 text-sm text-[#8A94A6]">Signed in as {username}</p>
+            ) : null}
+          </div>
+          <Button variant="outline" className="rounded-full px-5" onClick={() => void logout()}>
+            <span className="inline-flex items-center gap-2">
+              <LogOut size={16} />
+              Log out
+            </span>
+          </Button>
         </div>
 
         <section className="rounded-[32px] border border-[rgba(36,52,71,0.08)] bg-white/92 px-6 py-7 text-center shadow-[0_18px_36px_rgba(31,41,55,0.07)] sm:px-8">

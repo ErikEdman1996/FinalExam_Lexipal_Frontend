@@ -4,6 +4,7 @@ import { BottomNav } from '../components/BottomNav';
 import { Button } from '../components/Button';
 import {
   extractDefinitionFromDefinitions,
+  extractPartsOfSpeechFromDefinitions,
   extractPhoneticText,
   extractSynonymsFromDefinitions,
   getCodexEntries,
@@ -11,7 +12,7 @@ import {
 } from '../api/api';
 
 type RarityFilter = 'ALL' | 'COMMON' | 'RARE' | 'MYTHIC';
-type SortOption = 'NEWEST' | 'ALPHABETICAL' | 'HIGHEST_XP' | 'RAREST';
+type SortOption = 'NEWEST' | 'ALPHABETICAL' | 'HIGHEST_XP' | 'RAREST' | 'PART_OF_SPEECH';
 
 const rarityOptions: { id: RarityFilter; label: string }[] = [
   { id: 'ALL', label: 'All' },
@@ -25,6 +26,7 @@ const sortOptions: { id: SortOption; label: string }[] = [
   { id: 'RAREST', label: 'Rarest first' },
   { id: 'HIGHEST_XP', label: 'Highest XP' },
   { id: 'ALPHABETICAL', label: 'A-Z' },
+  { id: 'PART_OF_SPEECH', label: 'Part of speech' },
 ];
 
 const getRarityTier = (word: CodexEntryReadResponseDTO): Exclude<RarityFilter, 'ALL'> => {
@@ -61,6 +63,10 @@ const getRarityCardAccentClassName = (rarity: Exclude<RarityFilter, 'ALL'>) => {
 
 const getSpecificOrFallbackDefinition = (word: CodexEntryReadResponseDTO) => {
   return word.specificDefinition || extractDefinitionFromDefinitions(word.definitions) || 'No definition available yet.';
+};
+
+const getPartsOfSpeech = (word: CodexEntryReadResponseDTO) => {
+  return extractPartsOfSpeechFromDefinitions(word.definitions);
 };
 
 const formatCreatedDate = (createdAt: string) => {
@@ -103,6 +109,7 @@ function CodexWordDetails({ word, onClose }: CodexWordDetailsProps) {
   const phoneticText = extractPhoneticText(word.phonetics);
   const synonyms = extractSynonymsFromDefinitions(word.definitions);
   const definition = getSpecificOrFallbackDefinition(word);
+  const partsOfSpeech = getPartsOfSpeech(word);
 
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
@@ -162,6 +169,21 @@ function CodexWordDetails({ word, onClose }: CodexWordDetailsProps) {
             <p className="text-xs uppercase tracking-[0.22em] text-[#7B8794]">Definition</p>
             <p className="text-sm text-[#2C3E50] mt-2 leading-relaxed">{definition}</p>
           </section>
+
+          {partsOfSpeech.length > 0 ? (
+            <section>
+              <div className="flex flex-wrap gap-2">
+                {partsOfSpeech.map((partOfSpeech) => (
+                  <span
+                    key={partOfSpeech}
+                    className="px-3 py-1.5 rounded-full bg-[#EEF3F8] text-sm text-[#52606D] border border-[rgba(0,0,0,0.06)]"
+                  >
+                    {partOfSpeech}
+                  </span>
+                ))}
+              </div>
+            </section>
+          ) : null}
 
           {synonyms.length > 0 ? (
             <section>
@@ -254,11 +276,13 @@ export default function Codex() {
       const rarity = getRarityTier(word);
       const definition = getSpecificOrFallbackDefinition(word).toLowerCase();
       const source = (word.source ?? '').toLowerCase();
+      const partsOfSpeech = getPartsOfSpeech(word).join(' ').toLowerCase();
       const matchesFilter = rarityFilter === 'ALL' || rarity === rarityFilter;
       const matchesSearch = !normalizedQuery
         || word.lemma.toLowerCase().includes(normalizedQuery)
         || definition.includes(normalizedQuery)
-        || source.includes(normalizedQuery);
+        || source.includes(normalizedQuery)
+        || partsOfSpeech.includes(normalizedQuery);
 
       return matchesFilter && matchesSearch;
     })
@@ -279,6 +303,18 @@ export default function Codex() {
         }
 
         return (right.rarityScore ?? 0) - (left.rarityScore ?? 0);
+      }
+
+      if (sortBy === 'PART_OF_SPEECH') {
+        const leftPartOfSpeech = getPartsOfSpeech(left)[0] ?? 'zzzz';
+        const rightPartOfSpeech = getPartsOfSpeech(right)[0] ?? 'zzzz';
+        const comparison = leftPartOfSpeech.localeCompare(rightPartOfSpeech);
+
+        if (comparison !== 0) {
+          return comparison;
+        }
+
+        return left.lemma.localeCompare(right.lemma);
       }
 
       const leftTime = new Date(left.createdAt).getTime();
@@ -408,6 +444,7 @@ export default function Codex() {
             {filteredWords.map((word) => {
               const rarity = getRarityTier(word);
               const definition = getSpecificOrFallbackDefinition(word);
+              const partsOfSpeech = getPartsOfSpeech(word);
 
               return (
                 <button
@@ -423,6 +460,14 @@ export default function Codex() {
                         <span className={`text-xs px-3 py-1 rounded-full font-medium ${getRarityBadgeClassName(rarity)}`}>
                           {rarity}
                         </span>
+                        {partsOfSpeech.map((partOfSpeech) => (
+                          <span
+                            key={partOfSpeech}
+                            className="text-xs px-3 py-1 rounded-full font-medium bg-[#EEF3F8] text-[#52606D] border border-[rgba(0,0,0,0.06)]"
+                          >
+                            {partOfSpeech}
+                          </span>
+                        ))}
                       </div>
                       <p className="text-sm text-[#52606D] mt-1">{formatCreatedDate(word.createdAt)}</p>
                     </div>

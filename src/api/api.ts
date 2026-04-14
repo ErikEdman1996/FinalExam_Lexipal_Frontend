@@ -147,6 +147,40 @@ export interface CodexEntryCreateResponseDTO {
     rarityTier: 'COMMON' | 'RARE' | 'MYTHIC' | string;
 }
 
+export type ChallengeType = 'FLASHCARD' | string;
+
+export type ChallengeDifficulty = 'EASY' | 'MEDIUM' | 'HARD' | string;
+
+export type ChallengeAttemptResult = 'PASS' | 'FAIL';
+
+export interface Challenge {
+    id: number;
+    type: ChallengeType;
+    description: string;
+    difficulty: ChallengeDifficulty;
+}
+
+export interface ChallengeAttemptCreateRequest {
+    userAnswer?: string;
+    result: ChallengeAttemptResult;
+    codexEntryId?: number;
+    wordId?: number;
+}
+
+export interface ChallengeAttempt {
+    id: number;
+    userAnswer: string | null;
+    result: ChallengeAttemptResult;
+    xpAwarded: number;
+    attemptedAt: string;
+    challengeId: number;
+    challengeType: ChallengeType;
+    codexEntryId: number | null;
+    wordId: number | null;
+    lemma: string | null;
+    definitionPreview: string | null;
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> => {
     return value !== null && typeof value === 'object';
 };
@@ -208,6 +242,26 @@ const isCodexEntryLikeRecord = (value: unknown): value is Record<string, unknown
     return typeof value.lemma === 'string' && toFiniteNumber(value.id) !== null;
 };
 
+const isChallengeLikeRecord = (value: unknown): value is Record<string, unknown> => {
+    if (!isRecord(value)) {
+        return false;
+    }
+
+    return typeof value.type === 'string' && toFiniteNumber(value.id) !== null;
+};
+
+const isChallengeAttemptLikeRecord = (value: unknown): value is Record<string, unknown> => {
+    if (!isRecord(value)) {
+        return false;
+    }
+
+    return (
+        toFiniteNumber(value.id) !== null
+        && typeof value.result === 'string'
+        && toFiniteNumber(value.challengeId) !== null
+    );
+};
+
 const toApiBook = (value: Record<string, unknown>): ApiBook => {
     const id = toFiniteNumber(value.id) ?? 0;
     const readPages = toFiniteNumber(value.readPages) ?? 0;
@@ -248,6 +302,33 @@ const toCodexEntry = (value: Record<string, unknown>): CodexEntryReadResponseDTO
         source: typeof value.source === 'string' ? value.source : null,
         definitions: isApiJsonValue(value.definitions) ? value.definitions : null,
         phonetics: isApiJsonValue(value.phonetics) ? value.phonetics : null,
+    };
+};
+
+const toChallenge = (value: Record<string, unknown>): Challenge => {
+    return {
+        id: toFiniteNumber(value.id) ?? 0,
+        type: typeof value.type === 'string' ? value.type : 'FLASHCARD',
+        description: typeof value.description === 'string' ? value.description : '',
+        difficulty: typeof value.difficulty === 'string' ? value.difficulty : 'EASY',
+    };
+};
+
+const toChallengeAttempt = (value: Record<string, unknown>): ChallengeAttempt => {
+    const normalizedResult = value.result === 'FAIL' ? 'FAIL' : 'PASS';
+
+    return {
+        id: toFiniteNumber(value.id) ?? 0,
+        userAnswer: typeof value.userAnswer === 'string' ? value.userAnswer : null,
+        result: normalizedResult,
+        xpAwarded: toFiniteNumber(value.xpAwarded) ?? 0,
+        attemptedAt: typeof value.attemptedAt === 'string' ? value.attemptedAt : '',
+        challengeId: toFiniteNumber(value.challengeId) ?? 0,
+        challengeType: typeof value.challengeType === 'string' ? value.challengeType : 'FLASHCARD',
+        codexEntryId: value.codexEntryId == null ? null : (toFiniteNumber(value.codexEntryId) ?? null),
+        wordId: value.wordId == null ? null : (toFiniteNumber(value.wordId) ?? null),
+        lemma: typeof value.lemma === 'string' ? value.lemma : null,
+        definitionPreview: typeof value.definitionPreview === 'string' ? value.definitionPreview : null,
     };
 };
 
@@ -522,6 +603,88 @@ const normalizeProfileResponse = (value: unknown): ProfileReadResponseDTO => {
     };
 };
 
+const normalizeChallengesResponse = (value: unknown): Challenge[] => {
+    if (Array.isArray(value)) {
+        return value
+            .filter(isChallengeLikeRecord)
+            .map(toChallenge);
+    }
+
+    if (!isRecord(value)) {
+        return [];
+    }
+
+    const collections = [value.challenges, value.content, value.data, value.items];
+
+    for (const collection of collections) {
+        if (Array.isArray(collection)) {
+            return collection
+                .filter(isChallengeLikeRecord)
+                .map(toChallenge);
+        }
+    }
+
+    return isChallengeLikeRecord(value) ? [toChallenge(value)] : [];
+};
+
+const normalizeChallengeResponse = (value: unknown): Challenge => {
+    if (isChallengeLikeRecord(value)) {
+        return toChallenge(value);
+    }
+
+    if (isRecord(value)) {
+        const nestedChallenge = [value.challenge, value.data, value.item].find(isChallengeLikeRecord);
+
+        if (nestedChallenge) {
+            return toChallenge(nestedChallenge);
+        }
+    }
+
+    console.error('Unexpected challenge response shape. Raw payload:', value);
+    throw new Error('Unexpected challenge response shape.');
+};
+
+const normalizeChallengeAttemptsResponse = (value: unknown): ChallengeAttempt[] => {
+    if (Array.isArray(value)) {
+        return value
+            .filter(isChallengeAttemptLikeRecord)
+            .map(toChallengeAttempt);
+    }
+
+    if (!isRecord(value)) {
+        return [];
+    }
+
+    const collections = [value.challengeAttempts, value.attempts, value.content, value.data, value.items];
+
+    for (const collection of collections) {
+        if (Array.isArray(collection)) {
+            return collection
+                .filter(isChallengeAttemptLikeRecord)
+                .map(toChallengeAttempt);
+        }
+    }
+
+    return isChallengeAttemptLikeRecord(value) ? [toChallengeAttempt(value)] : [];
+};
+
+const normalizeChallengeAttemptResponse = (value: unknown): ChallengeAttempt => {
+    if (isChallengeAttemptLikeRecord(value)) {
+        return toChallengeAttempt(value);
+    }
+
+    if (isRecord(value)) {
+        const nestedAttempt = [value.challengeAttempt, value.attempt, value.data, value.item].find(isChallengeAttemptLikeRecord);
+
+        if (nestedAttempt) {
+            return toChallengeAttempt(nestedAttempt);
+        }
+    }
+
+    console.error('Unexpected challenge attempt response shape. Raw payload:', value);
+    throw new Error('Unexpected challenge attempt response shape.');
+};
+
 const normalizeSessionResponse = (value: ApiSessionResponse): ApiSession => {
     const candidate = findSessionLikeRecord(value);
 
@@ -531,6 +694,35 @@ const normalizeSessionResponse = (value: ApiSessionResponse): ApiSession => {
 
     console.error('Unexpected session response shape. Raw payload:', value);
     throw new Error('Unexpected session response shape.');
+};
+
+const normalizeErrorMessage = (payload: unknown, fallbackMessage: string) => {
+    if (!isRecord(payload)) {
+        return fallbackMessage;
+    }
+
+    if (typeof payload.message === 'string' && payload.message.trim()) {
+        return payload.message;
+    }
+
+    if (isRecord(payload.errors)) {
+        const firstError = Object.values(payload.errors).find((value) => typeof value === 'string' && value.trim());
+
+        if (typeof firstError === 'string') {
+            return firstError;
+        }
+    }
+
+    return fallbackMessage;
+};
+
+const getErrorMessage = async (res: Response, fallbackMessage: string) => {
+    try {
+        const payload = await res.json();
+        return normalizeErrorMessage(payload, fallbackMessage);
+    } catch {
+        return fallbackMessage;
+    }
 };
 
 
@@ -637,6 +829,94 @@ export const getProfile = async () => {
         return normalizeProfileResponse(data);
     } catch (error) {
         console.error('Error fetching profile:', error);
+        throw error;
+    }
+};
+
+export const getChallenges = async () => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/challenges`, {
+            headers: await buildAuthHeaders(),
+        });
+        if (!res.ok) {
+            throw new Error(await getErrorMessage(res, 'Failed to fetch challenges'));
+        }
+        const data = await res.json();
+        return normalizeChallengesResponse(data);
+    } catch (error) {
+        console.error('Error fetching challenges:', error);
+        throw error;
+    }
+};
+
+export const getChallenge = async (challengeId: string | number) => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/challenges/${challengeId}`, {
+            headers: await buildAuthHeaders(),
+        });
+        if (!res.ok) {
+            throw new Error(await getErrorMessage(res, 'Failed to fetch challenge'));
+        }
+        const data = await res.json();
+        return normalizeChallengeResponse(data);
+    } catch (error) {
+        console.error('Error fetching challenge:', error);
+        throw error;
+    }
+};
+
+export const getChallengeAttempts = async () => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/challengeAttempts`, {
+            headers: await buildAuthHeaders(),
+        });
+        if (!res.ok) {
+            throw new Error(await getErrorMessage(res, 'Failed to fetch challenge attempts'));
+        }
+        const data = await res.json();
+        return normalizeChallengeAttemptsResponse(data);
+    } catch (error) {
+        console.error('Error fetching challenge attempts:', error);
+        throw error;
+    }
+};
+
+export const getChallengeAttemptsByChallenge = async (challengeId: string | number) => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/challenges/${challengeId}/attempts`, {
+            headers: await buildAuthHeaders(),
+        });
+        if (!res.ok) {
+            throw new Error(await getErrorMessage(res, 'Failed to fetch challenge attempts'));
+        }
+        const data = await res.json();
+        return normalizeChallengeAttemptsResponse(data);
+    } catch (error) {
+        console.error('Error fetching challenge attempts by challenge:', error);
+        throw error;
+    }
+};
+
+export const createChallengeAttempt = async (
+    challengeId: string | number,
+    payload: ChallengeAttemptCreateRequest,
+) => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/challenges/${challengeId}/attempts`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(await buildAuthHeaders()),
+            },
+            body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+            throw new Error(await getErrorMessage(res, 'Failed to create challenge attempt'));
+        }
+        const data = await res.json();
+        return normalizeChallengeAttemptResponse(data);
+    } catch (error) {
+        console.error('Error creating challenge attempt:', error);
         throw error;
     }
 };
@@ -798,6 +1078,25 @@ export const extractSynonymsFromDefinitions = (definitions: unknown) => {
     collectValuesByKey(definitions, 'synonym', synonymCandidates);
 
     return Array.from(new Set(synonymCandidates));
+};
+
+export const extractPartsOfSpeechFromDefinitions = (definitions: unknown) => {
+    if (!isApiJsonValue(definitions)) {
+        return [];
+    }
+
+    const partOfSpeechCandidates: string[] = [];
+    collectValuesByKey(definitions, 'partOfSpeech', partOfSpeechCandidates);
+    collectValuesByKey(definitions, 'part_of_speech', partOfSpeechCandidates);
+    collectValuesByKey(definitions, 'pos', partOfSpeechCandidates);
+
+    return Array.from(
+        new Set(
+            partOfSpeechCandidates
+                .map((value) => value.trim().toLowerCase())
+                .filter(Boolean),
+        ),
+    ).map((value) => value.charAt(0).toUpperCase() + value.slice(1));
 };
 
 export const extractPhoneticText = (phonetics: unknown) => {

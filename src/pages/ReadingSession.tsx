@@ -229,10 +229,6 @@ export default function ReadingSession() {
     );
   }
 
-  const progressPercent = book.totalPages > 0
-    ? Math.min(100, Math.max(0, (book.readPages / book.totalPages) * 100))
-    : 0;
-
   return (
     <div className="min-h-screen bg-[linear-gradient(180deg,#F7FBF8_0%,#F6F9FF_58%,#F8F5FF_100%)] px-4 py-6">
       <div className="mx-auto max-w-lg">
@@ -250,27 +246,7 @@ export default function ReadingSession() {
           </div>
         </div>
 
-        <div className="mt-5 rounded-[28px] border border-[rgba(36,52,71,0.08)] bg-white/90 p-5 shadow-[0_14px_30px_rgba(31,41,55,0.06)]">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-xs uppercase tracking-[0.22em] text-[#8A94A6]">Book Progress</p>
-              <p className="mt-2 text-sm text-[#6A7687]">
-                {book.readPages} / {book.totalPages} pages
-              </p>
-            </div>
-            <div className="flex h-12 w-12 items-center justify-center rounded-[18px] bg-[#DFF5EA]">
-              <BookOpen size={22} className="text-[#3D9B7A]" />
-            </div>
-          </div>
-          <div className="mt-4 h-3 overflow-hidden rounded-full bg-[#E8EEF5]">
-            <div
-              className="h-full rounded-full bg-[linear-gradient(90deg,#A8E6CF_0%,#92D9C8_100%)]"
-              style={{ width: `${Math.max(progressPercent, 4)}%` }}
-            />
-          </div>
-        </div>
-
-        <section className="mt-6 rounded-[32px] border border-[rgba(36,52,71,0.08)] bg-white/92 px-6 py-8 text-center shadow-[0_18px_38px_rgba(31,41,55,0.07)]">
+        <section className="mt-5 rounded-[32px] border border-[rgba(36,52,71,0.08)] bg-white/92 px-6 py-8 text-center shadow-[0_18px_38px_rgba(31,41,55,0.07)]">
           <p className="text-sm text-[#6A7687]">Focus timer</p>
           <div
             className={`mt-4 text-6xl font-semibold tabular-nums tracking-[-0.05em] text-[#22324A] transition-all duration-300 sm:text-7xl ${
@@ -327,16 +303,11 @@ export default function ReadingSession() {
         </section>
 
         <section className="mt-6 rounded-[28px] border border-[rgba(36,52,71,0.08)] bg-white/90 p-5 shadow-[0_14px_30px_rgba(31,41,55,0.06)]">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <p className="text-xs uppercase tracking-[0.22em] text-[#8A94A6]">Captured Words</p>
-              <p className="mt-2 text-sm text-[#6A7687]">
-                {codexEntries.length === 0 ? 'No words captured yet' : `${codexEntries.length} words captured this session`}
-              </p>
-            </div>
-            <div className="rounded-full bg-[#F4F7FB] px-3 py-1 text-sm font-medium text-[#4B647C]">
-              {codexEntries.length}
-            </div>
+          <div>
+            <p className="text-xs uppercase tracking-[0.22em] text-[#8A94A6]">Captured Words</p>
+            <p className="mt-2 text-sm text-[#6A7687]">
+              {codexEntries.length === 0 ? 'No words captured yet' : `${codexEntries.length} words captured this session`}
+            </p>
           </div>
 
           {codexEntries.length === 0 ? (

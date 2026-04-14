@@ -5,6 +5,7 @@ import { Button } from './Button';
 import {
   createCodexEntry,
   extractDefinitionFromDefinitions,
+  extractPartsOfSpeechFromDefinitions,
   extractSynonymsFromDefinitions,
   getDictionaryWord,
 } from '../api/api';
@@ -21,6 +22,7 @@ interface LookupResult {
   lemma: string;
   definition: string;
   synonyms: string[];
+  partsOfSpeech: string[];
   newCapture: boolean;
   rarityTier: 'COMMON' | 'RARE' | 'MYTHIC';
   xpValue: number;
@@ -112,6 +114,20 @@ const getInnerPanelClass = (tier: LookupResult['rarityTier']) => {
   }
 
   return 'bg-white';
+};
+
+const getLookupCardHeight = (result: LookupResult | null) => {
+  if (!result) {
+    return 380;
+  }
+
+  const synonymText = result.synonyms.join(', ');
+  const partOfSpeechText = result.partsOfSpeech.join(', ');
+  const contentLength = result.definition.length + synonymText.length + partOfSpeechText.length;
+  const estimatedTextLines = Math.ceil(contentLength / 46);
+  const estimatedHeight = 320 + (estimatedTextLines * 18);
+
+  return Math.min(620, Math.max(380, estimatedHeight));
 };
 
 export function WordLookupModal({
@@ -218,11 +234,13 @@ export function WordLookupModal({
         const codexEntry = codexEntryResponse.codexEntry;
         const mappedDefinition = extractDefinitionFromDefinitions(codexEntry.definitions);
         const mappedSynonyms = extractSynonymsFromDefinitions(codexEntry.definitions);
+        const mappedPartsOfSpeech = extractPartsOfSpeechFromDefinitions(codexEntry.definitions);
 
         nextResult = {
           lemma: codexEntry.lemma ?? trimmedWord,
           definition: mappedDefinition || 'No definition available right now.',
           synonyms: mappedSynonyms,
+          partsOfSpeech: mappedPartsOfSpeech,
           newCapture: codexEntryResponse.newCapture,
           rarityTier: (codexEntryResponse.rarityTier as LookupResult['rarityTier']) ?? 'COMMON',
           xpValue: codexEntry.xpValue ?? 0,
@@ -236,6 +254,7 @@ export function WordLookupModal({
           lemma: fetchedWord.lemma ?? trimmedWord,
           definition: extractDefinitionFromDefinitions(fetchedWord.definitions) || 'No definition available right now.',
           synonyms: extractSynonymsFromDefinitions(fetchedWord.definitions),
+          partsOfSpeech: extractPartsOfSpeechFromDefinitions(fetchedWord.definitions),
           newCapture: fallbackNewCapture,
           rarityTier: getRarityTierFromScore(fetchedWord.rarityScore),
           xpValue: fallbackNewCapture ? 10 : 0,
@@ -306,6 +325,7 @@ export function WordLookupModal({
   const hasHighRarityReveal = !!result?.newCapture && (result.rarityTier === 'RARE' || result.rarityTier === 'MYTHIC');
   const hasMythicReveal = !!result?.newCapture && result.rarityTier === 'MYTHIC';
   const canTiltCard = !prefersReducedMotion && !!result?.newCapture && (result?.rarityTier === 'RARE' || result?.rarityTier === 'MYTHIC');
+  const lookupCardHeight = getLookupCardHeight(result);
 
   const handleCardPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
     if (!canTiltCard) {
@@ -328,7 +348,7 @@ export function WordLookupModal({
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
       <div
-        className="bg-white rounded-t-[32px] sm:rounded-[32px] w-full max-w-md shadow-[0_8px_32px_rgba(0,0,0,0.12)] animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 duration-300"
+        className="bg-white rounded-t-[32px] sm:rounded-[32px] w-full max-w-md max-h-[92vh] overflow-y-auto shadow-[0_8px_32px_rgba(0,0,0,0.12)] animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 duration-300"
         role="dialog"
         aria-modal="true"
         aria-labelledby="word-lookup-title"
@@ -347,7 +367,10 @@ export function WordLookupModal({
         </div>
 
         <div className="p-6 pt-5">
-          <div className="relative h-[380px]" style={{ perspective: prefersReducedMotion ? 'none' : '1200px' }}>
+          <div
+            className="relative transition-[height] duration-300"
+            style={{ height: `${lookupCardHeight}px`, perspective: prefersReducedMotion ? 'none' : '1200px' }}
+          >
             <div
               className="relative h-full w-full transition-transform duration-700"
               style={{
@@ -520,7 +543,7 @@ export function WordLookupModal({
                       />
                     ) : null}
 
-                    <div className="relative z-10 flex h-full flex-col px-5 py-4">
+                    <div className="relative z-10 flex h-full flex-col overflow-y-auto px-5 py-4">
                       <div className="flex items-start justify-between gap-4">
                         <div>
                           {result.newCapture ? (
@@ -539,6 +562,19 @@ export function WordLookupModal({
                         <div className="mt-3 inline-flex self-start items-center gap-2 rounded-full bg-[#EAFBF3] text-[#2C7A5C] px-3 py-1 text-sm font-medium">
                           <Sparkles size={14} />
                           +{result.xpValue} XP
+                        </div>
+                      ) : null}
+
+                      {result.partsOfSpeech.length > 0 ? (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          {result.partsOfSpeech.map((partOfSpeech) => (
+                            <span
+                              key={partOfSpeech}
+                              className="rounded-full bg-[#EEF3F8] px-3 py-1 text-xs font-medium text-[#4D6175]"
+                            >
+                              {partOfSpeech}
+                            </span>
+                          ))}
                         </div>
                       ) : null}
 
