@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Brain, CheckCircle2, ChevronRight, RotateCcw, Sparkles, Swords, XCircle } from 'lucide-react';
 import { BottomNav } from '../components/BottomNav';
 import { Button } from '../components/Button';
+import { useXpGain } from '../features/xp/XpGainProvider';
 import {
   createChallengeAttempt,
   extractDefinitionFromDefinitions,
@@ -379,6 +380,7 @@ export default function Challenge() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [sessionSummary, setSessionSummary] = useState<FlashcardSessionSummary | null>(null);
+  const { showXpGain } = useXpGain();
 
   useEffect(() => {
     let isMounted = true;
@@ -478,6 +480,13 @@ export default function Challenge() {
       });
 
       setAttempts((previousAttempts) => [createdAttempt, ...previousAttempts]);
+
+      if (createdAttempt.xpUpdate) {
+        showXpGain({
+          xpUpdate: createdAttempt.xpUpdate,
+          source: 'challenge',
+        });
+      }
 
       const isFinalCard = currentIndex >= activeDeck.length - 1;
 

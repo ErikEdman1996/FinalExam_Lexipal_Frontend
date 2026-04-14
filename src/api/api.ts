@@ -16,6 +16,7 @@ export interface ApiSession {
     reflection: string;
     status: 'IN_PROGRESS' | 'COMPLETED';
     capturedWordCount: number;
+    xpUpdate?: XpUpdateResponseDTO | null;
 }
 
 type ApiSessionResponse = unknown;
@@ -89,6 +90,52 @@ export interface ApiWord {
     phonetics: ApiJsonValue | null;
 }
 
+export interface Pronunciation {
+    type: string;
+    text: string;
+    tags: string[];
+}
+
+export interface DictionaryQuote {
+    text: string;
+    reference: string;
+}
+
+export interface DictionaryTranslation {
+    language: {
+        code: string;
+        name: string;
+    };
+    word: string;
+}
+
+export interface Sense {
+    definition: string;
+    tags: string[];
+    examples: string[];
+    quotes: DictionaryQuote[];
+    synonyms: string[];
+    antonyms: string[];
+    translations?: DictionaryTranslation[];
+    subsenses: Sense[];
+}
+
+export interface DictionaryEntry {
+    language: {
+        code: string;
+        name: string;
+    };
+    partOfSpeech: string;
+    pronunciations: Pronunciation[];
+    forms: {
+        word: string;
+        tags: string[];
+    }[];
+    senses: Sense[];
+    synonyms: string[];
+    antonyms: string[];
+}
+
 export type RarityTier = 'COMMON' | 'UNCOMMON' | 'RARE' | 'MYTHIC';
 
 export const rarityOrder: RarityTier[] = ['COMMON', 'UNCOMMON', 'RARE', 'MYTHIC'];
@@ -108,8 +155,8 @@ export interface CodexEntryReadResponseDTO {
     rarityScore: number | null;
     rarityTier: RarityTier | string;
     source: string | null;
-    definitions: unknown;
-    phonetics: unknown;
+    definitions: DictionaryEntry[] | null;
+    phonetics: Pronunciation[] | null;
 }
 
 export interface ProfileStatsResponseDTO {
@@ -118,6 +165,7 @@ export interface ProfileStatsResponseDTO {
     totalSessionsCompleted: number;
     totalCapturedWords: number;
     totalXpEarned: number;
+    totalMinutesRead: number;
 }
 
 export interface StreakMetaDataReadResponseDTO {
@@ -145,10 +193,26 @@ export interface ProfileReadResponseDTO {
     recentDailyActivities: DailyActivityReadResponseDTO[];
 }
 
+export interface XpUpdateResponseDTO {
+    xpAwarded: number;
+    previousTotalXp: number;
+    newTotalXp: number;
+    level: number;
+    xpIntoLevel: number;
+    xpPerLevel: number;
+    leveledUp: boolean;
+}
+
+export interface DictionarySense {
+    definition: string;
+    examples: string[];
+}
+
 export interface CodexEntryCreateResponseDTO {
     codexEntry: CodexEntryReadResponseDTO;
     newCapture: boolean;
     rarityTier: RarityTier | string;
+    xpUpdate: XpUpdateResponseDTO | null;
 }
 
 export type ChallengeType = 'FLASHCARD' | string;
@@ -183,6 +247,7 @@ export interface ChallengeAttempt {
     wordId: number | null;
     lemma: string | null;
     definitionPreview: string | null;
+    xpUpdate?: XpUpdateResponseDTO | null;
 }
 
 const isRecord = (value: unknown): value is Record<string, unknown> => {
@@ -304,8 +369,8 @@ const toCodexEntry = (value: Record<string, unknown>): CodexEntryReadResponseDTO
         rarityScore: toFiniteNumber(value.rarityScore),
         rarityTier: typeof value.rarityTier === 'string' ? value.rarityTier : 'COMMON',
         source: typeof value.source === 'string' ? value.source : null,
-        definitions: isApiJsonValue(value.definitions) ? value.definitions : null,
-        phonetics: isApiJsonValue(value.phonetics) ? value.phonetics : null,
+        definitions: toDictionaryEntries(value.definitions),
+        phonetics: toPronunciations(value.phonetics),
     };
 };
 
@@ -341,6 +406,29 @@ const toChallengeAttempt = (value: Record<string, unknown>): ChallengeAttempt =>
         wordId: value.wordId == null ? null : (toFiniteNumber(value.wordId) ?? null),
         lemma: typeof value.lemma === 'string' ? value.lemma : null,
         definitionPreview: typeof value.definitionPreview === 'string' ? value.definitionPreview : null,
+        xpUpdate: toXpUpdate(value.xpUpdate),
+    };
+};
+
+const toXpUpdate = (value: unknown): XpUpdateResponseDTO | null => {
+    if (!isRecord(value)) {
+        return null;
+    }
+
+    const previousTotalXp = toFiniteNumber(value.previousTotalXp) ?? 0;
+    const newTotalXp = toFiniteNumber(value.newTotalXp) ?? previousTotalXp;
+    const xpPerLevel = Math.max(1, toFiniteNumber(value.xpPerLevel) ?? 100);
+    const xpIntoLevel = toFiniteNumber(value.xpIntoLevel) ?? Math.max(0, newTotalXp % xpPerLevel);
+    const derivedLevel = Math.floor(Math.max(0, newTotalXp) / xpPerLevel) + 1;
+
+    return {
+        xpAwarded: toFiniteNumber(value.xpAwarded) ?? Math.max(0, newTotalXp - previousTotalXp),
+        previousTotalXp,
+        newTotalXp,
+        level: toFiniteNumber(value.level) ?? derivedLevel,
+        xpIntoLevel: Math.max(0, xpIntoLevel),
+        xpPerLevel,
+        leveledUp: value.leveledUp === true,
     };
 };
 
@@ -353,6 +441,7 @@ const toProfileStats = (value: unknown): ProfileStatsResponseDTO => {
         totalSessionsCompleted: toFiniteNumber(record.totalSessionsCompleted) ?? 0,
         totalCapturedWords: toFiniteNumber(record.totalCapturedWords) ?? 0,
         totalXpEarned: toFiniteNumber(record.totalXpEarned) ?? 0,
+        totalMinutesRead: toFiniteNumber(record.totalMinutesRead) ?? 0,
     };
 };
 
@@ -489,6 +578,7 @@ const toApiSession = (value: Record<string, unknown>): ApiSession => {
         status,
         sessionDate,
         capturedWordCount,
+        xpUpdate: toXpUpdate(value.xpUpdate),
     };
 };
 
@@ -1063,7 +1153,177 @@ const collectAllStrings = (value: ApiJsonValue, collected: string[]) => {
     }
 };
 
+const toStringArray = (value: unknown): string[] => {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+
+    return value
+        .filter((entry): entry is string => typeof entry === 'string')
+        .map((entry) => entry.trim())
+        .filter(Boolean);
+};
+
+const toPronunciation = (value: unknown): Pronunciation | null => {
+    if (!isRecord(value)) {
+        return null;
+    }
+
+    const text = typeof value.text === 'string' ? value.text.trim() : '';
+
+    if (!text) {
+        return null;
+    }
+
+    return {
+        type: typeof value.type === 'string' ? value.type : '',
+        text,
+        tags: toStringArray(value.tags),
+    };
+};
+
+const toPronunciations = (value: unknown): Pronunciation[] | null => {
+    if (!Array.isArray(value)) {
+        return null;
+    }
+
+    const pronunciations = value
+        .map(toPronunciation)
+        .filter((entry): entry is Pronunciation => entry !== null);
+
+    return pronunciations.length > 0 ? pronunciations : [];
+};
+
+const toDictionaryTranslation = (value: unknown): DictionaryTranslation | null => {
+    if (!isRecord(value) || !isRecord(value.language)) {
+        return null;
+    }
+
+    const word = typeof value.word === 'string' ? value.word.trim() : '';
+
+    if (!word) {
+        return null;
+    }
+
+    return {
+        language: {
+            code: typeof value.language.code === 'string' ? value.language.code : '',
+            name: typeof value.language.name === 'string' ? value.language.name : '',
+        },
+        word,
+    };
+};
+
+const toDictionaryQuote = (value: unknown): DictionaryQuote | null => {
+    if (!isRecord(value)) {
+        return null;
+    }
+
+    const text = typeof value.text === 'string' ? value.text.trim() : '';
+
+    if (!text) {
+        return null;
+    }
+
+    return {
+        text,
+        reference: typeof value.reference === 'string' ? value.reference : '',
+    };
+};
+
+const toSense = (value: unknown): Sense | null => {
+    if (!isRecord(value)) {
+        return null;
+    }
+
+    const definition = typeof value.definition === 'string' ? value.definition.trim() : '';
+
+    if (!definition) {
+        return null;
+    }
+
+    const subsenses = Array.isArray(value.subsenses)
+        ? value.subsenses.map(toSense).filter((entry): entry is Sense => entry !== null)
+        : [];
+
+    const translations = Array.isArray(value.translations)
+        ? value.translations.map(toDictionaryTranslation).filter((entry): entry is DictionaryTranslation => entry !== null)
+        : [];
+
+    return {
+        definition,
+        tags: toStringArray(value.tags),
+        examples: toStringArray(value.examples),
+        quotes: Array.isArray(value.quotes)
+            ? value.quotes.map(toDictionaryQuote).filter((entry): entry is DictionaryQuote => entry !== null)
+            : [],
+        synonyms: toStringArray(value.synonyms),
+        antonyms: toStringArray(value.antonyms),
+        translations: translations.length > 0 ? translations : undefined,
+        subsenses,
+    };
+};
+
+const toDictionaryEntry = (value: unknown): DictionaryEntry | null => {
+    if (!isRecord(value)) {
+        return null;
+    }
+
+    const senses = Array.isArray(value.senses)
+        ? value.senses.map(toSense).filter((entry): entry is Sense => entry !== null)
+        : [];
+
+    return {
+        language: isRecord(value.language)
+            ? {
+                code: typeof value.language.code === 'string' ? value.language.code : '',
+                name: typeof value.language.name === 'string' ? value.language.name : '',
+            }
+            : { code: '', name: '' },
+        partOfSpeech: typeof value.partOfSpeech === 'string' ? value.partOfSpeech : '',
+        pronunciations: Array.isArray(value.pronunciations)
+            ? value.pronunciations.map(toPronunciation).filter((entry): entry is Pronunciation => entry !== null)
+            : [],
+        forms: Array.isArray(value.forms)
+            ? value.forms
+                .filter(isRecord)
+                .map((form) => ({
+                    word: typeof form.word === 'string' ? form.word : '',
+                    tags: toStringArray(form.tags),
+                }))
+                .filter((form) => form.word)
+            : [],
+        senses,
+        synonyms: toStringArray(value.synonyms),
+        antonyms: toStringArray(value.antonyms),
+    };
+};
+
+export const toDictionaryEntries = (value: unknown): DictionaryEntry[] | null => {
+    if (!Array.isArray(value)) {
+        return null;
+    }
+
+    const entries = value
+        .map(toDictionaryEntry)
+        .filter((entry): entry is DictionaryEntry => entry !== null);
+
+    return entries.length > 0 ? entries : [];
+};
+
 export const extractDefinitionFromDefinitions = (definitions: unknown) => {
+    const entries = toDictionaryEntries(definitions);
+
+    if (entries) {
+        for (const entry of entries) {
+            const firstSense = entry.senses[0];
+
+            if (firstSense?.definition) {
+                return firstSense.definition;
+            }
+        }
+    }
+
     if (!isApiJsonValue(definitions)) {
         return '';
     }
@@ -1081,6 +1341,24 @@ export const extractDefinitionFromDefinitions = (definitions: unknown) => {
 };
 
 export const extractSynonymsFromDefinitions = (definitions: unknown) => {
+    const entries = toDictionaryEntries(definitions);
+
+    if (entries) {
+        const synonyms = new Set<string>();
+
+        const collectSenseSynonyms = (sense: Sense) => {
+            sense.synonyms.forEach((synonym) => synonyms.add(synonym));
+            sense.subsenses.forEach(collectSenseSynonyms);
+        };
+
+        entries.forEach((entry) => {
+            entry.synonyms.forEach((synonym) => synonyms.add(synonym));
+            entry.senses.forEach(collectSenseSynonyms);
+        });
+
+        return Array.from(synonyms);
+    }
+
     if (!isApiJsonValue(definitions)) {
         return [];
     }
@@ -1093,6 +1371,18 @@ export const extractSynonymsFromDefinitions = (definitions: unknown) => {
 };
 
 export const extractPartsOfSpeechFromDefinitions = (definitions: unknown) => {
+    const entries = toDictionaryEntries(definitions);
+
+    if (entries) {
+        return Array.from(
+            new Set(
+                entries
+                    .map((entry) => entry.partOfSpeech.trim())
+                    .filter(Boolean),
+            ),
+        ).map((value) => value.charAt(0).toUpperCase() + value.slice(1));
+    }
+
     if (!isApiJsonValue(definitions)) {
         return [];
     }
@@ -1112,6 +1402,12 @@ export const extractPartsOfSpeechFromDefinitions = (definitions: unknown) => {
 };
 
 export const extractPhoneticText = (phonetics: unknown) => {
+    const pronunciations = toPronunciations(phonetics);
+
+    if (pronunciations && pronunciations.length > 0) {
+        return pronunciations[0].text;
+    }
+
     if (!isApiJsonValue(phonetics)) {
         return '';
     }
@@ -1128,6 +1424,94 @@ export const extractPhoneticText = (phonetics: unknown) => {
     return allStrings[0] ?? '';
 };
 
+export const extractDictionarySenses = (definitions: unknown): DictionarySense[] => {
+    const entries = toDictionaryEntries(definitions);
+
+    if (entries) {
+        const senses: DictionarySense[] = [];
+
+        const collectSense = (sense: Sense) => {
+            senses.push({
+                definition: sense.definition,
+                examples: sense.examples,
+            });
+            sense.subsenses.forEach(collectSense);
+        };
+
+        entries.forEach((entry) => {
+            entry.senses.forEach(collectSense);
+        });
+
+        if (senses.length > 0) {
+            return senses.filter((sense, index, list) => {
+                return list.findIndex((candidate) => candidate.definition === sense.definition) === index;
+            });
+        }
+    }
+
+    if (!isApiJsonValue(definitions)) {
+        return [];
+    }
+
+    const senses: DictionarySense[] = [];
+
+    const visit = (value: ApiJsonValue) => {
+        if (Array.isArray(value)) {
+            value.forEach(visit);
+            return;
+        }
+
+        if (value === null || typeof value !== 'object') {
+            return;
+        }
+
+        const record = value as Record<string, ApiJsonValue>;
+        const rawDefinition = record.definition;
+        const rawExample = record.example ?? record.examples;
+
+        if (typeof rawDefinition === 'string' && rawDefinition.trim()) {
+            const examples: string[] = [];
+
+            if (typeof rawExample === 'string' && rawExample.trim()) {
+                examples.push(rawExample.trim());
+            } else if (Array.isArray(rawExample)) {
+                rawExample.forEach((entry) => {
+                    if (typeof entry === 'string' && entry.trim()) {
+                        examples.push(entry.trim());
+                    } else if (entry && typeof entry === 'object') {
+                        const nestedText = (entry as Record<string, ApiJsonValue>).text;
+
+                        if (typeof nestedText === 'string' && nestedText.trim()) {
+                            examples.push(nestedText.trim());
+                        }
+                    }
+                });
+            }
+
+            senses.push({
+                definition: rawDefinition.trim(),
+                examples: Array.from(new Set(examples)),
+            });
+        }
+
+        Object.values(record).forEach((nestedValue) => visit(nestedValue));
+    };
+
+    visit(definitions);
+
+    if (senses.length > 0) {
+        return senses.filter((sense, index, list) => {
+            return list.findIndex((candidate) => candidate.definition === sense.definition) === index;
+        });
+    }
+
+    const fallbackDefinition = extractDefinitionFromDefinitions(definitions);
+
+    return fallbackDefinition
+        ? [{ definition: fallbackDefinition, examples: [] }]
+        : [];
+};
+
 
 export const createCodexEntry = async (sessionId: number, payload: CodexEntryCreateRequestDTO) => {
     try {
@@ -1140,7 +1524,14 @@ export const createCodexEntry = async (sessionId: number, payload: CodexEntryCre
             body: JSON.stringify(payload),
         });
         if (!res.ok) throw new Error('Failed to create codex entry');
-        return await res.json() as CodexEntryCreateResponseDTO;
+        const data = await res.json() as Record<string, unknown>;
+
+        return {
+            codexEntry: toCodexEntry(isRecord(data.codexEntry) ? data.codexEntry : {}),
+            newCapture: data.newCapture === true,
+            rarityTier: typeof data.rarityTier === 'string' ? data.rarityTier : 'COMMON',
+            xpUpdate: toXpUpdate(data.xpUpdate),
+        } satisfies CodexEntryCreateResponseDTO;
     } catch (error) {
         console.error('Error creating codex entry:', error);
         throw error;

@@ -3,7 +3,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, BookOpen, Pause, Play, Search, Square } from 'lucide-react';
 import { Button } from '../components/Button';
 import { WordLookupModal } from '../components/WordLookupModal';
-import { createSession, getBook, updateSession, type ApiBook } from '../api/api';
+import { useXpGain } from '../features/xp/XpGainProvider';
+import { createSession, getBook, updateSession, type ApiBook, type RarityTier, type XpUpdateResponseDTO } from '../api/api';
 
 interface SessionCodexEntry {
   lemma: string;
@@ -31,6 +32,7 @@ export default function ReadingSession() {
   const [codexEntries, setCodexEntries] = useState<SessionCodexEntry[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<number | null>(null);
   const [sessionError, setSessionError] = useState<string | null>(null);
+  const { showXpGain } = useXpGain();
   const intervalRef = useRef<number | null>(null);
   const shouldResumeAfterLookupRef = useRef(false);
   const sessionInitializationRef = useRef<Promise<number> | null>(null);
@@ -173,28 +175,47 @@ export default function ReadingSession() {
 
     const sessionId = await ensureSessionInitialized(parsedBookId);
 
-    await updateSession(sessionId, {
+    const updatedSession = await updateSession(sessionId, {
       durationSeconds: seconds,
       endPage,
       reflection: trimmedReflection,
       status: 'COMPLETED',
     });
 
+    if (updatedSession.xpUpdate) {
+      showXpGain({
+        xpUpdate: updatedSession.xpUpdate,
+        source: 'session',
+      });
+    }
+
     navigate(`/book/${bookId}`);
   };
 
-  const handleCaptureWord = (codexEntry: SessionCodexEntry, newCapture: boolean) => {
-    if (!newCapture) {
+  const handleCaptureWord = (captureResult: SessionCodexEntry & { newCapture: boolean; xpValue: number; xpUpdate: XpUpdateResponseDTO | null; rarityTier: RarityTier }) => {
+    if (!captureResult.newCapture) {
       return;
     }
 
     setCodexEntries((previousEntries) => {
-      if (previousEntries.some((word) => word.lemma.toLowerCase() === codexEntry.lemma.toLowerCase())) {
+      if (previousEntries.some((word) => word.lemma.toLowerCase() === captureResult.lemma.toLowerCase())) {
         return previousEntries;
       }
 
-      return [...previousEntries, codexEntry];
+      return [...previousEntries, {
+        lemma: captureResult.lemma,
+        definition: captureResult.definition,
+        synonyms: captureResult.synonyms,
+      }];
     });
+
+    if (captureResult.xpUpdate) {
+      showXpGain({
+        xpUpdate: captureResult.xpUpdate,
+        source: 'capture',
+        rarityTier: captureResult.rarityTier,
+      });
+    }
   };
 
   const handleToggleTimer = () => {
@@ -298,7 +319,7 @@ export default function ReadingSession() {
             className="mt-5 inline-flex h-11 items-center gap-2 rounded-full bg-[#EFF4FF] px-5 text-sm font-medium text-[#375B87] transition-colors hover:bg-[#E5EEFF]"
           >
             <Search size={16} />
-            Capture Word
+            Look up Word
           </button>
         </section>
 

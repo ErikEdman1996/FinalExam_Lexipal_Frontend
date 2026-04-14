@@ -1,16 +1,15 @@
 import { useEffect, useState, type ComponentType } from 'react';
-import { BookOpen, Brain, Flame, LogOut, Target, Trophy, Zap } from 'lucide-react';
+import { BookOpen, Brain, Clock3, Flame, LogOut, Target, Trophy, Zap } from 'lucide-react';
 import { BottomNav } from '../components/BottomNav';
 import { Button } from '../components/Button';
 import { useAuth } from '../features/auth/AuthProvider';
+import { getXpProgressMeta, XP_PER_LEVEL } from '../features/xp/xp';
 import {
   getProfile,
   type DailyActivityReadResponseDTO,
   type ProfileReadResponseDTO,
   type ProfileStatsResponseDTO,
 } from '../api/api';
-
-const XP_PER_LEVEL = 100;
 
 const formatMemberSince = (value: string) => {
   const parsed = new Date(value);
@@ -56,19 +55,6 @@ const isNewUserProfile = (stats: ProfileStatsResponseDTO) => {
     && stats.totalCapturedWords === 0
     && stats.totalXpEarned === 0
   );
-};
-
-const getLevelMeta = (totalXp: number) => {
-  const safeXp = Math.max(0, totalXp);
-  const level = Math.floor(safeXp / XP_PER_LEVEL) + 1;
-  const xpIntoLevel = safeXp % XP_PER_LEVEL;
-  const progressPercent = (xpIntoLevel / XP_PER_LEVEL) * 100;
-
-  return {
-    level,
-    xpIntoLevel,
-    progressPercent,
-  };
 };
 
 interface ProfileStatCardProps {
@@ -226,7 +212,7 @@ export default function Profile() {
   }
 
   const { stats, streak, recentDailyActivities, createdAt, status } = profile;
-  const { level, xpIntoLevel, progressPercent } = getLevelMeta(stats.totalXpEarned);
+  const { level, xpIntoLevel, progressPercent } = getXpProgressMeta(stats.totalXpEarned);
   const showNewUserState = isNewUserProfile(stats);
   const currentStreak = streak?.currentStreak ?? 0;
   const longestStreak = streak?.longestStreak ?? 0;
@@ -260,6 +246,13 @@ export default function Profile() {
       icon: Target,
       iconWrapClassName: 'bg-[#DCEFFF]',
       iconClassName: 'text-[#4B93D1]',
+    },
+    {
+      label: 'Minutes Read',
+      value: stats.totalMinutesRead,
+      icon: Clock3,
+      iconWrapClassName: 'bg-[#FFF2E6]',
+      iconClassName: 'text-[#D9822B]',
     },
     {
       label: 'Words Captured',

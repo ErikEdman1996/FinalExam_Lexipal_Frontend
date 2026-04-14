@@ -1,5 +1,6 @@
 import { Navigate, Outlet } from 'react-router-dom';
 import { Button } from '../../components/Button';
+import { XpGainProvider } from '../xp/XpGainProvider';
 import { useAuth } from './AuthProvider';
 
 function AuthLoadingScreen({ message }: { message: string }) {
@@ -57,5 +58,9 @@ export function ProtectedRoute() {
     return <AuthLoadingScreen message="Creating your Lexipal profile and syncing your app access..." />;
   }
 
-  return <Outlet />;
+  return (
+    <XpGainProvider>
+      <Outlet />
+    </XpGainProvider>
+  );
 }

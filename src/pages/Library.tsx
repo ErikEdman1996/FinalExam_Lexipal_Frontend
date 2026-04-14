@@ -50,11 +50,9 @@ function mapApiStatusToUiStatus(status: ApiBook['status']): BookStatus {
 function mapBackendBookToLibraryBook(book: ApiBook): LibraryBook {
   const safeTotalPages = book.totalPages > 0 ? book.totalPages : 1;
   const safeReadPages = Math.max(0, Math.min(book.readPages, safeTotalPages));
-  const sessionCount = typeof book.sessionCount === 'number'
-    ? Math.max(0, Math.floor(book.sessionCount))
-    : Array.isArray(book.sessions)
-      ? book.sessions.length
-      : 0;
+  const sessionCount = Array.isArray(book.sessions)
+    ? book.sessions.filter((session) => session.status === 'COMPLETED').length
+    : 0;
 
   return {
     id: String(book.id),

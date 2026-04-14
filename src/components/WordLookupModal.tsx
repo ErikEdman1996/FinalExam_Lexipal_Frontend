@@ -4,18 +4,30 @@ import { motion, useMotionValue, useSpring, useTransform } from 'motion/react';
 import { Button } from './Button';
 import {
   createCodexEntry,
+  extractDictionarySenses,
   extractDefinitionFromDefinitions,
+  extractPhoneticText,
   extractPartsOfSpeechFromDefinitions,
   extractSynonymsFromDefinitions,
   getDictionaryWord,
   normalizeRarityTier,
+  type DictionarySense,
+  type XpUpdateResponseDTO,
   type RarityTier,
 } from '../api/api';
 
 interface WordLookupModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onCapture: (word: { lemma: string; definition: string; synonyms: string[] }, newCapture: boolean) => void;
+  onCapture: (result: {
+    lemma: string;
+    definition: string;
+    synonyms: string[];
+    newCapture: boolean;
+    xpValue: number;
+    xpUpdate: XpUpdateResponseDTO | null;
+    rarityTier: RarityTier;
+  }) => void;
   codexEntryLemmas: string[];
   sessionId?: number | null;
 }
@@ -23,8 +35,10 @@ interface WordLookupModalProps {
 interface LookupResult {
   lemma: string;
   definition: string;
+  senses: DictionarySense[];
   synonyms: string[];
   partsOfSpeech: string[];
+  phoneticText: string;
   newCapture: boolean;
   rarityTier: RarityTier;
   xpValue: number;
@@ -148,16 +162,17 @@ const getInnerPanelClass = (tier: LookupResult['rarityTier']) => {
 
 const getLookupCardHeight = (result: LookupResult | null) => {
   if (!result) {
-    return 380;
+    return 250;
   }
 
   const synonymText = result.synonyms.join(', ');
   const partOfSpeechText = result.partsOfSpeech.join(', ');
-  const contentLength = result.definition.length + synonymText.length + partOfSpeechText.length;
+  const senseText = result.senses.map((sense) => `${sense.definition} ${sense.examples.join(' ')}`).join(' ');
+  const contentLength = senseText.length + synonymText.length + partOfSpeechText.length + result.phoneticText.length;
   const estimatedTextLines = Math.ceil(contentLength / 46);
-  const estimatedHeight = 320 + (estimatedTextLines * 18);
+  const estimatedHeight = 380 + (estimatedTextLines * 18);
 
-  return Math.min(620, Math.max(380, estimatedHeight));
+  return Math.min(760, Math.max(500, estimatedHeight));
 };
 
 export function WordLookupModal({
@@ -255,6 +270,7 @@ export function WordLookupModal({
       setLookupError(null);
 
       let nextResult: LookupResult;
+      let nextXpUpdate: XpUpdateResponseDTO | null = null;
 
       if (sessionId) {
         const codexEntryResponse = await createCodexEntry(sessionId, {
@@ -263,18 +279,23 @@ export function WordLookupModal({
 
         const codexEntry = codexEntryResponse.codexEntry;
         const mappedDefinition = extractDefinitionFromDefinitions(codexEntry.definitions);
+        const mappedSenses = extractDictionarySenses(codexEntry.definitions);
         const mappedSynonyms = extractSynonymsFromDefinitions(codexEntry.definitions);
         const mappedPartsOfSpeech = extractPartsOfSpeechFromDefinitions(codexEntry.definitions);
+        const mappedPhoneticText = extractPhoneticText(codexEntry.phonetics);
 
         nextResult = {
           lemma: codexEntry.lemma ?? trimmedWord,
           definition: mappedDefinition || 'No definition available right now.',
+          senses: mappedSenses,
           synonyms: mappedSynonyms,
           partsOfSpeech: mappedPartsOfSpeech,
+          phoneticText: mappedPhoneticText,
           newCapture: codexEntryResponse.newCapture,
           rarityTier: normalizeRarityTier(codexEntryResponse.rarityTier),
           xpValue: codexEntry.xpValue ?? 0,
         };
+        nextXpUpdate = codexEntryResponse.xpUpdate;
       } else {
         const fetchedWord = await getDictionaryWord(trimmedWord);
         const normalizedLemma = (fetchedWord.lemma ?? trimmedWord).toLowerCase();
@@ -283,8 +304,10 @@ export function WordLookupModal({
         nextResult = {
           lemma: fetchedWord.lemma ?? trimmedWord,
           definition: extractDefinitionFromDefinitions(fetchedWord.definitions) || 'No definition available right now.',
+          senses: extractDictionarySenses(fetchedWord.definitions),
           synonyms: extractSynonymsFromDefinitions(fetchedWord.definitions),
           partsOfSpeech: extractPartsOfSpeechFromDefinitions(fetchedWord.definitions),
+          phoneticText: extractPhoneticText(fetchedWord.phonetics),
           newCapture: fallbackNewCapture,
           rarityTier: getRarityTierFromScore(fetchedWord.rarityScore),
           xpValue: fallbackNewCapture ? 10 : 0,
@@ -313,14 +336,15 @@ export function WordLookupModal({
         setIsFlipped(true);
       }
 
-      onCapture(
-        {
-          lemma: nextResult.lemma,
-          definition: nextResult.definition,
-          synonyms: nextResult.synonyms,
-        },
-        nextResult.newCapture,
-      );
+      onCapture({
+        lemma: nextResult.lemma,
+        definition: nextResult.definition,
+        synonyms: nextResult.synonyms,
+        newCapture: nextResult.newCapture,
+        xpValue: nextResult.xpValue,
+        xpUpdate: nextXpUpdate,
+        rarityTier: nextResult.rarityTier,
+      });
     } catch (error) {
       console.error('Error creating codex entry:', error);
       setLookupError('Could not capture this word right now. Please try again.');
@@ -378,25 +402,21 @@ export function WordLookupModal({
   return (
     <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
       <div
-        className="bg-white rounded-t-[32px] sm:rounded-[32px] w-full max-w-md max-h-[92vh] overflow-y-auto shadow-[0_8px_32px_rgba(0,0,0,0.12)] animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 duration-300"
+        className="bg-white rounded-t-[32px] sm:rounded-[32px] w-full max-w-lg max-h-[94vh] overflow-y-auto shadow-[0_8px_32px_rgba(0,0,0,0.12)] animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 duration-300"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="word-lookup-title"
+        aria-label="Word lookup"
       >
-        <div className="sticky top-0 bg-white border-b border-[rgba(0,0,0,0.05)] px-6 py-4 rounded-t-[32px]">
-          <div className="flex justify-between items-center">
-            <h2 id="word-lookup-title" className="text-xl font-semibold text-[#2C3E50]">Look Up Word</h2>
+        <div className="p-6 pt-6">
+          <div className="mb-4 flex justify-end">
             <button
               onClick={onClose}
-              className="w-10 h-10 rounded-full hover:bg-[#F0F2F5] flex items-center justify-center transition-colors"
+              className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-[#F0F2F5] transition-colors"
               aria-label="Close word lookup modal"
             >
               <X size={20} className="text-[#6C757D]" />
             </button>
           </div>
-        </div>
-
-        <div className="p-6 pt-5">
           <div
             className="relative transition-[height] duration-300"
             style={{ height: `${lookupCardHeight}px`, perspective: prefersReducedMotion ? 'none' : '1200px' }}
@@ -413,9 +433,6 @@ export function WordLookupModal({
                 className="absolute inset-0 rounded-[24px] border border-[rgba(0,0,0,0.08)] bg-white p-5"
                 style={{ backfaceVisibility: 'hidden' }}
               >
-                <label htmlFor="lookup-word" className="block text-sm text-[#2C3E50] mb-2">
-                  Word
-                </label>
                 <input
                   id="lookup-word"
                   type="text"
@@ -428,8 +445,9 @@ export function WordLookupModal({
                     }
                   }}
                   className="w-full px-4 py-3 rounded-[16px] bg-[#F8F9FA] border border-[rgba(0,0,0,0.08)] focus:outline-none focus:ring-2 focus:ring-[#D4C5F9] focus:border-transparent transition-all"
-                  placeholder="Enter word to capture"
+                  placeholder="Enter word"
                   autoFocus
+                  aria-label="Enter word"
                 />
 
                 {lookupError ? (
@@ -582,14 +600,24 @@ export function WordLookupModal({
                     ) : null}
 
                     <div className="relative z-10 flex h-full flex-col overflow-y-auto px-5 py-4">
-                      <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-start justify-between gap-4 border-b border-[rgba(36,52,71,0.08)] pb-4">
                         <div>
                           {result.newCapture ? (
-                            <p className="text-sm text-[#6C757D]">You have captured</p>
+                            <p className="text-[0.72rem] uppercase tracking-[0.22em] text-[#6C757D]">Captured entry</p>
                           ) : (
-                            <p className="text-sm text-[#6C757D]">Already in your codex</p>
+                            <p className="text-[0.72rem] uppercase tracking-[0.22em] text-[#6C757D]">Dictionary entry</p>
                           )}
-                          <h3 className="text-2xl font-semibold text-[#2C3E50] uppercase tracking-wide mt-1">{result.lemma}</h3>
+                          <h3 className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-[#23324A]">{result.lemma}</h3>
+                          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-[#5A6678]">
+                            {result.phoneticText ? (
+                              <span className="font-medium italic text-[#4B5E77]">/{result.phoneticText}/</span>
+                            ) : null}
+                            {result.partsOfSpeech.length > 0 ? (
+                              <span className="rounded-full bg-white/70 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-[#516275]">
+                                {result.partsOfSpeech[0]}
+                              </span>
+                            ) : null}
+                          </div>
                         </div>
                         <span className={`text-xs px-3 py-1 rounded-full font-medium ${rarityPillClass}`}>
                           {result.rarityTier}
@@ -603,27 +631,32 @@ export function WordLookupModal({
                         </div>
                       ) : null}
 
-                      {result.partsOfSpeech.length > 0 ? (
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {result.partsOfSpeech.map((partOfSpeech) => (
-                            <span
-                              key={partOfSpeech}
-                              className="rounded-full bg-[#EEF3F8] px-3 py-1 text-xs font-medium text-[#4D6175]"
-                            >
-                              {partOfSpeech}
-                            </span>
+                      <div className="mt-5">
+                        <p className="text-[0.72rem] uppercase tracking-[0.24em] text-[#6C757D]">Definitions</p>
+                        <div className="mt-3 space-y-4">
+                          {(result.senses.length > 0 ? result.senses : [{ definition: result.definition, examples: [] }]).map((sense, index) => (
+                            <div key={`${sense.definition}-${index}`} className="flex gap-3">
+                              <span className="pt-0.5 text-sm font-semibold text-[#7A5E2A]">{index + 1}.</span>
+                              <div className="min-w-0 flex-1">
+                                <p className="text-sm leading-relaxed text-[#23324A]">{sense.definition}</p>
+                                {sense.examples.length > 0 ? (
+                                  <ul className="mt-2 space-y-1 text-sm italic text-[#5B687A]">
+                                    {sense.examples.slice(0, 3).map((example) => (
+                                      <li key={example} className="leading-relaxed">
+                                        {example}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                ) : null}
+                              </div>
+                            </div>
                           ))}
                         </div>
-                      ) : null}
-
-                      <div className="mt-5">
-                        <p className="text-xs uppercase tracking-wide text-[#6C757D]">Definition</p>
-                        <p className="text-sm text-[#2C3E50] mt-1 leading-relaxed">{result.definition}</p>
                       </div>
 
-                      <div className="mt-4">
-                        <p className="text-xs uppercase tracking-wide text-[#6C757D]">Synonyms</p>
-                        <p className="text-sm text-[#2C3E50] mt-1 leading-relaxed">
+                      <div className="mt-5 border-t border-[rgba(36,52,71,0.08)] pt-4">
+                        <p className="text-[0.72rem] uppercase tracking-[0.24em] text-[#6C757D]">Synonyms</p>
+                        <p className="mt-2 text-sm leading-relaxed text-[#2C3E50]">
                           {result.synonyms.length > 0 ? result.synonyms.join(', ') : 'No synonyms available.'}
                         </p>
                       </div>
