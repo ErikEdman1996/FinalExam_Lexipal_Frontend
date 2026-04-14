@@ -8,6 +8,8 @@ import {
   extractPartsOfSpeechFromDefinitions,
   extractSynonymsFromDefinitions,
   getDictionaryWord,
+  normalizeRarityTier,
+  type RarityTier,
 } from '../api/api';
 
 interface WordLookupModalProps {
@@ -24,17 +26,21 @@ interface LookupResult {
   synonyms: string[];
   partsOfSpeech: string[];
   newCapture: boolean;
-  rarityTier: 'COMMON' | 'RARE' | 'MYTHIC';
+  rarityTier: RarityTier;
   xpValue: number;
 }
 
-const getRarityTierFromScore = (score: number | null | undefined): 'COMMON' | 'RARE' | 'MYTHIC' => {
+const getRarityTierFromScore = (score: number | null | undefined): RarityTier => {
   if ((score ?? 0) >= 0.9) {
     return 'MYTHIC';
   }
 
   if ((score ?? 0) >= 0.7) {
     return 'RARE';
+  }
+
+  if ((score ?? 0) >= 0.5) {
+    return 'UNCOMMON';
   }
 
   return 'COMMON';
@@ -46,6 +52,10 @@ const getRarityBorderClass = (tier: LookupResult['rarityTier']) => {
   }
 
   if (tier === 'RARE') {
+    return 'border-[#D6A332] shadow-[0_0_0_1px_rgba(214,163,50,0.35),0_8px_24px_rgba(214,163,50,0.18)]';
+  }
+
+  if (tier === 'UNCOMMON') {
     return 'border-[#7FB7FF] shadow-[0_0_0_1px_rgba(127,183,255,0.35),0_8px_24px_rgba(127,183,255,0.18)]';
   }
 
@@ -54,10 +64,14 @@ const getRarityBorderClass = (tier: LookupResult['rarityTier']) => {
 
 const getRarityPillClass = (tier: LookupResult['rarityTier']) => {
   if (tier === 'MYTHIC') {
-    return 'bg-[#F1E9FF] text-[#6E3CC8]';
+    return 'border border-transparent bg-[linear-gradient(135deg,#FF7A59_0%,#FFD866_24%,#8BE8FF_52%,#B084F5_76%,#FF7A59_100%)] text-white shadow-[0_10px_24px_rgba(176,132,245,0.25)]';
   }
 
   if (tier === 'RARE') {
+    return 'bg-[#FFF2D6] text-[#A36F00]';
+  }
+
+  if (tier === 'UNCOMMON') {
     return 'bg-[#E8F3FF] text-[#2B6CB0]';
   }
 
@@ -77,6 +91,10 @@ const getRevealDelayMs = (tier: LookupResult['rarityTier'], isNewCapture: boolea
     return 500;
   }
 
+  if (tier === 'UNCOMMON') {
+    return 250;
+  }
+
   return 0;
 };
 
@@ -86,6 +104,10 @@ const getRaritySurfaceClass = (tier: LookupResult['rarityTier']) => {
   }
 
   if (tier === 'RARE') {
+    return 'bg-[radial-gradient(circle_at_top,#fffaf0_0%,#fff2d6_44%,#fffdf8_100%)]';
+  }
+
+  if (tier === 'UNCOMMON') {
     return 'bg-[radial-gradient(circle_at_top,#f8fbff_0%,#eef5ff_46%,#fcfdff_100%)]';
   }
 
@@ -98,6 +120,10 @@ const getRarityAuraClass = (tier: LookupResult['rarityTier']) => {
   }
 
   if (tier === 'RARE') {
+    return 'from-[#FFF2C4]/70 via-[#FFE29A]/55 to-[#FFF9E6]/65';
+  }
+
+  if (tier === 'UNCOMMON') {
     return 'from-[#d8ebff]/70 via-[#b9d6ff]/55 to-[#e8f7ff]/65';
   }
 
@@ -110,6 +136,10 @@ const getInnerPanelClass = (tier: LookupResult['rarityTier']) => {
   }
 
   if (tier === 'RARE') {
+    return 'bg-[linear-gradient(180deg,rgba(255,255,255,0.97),rgba(255,249,240,0.94))]';
+  }
+
+  if (tier === 'UNCOMMON') {
     return 'bg-[linear-gradient(180deg,rgba(255,255,255,0.97),rgba(247,251,255,0.94))]';
   }
 
@@ -242,7 +272,7 @@ export function WordLookupModal({
           synonyms: mappedSynonyms,
           partsOfSpeech: mappedPartsOfSpeech,
           newCapture: codexEntryResponse.newCapture,
-          rarityTier: (codexEntryResponse.rarityTier as LookupResult['rarityTier']) ?? 'COMMON',
+          rarityTier: normalizeRarityTier(codexEntryResponse.rarityTier),
           xpValue: codexEntry.xpValue ?? 0,
         };
       } else {
@@ -322,9 +352,9 @@ export function WordLookupModal({
   const raritySurfaceClass = getRaritySurfaceClass(result?.rarityTier ?? 'COMMON');
   const rarityAuraClass = getRarityAuraClass(result?.rarityTier ?? 'COMMON');
   const innerPanelClass = getInnerPanelClass(result?.rarityTier ?? 'COMMON');
-  const hasHighRarityReveal = !!result?.newCapture && (result.rarityTier === 'RARE' || result.rarityTier === 'MYTHIC');
+  const hasHighRarityReveal = !!result?.newCapture && (result.rarityTier === 'UNCOMMON' || result.rarityTier === 'RARE' || result.rarityTier === 'MYTHIC');
   const hasMythicReveal = !!result?.newCapture && result.rarityTier === 'MYTHIC';
-  const canTiltCard = !prefersReducedMotion && !!result?.newCapture && (result?.rarityTier === 'RARE' || result?.rarityTier === 'MYTHIC');
+  const canTiltCard = !prefersReducedMotion && !!result?.newCapture && (result?.rarityTier === 'UNCOMMON' || result?.rarityTier === 'RARE' || result?.rarityTier === 'MYTHIC');
   const lookupCardHeight = getLookupCardHeight(result);
 
   const handleCardPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -435,16 +465,16 @@ export function WordLookupModal({
                           ? { opacity: 0.7 }
                           : { opacity: [0.45, 0.85, 0.55], scale: [1, 1.05, 1.02] }
                       }
-                      transition={{ duration: result.rarityTier === 'MYTHIC' ? 1.2 : 0.8, repeat: Infinity }}
+                      transition={{ duration: result.rarityTier === 'MYTHIC' ? 1.2 : result.rarityTier === 'RARE' ? 0.95 : 0.8, repeat: Infinity }}
                     />
                     <motion.div
                       className="absolute inset-y-0 -left-1/2 w-1/2 bg-[linear-gradient(90deg,transparent,rgba(255,255,255,0.9),transparent)]"
                       animate={prefersReducedMotion ? { opacity: 0.75 } : { x: ['-10%', '230%'], opacity: [0, 0.95, 0] }}
-                      transition={{ duration: result.rarityTier === 'MYTHIC' ? 1.35 : 0.95, repeat: Infinity, ease: 'easeInOut' }}
+                      transition={{ duration: result.rarityTier === 'MYTHIC' ? 1.35 : result.rarityTier === 'RARE' ? 1.05 : 0.95, repeat: Infinity, ease: 'easeInOut' }}
                     />
                     <div className="absolute inset-x-0 bottom-7 text-center">
                       <p className="text-xs uppercase tracking-[0.32em] text-[#2C3E50]/70">
-                        {result.rarityTier === 'MYTHIC' ? 'Mythic resonance' : 'Rare signal'}
+                        {result.rarityTier === 'MYTHIC' ? 'Mythic resonance' : result.rarityTier === 'RARE' ? 'Rare signal' : 'Uncommon signal'}
                       </p>
                     </div>
                   </motion.div>
@@ -466,9 +496,15 @@ export function WordLookupModal({
                               '0 0 0 1px rgba(176,132,245,0.30), 0 16px 32px rgba(122,89,214,0.24)',
                             ]
                           : [
-                              '0 0 0 1px rgba(127,183,255,0.30), 0 14px 28px rgba(80,125,216,0.18)',
-                              '0 0 0 1px rgba(127,183,255,0.45), 0 18px 36px rgba(80,125,216,0.24)',
-                              '0 0 0 1px rgba(127,183,255,0.30), 0 14px 28px rgba(80,125,216,0.18)',
+                              result.rarityTier === 'RARE'
+                                ? '0 0 0 1px rgba(214,163,50,0.30), 0 14px 28px rgba(214,163,50,0.18)'
+                                : '0 0 0 1px rgba(127,183,255,0.30), 0 14px 28px rgba(80,125,216,0.18)',
+                              result.rarityTier === 'RARE'
+                                ? '0 0 0 1px rgba(214,163,50,0.45), 0 18px 36px rgba(214,163,50,0.24)'
+                                : '0 0 0 1px rgba(127,183,255,0.45), 0 18px 36px rgba(80,125,216,0.24)',
+                              result.rarityTier === 'RARE'
+                                ? '0 0 0 1px rgba(214,163,50,0.30), 0 14px 28px rgba(214,163,50,0.18)'
+                                : '0 0 0 1px rgba(127,183,255,0.30), 0 14px 28px rgba(80,125,216,0.18)',
                             ],
                       }
                     : undefined
@@ -507,7 +543,9 @@ export function WordLookupModal({
                           style={{
                             background: hasMythicReveal
                               ? 'linear-gradient(115deg, rgba(255,0,128,0.07), rgba(255,208,0,0.1), rgba(0,214,255,0.08), rgba(160,100,255,0.08))'
-                              : 'linear-gradient(115deg, rgba(124,177,255,0.05), rgba(210,235,255,0.12), rgba(124,177,255,0.05))',
+                              : result.rarityTier === 'RARE'
+                                ? 'linear-gradient(115deg, rgba(255,221,120,0.06), rgba(255,236,186,0.14), rgba(255,221,120,0.06))'
+                                : 'linear-gradient(115deg, rgba(124,177,255,0.05), rgba(210,235,255,0.12), rgba(124,177,255,0.05))',
                             backgroundSize: '220% 220%',
                           }}
                           animate={prefersReducedMotion ? { opacity: 0.65 } : { backgroundPosition: ['0% 50%', '100% 50%', '0% 50%'] }}
@@ -619,7 +657,9 @@ export function WordLookupModal({
                     {[8, 18, 30, 42, 56, 68, 80, 92].map((topOffset, index) => (
                       <motion.span
                         key={`particle-left-${topOffset}`}
-                        className={`absolute -left-1 h-2 w-2 rounded-full ${hasMythicReveal ? 'bg-[#FFE27A]' : 'bg-[#D4C5F9]'}`}
+                        className={`absolute -left-1 h-2 w-2 rounded-full ${
+                          hasMythicReveal ? 'bg-[#FFE27A]' : result?.rarityTier === 'RARE' ? 'bg-[#FFD866]' : 'bg-[#8EC5FF]'
+                        }`}
                         initial={{ opacity: 0, x: 0, scale: 0.6 }}
                         animate={
                           prefersReducedMotion
@@ -633,7 +673,9 @@ export function WordLookupModal({
                     {[12, 22, 34, 46, 60, 72, 84, 96].map((topOffset, index) => (
                       <motion.span
                         key={`particle-right-${topOffset}`}
-                        className={`absolute -right-1 h-2 w-2 rounded-full ${hasMythicReveal ? 'bg-[#8BE8FF]' : 'bg-[#A8E6CF]'}`}
+                        className={`absolute -right-1 h-2 w-2 rounded-full ${
+                          hasMythicReveal ? 'bg-[#8BE8FF]' : result?.rarityTier === 'RARE' ? 'bg-[#FFF0AE]' : 'bg-[#A8D8FF]'
+                        }`}
                         initial={{ opacity: 0, x: 0, scale: 0.6 }}
                         animate={
                           prefersReducedMotion

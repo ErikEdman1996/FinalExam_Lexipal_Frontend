@@ -89,6 +89,10 @@ export interface ApiWord {
     phonetics: ApiJsonValue | null;
 }
 
+export type RarityTier = 'COMMON' | 'UNCOMMON' | 'RARE' | 'MYTHIC';
+
+export const rarityOrder: RarityTier[] = ['COMMON', 'UNCOMMON', 'RARE', 'MYTHIC'];
+
 export interface CodexEntryCreateRequestDTO {
     lemma: string;
 }
@@ -102,7 +106,7 @@ export interface CodexEntryReadResponseDTO {
     xpValue: number | null;
     createdAt: string;
     rarityScore: number | null;
-    rarityTier: 'COMMON' | 'RARE' | 'MYTHIC' | string;
+    rarityTier: RarityTier | string;
     source: string | null;
     definitions: unknown;
     phonetics: unknown;
@@ -144,7 +148,7 @@ export interface ProfileReadResponseDTO {
 export interface CodexEntryCreateResponseDTO {
     codexEntry: CodexEntryReadResponseDTO;
     newCapture: boolean;
-    rarityTier: 'COMMON' | 'RARE' | 'MYTHIC' | string;
+    rarityTier: RarityTier | string;
 }
 
 export type ChallengeType = 'FLASHCARD' | string;
@@ -303,6 +307,14 @@ const toCodexEntry = (value: Record<string, unknown>): CodexEntryReadResponseDTO
         definitions: isApiJsonValue(value.definitions) ? value.definitions : null,
         phonetics: isApiJsonValue(value.phonetics) ? value.phonetics : null,
     };
+};
+
+export const normalizeRarityTier = (rarityTier: unknown): RarityTier => {
+    if (rarityTier === 'MYTHIC' || rarityTier === 'RARE' || rarityTier === 'UNCOMMON') {
+        return rarityTier;
+    }
+
+    return 'COMMON';
 };
 
 const toChallenge = (value: Record<string, unknown>): Challenge => {

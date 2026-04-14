@@ -9,15 +9,18 @@ import {
   extractSynonymsFromDefinitions,
   getCodexEntries,
   type CodexEntryReadResponseDTO,
+  normalizeRarityTier,
+  type RarityTier,
 } from '../api/api';
 
-type RarityFilter = 'ALL' | 'COMMON' | 'RARE' | 'MYTHIC';
+type RarityFilter = 'ALL' | RarityTier;
 type SortOption = 'NEWEST' | 'ALPHABETICAL' | 'HIGHEST_XP' | 'RAREST' | 'PART_OF_SPEECH';
 
 const rarityOptions: { id: RarityFilter; label: string }[] = [
   { id: 'ALL', label: 'All' },
   { id: 'MYTHIC', label: 'Mythic' },
   { id: 'RARE', label: 'Rare' },
+  { id: 'UNCOMMON', label: 'Uncommon' },
   { id: 'COMMON', label: 'Common' },
 ];
 
@@ -29,33 +32,35 @@ const sortOptions: { id: SortOption; label: string }[] = [
   { id: 'PART_OF_SPEECH', label: 'Part of speech' },
 ];
 
-const getRarityTier = (word: CodexEntryReadResponseDTO): Exclude<RarityFilter, 'ALL'> => {
-  if (word.rarityTier === 'MYTHIC' || word.rarityTier === 'RARE') {
-    return word.rarityTier;
-  }
+const getRarityTier = (word: CodexEntryReadResponseDTO): RarityTier => normalizeRarityTier(word.rarityTier);
 
-  return 'COMMON';
-};
-
-const getRarityBadgeClassName = (rarity: Exclude<RarityFilter, 'ALL'>) => {
+const getRarityBadgeClassName = (rarity: RarityTier) => {
   if (rarity === 'MYTHIC') {
-    return 'bg-[#FFE7D6] text-[#9A4D19] border border-[rgba(154,77,25,0.14)]';
+    return 'border border-transparent bg-[linear-gradient(135deg,#FF7A59_0%,#FFD866_22%,#6DE7C8_44%,#8BE8FF_64%,#B084F5_82%,#FF7A59_100%)] text-white shadow-[0_10px_24px_rgba(176,132,245,0.28)]';
   }
 
   if (rarity === 'RARE') {
-    return 'bg-[#DDF4EC] text-[#206B52] border border-[rgba(32,107,82,0.14)]';
+    return 'bg-[#FFF2D6] text-[#A36F00] border border-[rgba(199,134,46,0.18)]';
+  }
+
+  if (rarity === 'UNCOMMON') {
+    return 'bg-[#E8F1FF] text-[#356A9A] border border-[rgba(75,147,209,0.16)]';
   }
 
   return 'bg-[#F1F3F5] text-[#5C6770] border border-[rgba(92,103,112,0.14)]';
 };
 
-const getRarityCardAccentClassName = (rarity: Exclude<RarityFilter, 'ALL'>) => {
+const getRarityCardAccentClassName = (rarity: RarityTier) => {
   if (rarity === 'MYTHIC') {
-    return 'from-[#FFF4E8] to-[#FFE7D6] border-[rgba(255,186,122,0.28)]';
+    return 'from-[#FFF6F3] via-[#FFF7D6] via-[35%] to-[#F4EEFF] border-[rgba(176,132,245,0.24)]';
   }
 
   if (rarity === 'RARE') {
-    return 'from-[#F2FBF7] to-[#DDF4EC] border-[rgba(61,163,122,0.22)]';
+    return 'from-[#FFF9EC] to-[#FFF2D6] border-[rgba(199,134,46,0.22)]';
+  }
+
+  if (rarity === 'UNCOMMON') {
+    return 'from-[#F4F9FF] to-[#E8F1FF] border-[rgba(75,147,209,0.18)]';
   }
 
   return 'from-[#FFFFFF] to-[#F6F7F9] border-[rgba(0,0,0,0.06)]';
@@ -83,12 +88,16 @@ const formatCreatedDate = (createdAt: string) => {
   });
 };
 
-const getSortWeight = (rarity: Exclude<RarityFilter, 'ALL'>) => {
+const getSortWeight = (rarity: RarityTier) => {
   if (rarity === 'MYTHIC') {
-    return 3;
+    return 4;
   }
 
   if (rarity === 'RARE') {
+    return 3;
+  }
+
+  if (rarity === 'UNCOMMON') {
     return 2;
   }
 
@@ -138,7 +147,17 @@ function CodexWordDetails({ word, onClose }: CodexWordDetailsProps) {
         </div>
 
         <div className="px-6 py-5 max-h-[78vh] overflow-y-auto space-y-5">
-          <div className={`rounded-[24px] border bg-gradient-to-br p-5 ${getRarityCardAccentClassName(rarity)}`}>
+          <div
+            className={`rounded-[24px] border bg-gradient-to-br p-5 ${getRarityCardAccentClassName(rarity)}`}
+            style={
+              rarity === 'MYTHIC'
+                ? {
+                    backgroundImage:
+                      'linear-gradient(135deg, rgba(255,122,89,0.18) 0%, rgba(255,216,102,0.16) 22%, rgba(109,231,200,0.15) 44%, rgba(139,232,255,0.16) 64%, rgba(176,132,245,0.18) 82%, rgba(255,122,89,0.16) 100%)',
+                  }
+                : undefined
+            }
+          >
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-sm text-[#6C757D]">
@@ -269,6 +288,7 @@ export default function Codex() {
   const totalXp = codexEntries.reduce((sum, word) => sum + Math.max(0, word.xpValue ?? 0), 0);
   const mythicCount = codexEntries.filter((word) => getRarityTier(word) === 'MYTHIC').length;
   const rareCount = codexEntries.filter((word) => getRarityTier(word) === 'RARE').length;
+  const uncommonCount = codexEntries.filter((word) => getRarityTier(word) === 'UNCOMMON').length;
   const commonCount = codexEntries.filter((word) => getRarityTier(word) === 'COMMON').length;
 
   const filteredWords = codexEntries
@@ -324,7 +344,7 @@ export default function Codex() {
 
   return (
     <div className="min-h-screen bg-[#F6F8F7] pb-20">
-      <div className="bg-white border-b border-[rgba(0,0,0,0.08)] sticky top-0 z-10">
+      <div className="bg-white/88 border-b border-[rgba(0,0,0,0.08)] backdrop-blur-sm">
         <div className="max-w-[480px] mx-auto px-6 py-4">
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -335,8 +355,12 @@ export default function Codex() {
               <BookOpen size={22} className="text-[#B35C1E]" />
             </div>
           </div>
+        </div>
+      </div>
 
-          <div className="grid grid-cols-2 gap-3 mt-5">
+      <div className="border-b border-[rgba(0,0,0,0.06)] bg-[#F6F8F7]/92 backdrop-blur-md">
+        <div className="max-w-[480px] mx-auto px-6 py-4">
+          <div className="grid grid-cols-2 gap-3">
             <div className="rounded-[22px] bg-gradient-to-br from-[#FFF5EB] to-[#FFE6CF] p-4 border border-[rgba(255,186,122,0.26)]">
               <p className="text-xs uppercase tracking-[0.18em] text-[#9A6A43]">Saved</p>
               <p className="text-2xl font-semibold text-[#2C3E50] mt-2">{codexEntries.length}</p>
@@ -347,7 +371,7 @@ export default function Codex() {
             </div>
           </div>
 
-          <div className="grid grid-cols-3 gap-2 mt-3">
+          <div className="grid grid-cols-2 gap-2 mt-3 sm:grid-cols-4">
             <div className="rounded-[18px] bg-white p-3 border border-[rgba(0,0,0,0.05)]">
               <p className="text-xs uppercase tracking-[0.16em] text-[#7B8794]">Mythic</p>
               <p className="text-lg font-semibold text-[#2C3E50] mt-1">{mythicCount}</p>
@@ -355,6 +379,10 @@ export default function Codex() {
             <div className="rounded-[18px] bg-white p-3 border border-[rgba(0,0,0,0.05)]">
               <p className="text-xs uppercase tracking-[0.16em] text-[#7B8794]">Rare</p>
               <p className="text-lg font-semibold text-[#2C3E50] mt-1">{rareCount}</p>
+            </div>
+            <div className="rounded-[18px] bg-white p-3 border border-[rgba(0,0,0,0.05)]">
+              <p className="text-xs uppercase tracking-[0.16em] text-[#7B8794]">Uncommon</p>
+              <p className="text-lg font-semibold text-[#2C3E50] mt-1">{uncommonCount}</p>
             </div>
             <div className="rounded-[18px] bg-white p-3 border border-[rgba(0,0,0,0.05)]">
               <p className="text-xs uppercase tracking-[0.16em] text-[#7B8794]">Common</p>
@@ -452,6 +480,14 @@ export default function Codex() {
                   type="button"
                   onClick={() => setSelectedWord(word)}
                   className={`w-full text-left rounded-[26px] border bg-gradient-to-br p-5 shadow-[0_8px_22px_rgba(15,23,42,0.05)] transition-all duration-200 hover:-translate-y-0.5 ${getRarityCardAccentClassName(rarity)}`}
+                  style={
+                    rarity === 'MYTHIC'
+                      ? {
+                          backgroundImage:
+                            'linear-gradient(135deg, rgba(255,122,89,0.18) 0%, rgba(255,216,102,0.17) 22%, rgba(109,231,200,0.15) 44%, rgba(139,232,255,0.17) 64%, rgba(176,132,245,0.18) 82%, rgba(255,122,89,0.16) 100%)',
+                        }
+                      : undefined
+                  }
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0">
