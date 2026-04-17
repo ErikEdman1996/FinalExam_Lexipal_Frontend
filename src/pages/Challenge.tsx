@@ -150,32 +150,32 @@ const shuffleCards = (cards: FlashcardCandidate[]) => {
 
 function ChallengeCard({ challenge, isLocked, availableCardCount, onStart }: ChallengeCardProps) {
   return (
-    <section className="rounded-[30px] border border-[rgba(36,52,71,0.08)] bg-white/92 p-6 shadow-[0_16px_34px_rgba(31,41,55,0.06)]">
+    <section className="rounded-[30px] border border-border bg-surface p-6 shadow-[0_16px_34px_rgba(31,41,55,0.06)]">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-xs uppercase tracking-[0.24em] text-[#8A94A6]">Mini Game</p>
-          <h2 className="mt-2 text-2xl font-semibold text-[#22324A]">{challenge.type}</h2>
+          <p className="text-xs uppercase tracking-[0.24em] text-text-subtle">Mini Game</p>
+          <h2 className="mt-2 text-2xl font-semibold text-text">{challenge.type}</h2>
         </div>
-        <div className="flex h-14 w-14 items-center justify-center rounded-[20px] bg-[linear-gradient(135deg,#FFF2DD_0%,#FFE5C6_100%)] shadow-[0_10px_24px_rgba(212,146,79,0.16)]">
-          <Swords size={24} className="text-[#B96A2D]" />
+        <div className="flex h-14 w-14 items-center justify-center rounded-[20px] bg-accent-soft shadow-[0_10px_24px_rgba(212,146,79,0.16)]">
+          <Swords size={24} className="text-accent-strong" />
         </div>
       </div>
 
-      <p className="mt-4 text-sm leading-relaxed text-[#6A7687]">{challenge.description}</p>
+      <p className="mt-4 text-sm leading-relaxed text-text-muted">{challenge.description}</p>
 
       <div className="mt-5 flex flex-wrap gap-2 text-sm">
-        <span className="rounded-full bg-[#EEF5FF] px-3 py-1.5 text-[#356A9A]">
+        <span className="rounded-full bg-surface-muted px-3 py-1.5 text-text">
           Difficulty: {challenge.difficulty}
         </span>
-        <span className="rounded-full bg-[#EAF7F1] px-3 py-1.5 text-[#2F7D5F]">
+        <span className="rounded-full bg-brand-soft px-3 py-1.5 text-brand-strong">
           {availableCardCount} Codex cards ready
         </span>
       </div>
 
-      <div className="mt-6 flex items-center justify-between gap-4 rounded-[24px] bg-[linear-gradient(135deg,#FFF7EE_0%,#F5FBF7_100%)] px-4 py-4">
+      <div className="mt-6 flex items-center justify-between gap-4 rounded-[24px] bg-[linear-gradient(135deg,var(--color-surface-alt)_0%,var(--color-brand-soft)_100%)] px-4 py-4">
         <div>
-          <p className="text-sm font-medium text-[#22324A]">Codex-powered flashcards</p>
-          <p className="mt-1 text-sm text-[#6A7687]">
+          <p className="text-sm font-medium text-text">Codex-powered flashcards</p>
+          <p className="mt-1 text-sm text-text-muted">
             Reveal the definition, then self-grade with pass or fail.
           </p>
         </div>
@@ -200,35 +200,35 @@ function FlashcardStage({
   onEndSession,
 }: FlashcardStageProps) {
   return (
-    <section className="rounded-[30px] border border-[rgba(36,52,71,0.08)] bg-white/92 p-6 shadow-[0_16px_34px_rgba(31,41,55,0.06)]">
+    <section className="rounded-[30px] border border-border bg-surface p-6 shadow-[0_16px_34px_rgba(31,41,55,0.06)]">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <p className="text-xs uppercase tracking-[0.24em] text-[#8A94A6]">Card Progress</p>
-          <h2 className="mt-2 text-2xl font-semibold text-[#22324A]">
+          <p className="text-xs uppercase tracking-[0.24em] text-text-subtle">Card Progress</p>
+          <h2 className="mt-2 text-2xl font-semibold text-text">
             Card {currentIndex + 1} of {totalCards}
           </h2>
         </div>
         <button
           type="button"
           onClick={onEndSession}
-          className="rounded-full bg-[#F7F9FC] px-4 py-2 text-sm font-medium text-[#52606D] transition-colors hover:bg-[#EEF2F6]"
+          className="rounded-full bg-surface-muted px-4 py-2 text-sm font-medium text-text-muted transition-colors hover:bg-surface-alt"
         >
           End session
         </button>
       </div>
 
-      <div className="mt-5 overflow-hidden rounded-[28px] border border-[rgba(36,52,71,0.08)] bg-[linear-gradient(180deg,#FFF8F0_0%,#FFFFFF_100%)]">
-        <div className="border-b border-[rgba(36,52,71,0.08)] px-5 py-4">
-          <p className="text-xs uppercase tracking-[0.22em] text-[#8A94A6]">Front</p>
-          <h3 className="mt-2 text-4xl font-semibold tracking-[-0.03em] text-[#22324A]">{card.lemma}</h3>
-          <p className="mt-2 text-sm text-[#6A7687]">
+      <div className="mt-5 overflow-hidden rounded-[28px] border border-border bg-[linear-gradient(180deg,var(--color-surface-alt)_0%,var(--color-surface)_100%)]">
+        <div className="border-b border-border px-5 py-4">
+          <p className="text-xs uppercase tracking-[0.22em] text-text-subtle">Front</p>
+          <h3 className="mt-2 text-4xl font-semibold tracking-[-0.03em] text-text">{card.lemma}</h3>
+          <p className="mt-2 text-sm text-text-muted">
             Saved {formatCreatedDate(card.createdAt)}
             {card.source ? ` from ${card.source}` : ''}
           </p>
         </div>
 
         <div className="px-5 py-5">
-          <label htmlFor="challenge-answer" className="text-xs uppercase tracking-[0.22em] text-[#8A94A6]">
+          <label htmlFor="challenge-answer" className="text-xs uppercase tracking-[0.22em] text-text-subtle">
             Your Guess
           </label>
           <textarea
@@ -236,13 +236,13 @@ function FlashcardStage({
             value={userAnswer}
             onChange={(event) => onAnswerChange(event.target.value)}
             placeholder="Type what you think it means before revealing the answer..."
-            className="mt-3 min-h-28 w-full rounded-[20px] border border-[rgba(36,52,71,0.10)] bg-[#F7F9FC] px-4 py-3 text-sm text-[#22324A] outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-[#A8E6CF]"
+            className="mt-3 min-h-28 w-full rounded-[20px] border border-border bg-surface-muted px-4 py-3 text-sm text-text outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-brand"
           />
 
           {isFlipped ? (
-            <div className="mt-5 rounded-[22px] bg-[#F7FBF8] px-4 py-4">
-              <p className="text-xs uppercase tracking-[0.22em] text-[#7A8B78]">Back</p>
-              <p className="mt-2 text-sm leading-relaxed text-[#22324A]">{card.definition}</p>
+            <div className="mt-5 rounded-[22px] bg-brand-soft px-4 py-4">
+              <p className="text-xs uppercase tracking-[0.22em] text-brand-strong">Back</p>
+              <p className="mt-2 text-sm leading-relaxed text-text">{card.definition}</p>
             </div>
           ) : null}
 
@@ -253,7 +253,7 @@ function FlashcardStage({
             <Button
               onClick={() => onGrade('PASS')}
               disabled={!isFlipped || isSubmitting}
-              className="bg-[#DDF4EC] text-[#1F5F48] hover:bg-[#CDECDD]"
+              className="bg-brand-soft text-brand-strong hover:bg-brand-soft/80"
             >
               <CheckCircle2 size={18} className="mr-2 inline-flex" />
               {isSubmitting ? 'Saving...' : 'Pass'}
@@ -261,7 +261,7 @@ function FlashcardStage({
             <Button
               onClick={() => onGrade('FAIL')}
               disabled={!isFlipped || isSubmitting}
-              className="bg-[#FFE1DE] text-[#9C3D35] hover:bg-[#FFD1CB]"
+              className="bg-danger-soft text-danger hover:bg-danger-soft/80"
             >
               <XCircle size={18} className="mr-2 inline-flex" />
               {isSubmitting ? 'Saving...' : 'Fail'}
@@ -275,29 +275,29 @@ function FlashcardStage({
 
 function SessionSummaryCard({ summary, onPlayAgain, onBackToMenu }: SessionSummaryCardProps) {
   return (
-    <section className="rounded-[30px] border border-[rgba(36,52,71,0.08)] bg-white/92 p-6 shadow-[0_16px_34px_rgba(31,41,55,0.06)]">
-      <p className="text-xs uppercase tracking-[0.24em] text-[#8A94A6]">Session Summary</p>
-      <h2 className="mt-2 text-3xl font-semibold text-[#22324A]">Flashcards complete</h2>
-      <p className="mt-2 text-sm leading-relaxed text-[#6A7687]">
+    <section className="rounded-[30px] border border-border bg-surface p-6 shadow-[0_16px_34px_rgba(31,41,55,0.06)]">
+      <p className="text-xs uppercase tracking-[0.24em] text-text-subtle">Session Summary</p>
+      <h2 className="mt-2 text-3xl font-semibold text-text">Flashcards complete</h2>
+      <p className="mt-2 text-sm leading-relaxed text-text-muted">
         Your results are already saved. Backend-awarded XP is reflected below.
       </p>
 
       <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-[22px] bg-[#F7F9FC] p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-[#8A94A6]">Cards</p>
-          <p className="mt-2 text-2xl font-semibold text-[#22324A]">{summary.completedCards}/{summary.totalCards}</p>
+        <div className="rounded-[22px] bg-surface-muted p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-text-subtle">Cards</p>
+          <p className="mt-2 text-2xl font-semibold text-text">{summary.completedCards}/{summary.totalCards}</p>
         </div>
-        <div className="rounded-[22px] bg-[#EEF8F2] p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-[#6A8B76]">Pass</p>
-          <p className="mt-2 text-2xl font-semibold text-[#1F5F48]">{summary.passCount}</p>
+        <div className="rounded-[22px] bg-brand-soft p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-brand-strong">Pass</p>
+          <p className="mt-2 text-2xl font-semibold text-brand-strong">{summary.passCount}</p>
         </div>
-        <div className="rounded-[22px] bg-[#FFF1EF] p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-[#A36A62]">Fail</p>
-          <p className="mt-2 text-2xl font-semibold text-[#9C3D35]">{summary.failCount}</p>
+        <div className="rounded-[22px] bg-danger-soft p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-danger">Fail</p>
+          <p className="mt-2 text-2xl font-semibold text-danger">{summary.failCount}</p>
         </div>
-        <div className="rounded-[22px] bg-[#FFF7E8] p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-[#9D7A34]">XP Earned</p>
-          <p className="mt-2 text-2xl font-semibold text-[#8C6420]">{summary.totalXp}</p>
+        <div className="rounded-[22px] bg-accent-soft p-4">
+          <p className="text-xs uppercase tracking-[0.18em] text-accent-strong">XP Earned</p>
+          <p className="mt-2 text-2xl font-semibold text-accent-strong">{summary.totalXp}</p>
         </div>
       </div>
 
@@ -316,46 +316,46 @@ function SessionSummaryCard({ summary, onPlayAgain, onBackToMenu }: SessionSumma
 
 function AttemptHistorySection({ attempts }: AttemptHistorySectionProps) {
   return (
-    <section className="rounded-[30px] border border-[rgba(36,52,71,0.08)] bg-white/90 p-6 shadow-[0_16px_34px_rgba(31,41,55,0.06)]">
+    <section className="rounded-[30px] border border-border bg-surface p-6 shadow-[0_16px_34px_rgba(31,41,55,0.06)]">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-xs uppercase tracking-[0.24em] text-[#8A94A6]">Attempt History</p>
-          <h2 className="mt-2 text-2xl font-semibold text-[#22324A]">Recent flashcard results</h2>
+          <p className="text-xs uppercase tracking-[0.24em] text-text-subtle">Attempt History</p>
+          <h2 className="mt-2 text-2xl font-semibold text-text">Recent flashcard results</h2>
         </div>
-        <div className="flex h-12 w-12 items-center justify-center rounded-[18px] bg-[#EEF6FF]">
-          <Sparkles size={20} className="text-[#4676B8]" />
+        <div className="flex h-12 w-12 items-center justify-center rounded-[18px] bg-brand-soft">
+          <Sparkles size={20} className="text-brand-strong" />
         </div>
       </div>
 
       {attempts.length === 0 ? (
-        <div className="mt-5 rounded-[22px] bg-[#F7F9FC] px-4 py-5 text-sm leading-relaxed text-[#6A7687]">
+        <div className="mt-5 rounded-[22px] bg-surface-muted px-4 py-5 text-sm leading-relaxed text-text-muted">
           Your flashcard attempts will show up here after your first challenge run.
         </div>
       ) : (
         <div className="mt-5 space-y-3">
           {attempts.slice(0, 6).map((attempt) => (
-            <article key={attempt.id} className="rounded-[22px] bg-[#F7F9FC] px-4 py-4">
+            <article key={attempt.id} className="rounded-[22px] bg-surface-muted px-4 py-4">
               <div className="flex items-start justify-between gap-4">
                 <div className="min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <h3 className="text-sm font-semibold text-[#22324A]">{attempt.lemma ?? 'Unknown word'}</h3>
+                    <h3 className="text-sm font-semibold text-text">{attempt.lemma ?? 'Unknown word'}</h3>
                     <span
                       className={`rounded-full px-2.5 py-1 text-xs font-medium ${
                         attempt.result === 'PASS'
-                          ? 'bg-[#E3F6EC] text-[#2F7D5F]'
-                          : 'bg-[#FFE4E0] text-[#A14B43]'
+                          ? 'bg-brand-soft text-brand-strong'
+                          : 'bg-danger-soft text-danger'
                       }`}
                     >
                       {attempt.result}
                     </span>
                   </div>
-                  <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-[#6A7687]">
+                  <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-text-muted">
                     {toReadableDefinitionPreview(attempt.definitionPreview)}
                   </p>
                 </div>
                 <div className="shrink-0 text-right">
-                  <p className="text-sm font-semibold text-[#22324A]">+{attempt.xpAwarded} XP</p>
-                  <p className="mt-1 text-xs text-[#8A94A6]">{formatAttemptDate(attempt.attemptedAt)}</p>
+                  <p className="text-sm font-semibold text-text">+{attempt.xpAwarded} XP</p>
+                  <p className="mt-1 text-xs text-text-subtle">{formatAttemptDate(attempt.attemptedAt)}</p>
                 </div>
               </div>
             </article>
@@ -553,8 +553,8 @@ export default function Challenge() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[linear-gradient(180deg,#F7FBF8_0%,#F6F9FF_55%,#FFF9EF_100%)] pb-24">
-        <div className="mx-auto max-w-3xl px-5 py-16 text-center text-[#6A7687]">
+      <div className="page-bg min-h-screen pb-24 lg:pl-60 lg:pb-0">
+        <div className="mx-auto max-w-3xl px-5 py-16 text-center text-text-muted">
           Loading your challenge menu...
         </div>
         <BottomNav />
@@ -564,10 +564,10 @@ export default function Challenge() {
 
   if (errorMessage) {
     return (
-      <div className="min-h-screen bg-[linear-gradient(180deg,#F7FBF8_0%,#F6F9FF_55%,#FFF9EF_100%)] pb-24">
+      <div className="page-bg min-h-screen pb-24 lg:pl-60 lg:pb-0">
         <div className="mx-auto max-w-3xl px-5 py-16 text-center">
-          <p className="text-lg text-[#FF6B6B]">{errorMessage}</p>
-          <p className="mt-2 text-sm text-[#6A7687]">Check backend connection and try again.</p>
+          <p className="text-lg text-danger">{errorMessage}</p>
+          <p className="mt-2 text-sm text-text-muted">Check backend connection and try again.</p>
         </div>
         <BottomNav />
       </div>
@@ -575,41 +575,41 @@ export default function Challenge() {
   }
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#F7FBF8_0%,#F6F9FF_45%,#FFF8EE_100%)] pb-24">
+    <div className="page-bg min-h-screen pb-24 lg:pl-60 lg:pb-0">
       <div className="mx-auto max-w-3xl px-5 py-8 sm:px-6 sm:py-10">
         <div className="mb-6 flex items-start justify-between gap-4">
           <div>
-            <h1 className="text-4xl font-semibold tracking-[-0.03em] text-[#22324A]">Challenges</h1>
-            <p className="mt-2 max-w-xl text-sm leading-relaxed text-[#6A7687]">
+            <h1 className="text-4xl font-semibold tracking-[-0.03em] text-text">Challenges</h1>
+            <p className="mt-2 max-w-xl text-sm leading-relaxed text-text-muted">
               Pick a mini game, train your memory, and let the backend track your earned XP.
             </p>
           </div>
-          <div className="flex h-14 w-14 items-center justify-center rounded-[20px] bg-[linear-gradient(135deg,#DFF5EA_0%,#CDEDDD_100%)] shadow-[0_10px_24px_rgba(62,157,123,0.16)]">
-            <Brain size={26} className="text-[#2F7D5F]" />
+          <div className="flex h-14 w-14 items-center justify-center rounded-[20px] bg-brand-soft shadow-[0_10px_24px_rgba(62,157,123,0.16)]">
+            <Brain size={26} className="text-brand-strong" />
           </div>
         </div>
 
-        <section className="rounded-[30px] border border-[rgba(36,52,71,0.08)] bg-white/92 p-6 shadow-[0_16px_34px_rgba(31,41,55,0.06)]">
+        <section className="rounded-[30px] border border-border bg-surface p-6 shadow-[0_16px_34px_rgba(31,41,55,0.06)]">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <div className="rounded-[24px] bg-[#F7F9FC] p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-[#8A94A6]">Mini Games</p>
-              <p className="mt-2 text-3xl font-semibold text-[#22324A]">{challenges.length}</p>
+            <div className="rounded-[24px] bg-surface-muted p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-text-subtle">Mini Games</p>
+              <p className="mt-2 text-3xl font-semibold text-text">{challenges.length}</p>
             </div>
-            <div className="rounded-[24px] bg-[#EEF8F2] p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-[#6A8B76]">Total Passes</p>
-              <p className="mt-2 text-3xl font-semibold text-[#1F5F48]">{totalPasses}</p>
+            <div className="rounded-[24px] bg-brand-soft p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-brand-strong">Total Passes</p>
+              <p className="mt-2 text-3xl font-semibold text-brand-strong">{totalPasses}</p>
             </div>
-            <div className="rounded-[24px] bg-[#FFF6E6] p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-[#9D7A34]">Challenge XP</p>
-              <p className="mt-2 text-3xl font-semibold text-[#8C6420]">{totalXpEarned}</p>
+            <div className="rounded-[24px] bg-accent-soft p-4">
+              <p className="text-xs uppercase tracking-[0.18em] text-accent-strong">Challenge XP</p>
+              <p className="mt-2 text-3xl font-semibold text-accent-strong">{totalXpEarned}</p>
             </div>
           </div>
         </section>
 
         {!flashcardChallenge ? (
-          <section className="mt-6 rounded-[30px] border border-[rgba(36,52,71,0.08)] bg-white/92 p-6 text-center shadow-[0_16px_34px_rgba(31,41,55,0.06)]">
-            <p className="text-lg font-medium text-[#22324A]">No challenge types are available yet.</p>
-            <p className="mt-2 text-sm leading-relaxed text-[#6A7687]">
+          <section className="mt-6 rounded-[30px] border border-border bg-surface p-6 text-center shadow-[0_16px_34px_rgba(31,41,55,0.06)]">
+            <p className="text-lg font-medium text-text">No challenge types are available yet.</p>
+            <p className="mt-2 text-sm leading-relaxed text-text-muted">
               Once the backend seeds the first challenge, it will show up here automatically.
             </p>
           </section>
@@ -625,23 +625,23 @@ export default function Challenge() {
             />
 
             {codexCards.length === 0 ? (
-              <section className="rounded-[28px] border border-[rgba(36,52,71,0.08)] bg-[linear-gradient(135deg,#FFF7EC_0%,#F1FBF6_100%)] p-5 shadow-[0_14px_30px_rgba(31,41,55,0.05)]">
-                <p className="text-base font-medium text-[#22324A]">Your Codex is the first deck source</p>
-                <p className="mt-2 text-sm leading-relaxed text-[#6A7687]">
+              <section className="rounded-[28px] border border-border bg-[linear-gradient(135deg,var(--color-surface-alt)_0%,var(--color-brand-soft)_100%)] p-5 shadow-[0_14px_30px_rgba(31,41,55,0.05)]">
+                <p className="text-base font-medium text-text">Your Codex is the first deck source</p>
+                <p className="mt-2 text-sm leading-relaxed text-text-muted">
                   Save words in Codex first, then this flashcard challenge can turn them into your practice deck.
                 </p>
               </section>
             ) : (
-              <section className="rounded-[28px] border border-[rgba(36,52,71,0.08)] bg-[linear-gradient(135deg,#EEF6FF_0%,#FFFFFF_100%)] p-5 shadow-[0_14px_30px_rgba(31,41,55,0.05)]">
+              <section className="rounded-[28px] border border-border bg-[linear-gradient(135deg,var(--color-brand-soft)_0%,var(--color-surface)_100%)] p-5 shadow-[0_14px_30px_rgba(31,41,55,0.05)]">
                 <div className="flex items-center justify-between gap-4">
                   <div>
-                    <p className="text-xs uppercase tracking-[0.22em] text-[#7E8CA0]">Ready Deck</p>
-                    <p className="mt-2 text-lg font-semibold text-[#22324A]">
+                    <p className="text-xs uppercase tracking-[0.22em] text-text-subtle">Ready Deck</p>
+                    <p className="mt-2 text-lg font-semibold text-text">
                       {codexCards.length} saved words are ready for flashcards
                     </p>
                   </div>
-                  <div className="flex h-12 w-12 items-center justify-center rounded-[18px] bg-[#DCEEFF]">
-                    <ChevronRight size={20} className="text-[#4676B8]" />
+                  <div className="flex h-12 w-12 items-center justify-center rounded-[18px] bg-brand-soft">
+                    <ChevronRight size={20} className="text-brand-strong" />
                   </div>
                 </div>
               </section>
@@ -667,7 +667,7 @@ export default function Challenge() {
             />
 
             {submissionError ? (
-              <div className="rounded-[22px] bg-[#FFE8E4] px-4 py-4 text-sm text-[#9C3D35]">
+              <div className="rounded-[22px] bg-danger-soft px-4 py-4 text-sm text-danger">
                 {submissionError}
               </div>
             ) : null}

@@ -20,6 +20,7 @@ export const router = createBrowserRouter([
       { path: '/book/:bookId', Component: BookDetails },
       { path: '/book/:bookId/session/new', Component: ReadingSession },
       { path: '/codex', Component: Codex },
+      { path: '/codex/page/:pageNumber', Component: Codex },
       { path: '/challenges', Component: Challenge },
       { path: '/profile', Component: Profile },
       { path: '*', Component: Library },

@@ -148,7 +148,7 @@ export function XpGainBar({ item, onComplete }: XpGainBarProps) {
   return (
     <div className="pointer-events-none fixed inset-x-0 top-0 z-[60] flex justify-center px-4 pt-4 sm:px-6 sm:pt-6">
       <div
-        className={`w-full max-w-xl rounded-[28px] border border-[rgba(36,52,71,0.08)] bg-white/95 p-4 shadow-[0_20px_50px_rgba(31,41,55,0.16)] backdrop-blur-md transition-all duration-300 sm:p-5 ${
+        className={`w-full max-w-xl rounded-[28px] border border-border bg-surface/95 p-4 shadow-[0_20px_50px_rgba(15,23,42,0.16)] backdrop-blur-xl transition-all duration-300 sm:p-5 ${
           phase === 'enter'
             ? 'translate-y-[-10px] opacity-0'
             : phase === 'exit'
@@ -159,24 +159,24 @@ export function XpGainBar({ item, onComplete }: XpGainBarProps) {
       >
         <div className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <p className="text-xs uppercase tracking-[0.24em] text-[#8A94A6]">{getSourceLabel(item.source)}</p>
+            <p className="text-xs uppercase tracking-[0.24em] text-text-subtle">{getSourceLabel(item.source)}</p>
             <div className="mt-2 flex items-center gap-2">
-              <p className="text-xl font-semibold text-[#22324A] sm:text-2xl">
+              <p className="text-xl font-semibold text-text sm:text-2xl">
                 {displayedXpIntoLevel}/{safeXpPerLevel} XP
               </p>
-              <span className="rounded-full bg-[#EAFBF3] px-2.5 py-1 text-xs font-semibold text-[#2F7D5F]">
+              <span className="rounded-full bg-brand-soft px-2.5 py-1 text-xs font-semibold text-brand-strong">
                 Level {displayedLevel}
               </span>
               {safeLeveledUp && isAnimationComplete ? (
-                <span className="rounded-full bg-[#FFF4D9] px-2.5 py-1 text-xs font-semibold text-[#A36F00]">
+                <span className="rounded-full bg-accent-soft px-2.5 py-1 text-xs font-semibold text-accent-strong">
                   Level up
                 </span>
               ) : null}
             </div>
-            <p className="mt-1 text-sm text-[#6A7687]">{roundedDisplayedTotalXp} total XP</p>
+            <p className="mt-1 text-sm text-text-muted">{roundedDisplayedTotalXp} total XP</p>
           </div>
 
-          <div className="shrink-0 rounded-full bg-[linear-gradient(135deg,#EAFBF3_0%,#FDF4DE_100%)] px-3 py-1.5 text-sm font-semibold text-[#2F7D5F] shadow-[0_10px_24px_rgba(76,167,132,0.14)]">
+          <div className="shrink-0 rounded-full bg-brand-soft px-3 py-1.5 text-sm font-semibold text-brand-strong shadow-[0_10px_24px_rgba(154,74,66,0.14)]">
             <span className="inline-flex items-center gap-1.5">
               <Sparkles size={14} />
               +{item.gainedXp} XP
@@ -184,14 +184,14 @@ export function XpGainBar({ item, onComplete }: XpGainBarProps) {
           </div>
         </div>
 
-        <div className="mt-4 h-3 overflow-hidden rounded-full bg-[#EEF2F6]">
+        <div className="mt-4 h-3 overflow-hidden rounded-full bg-surface-muted">
           <div
-            className="h-full rounded-full bg-[linear-gradient(90deg,#8FDDB8_0%,#6FC8B1_46%,#FFD28F_100%)]"
+            className="h-full rounded-full bg-[linear-gradient(90deg,var(--t-brand)_0%,var(--t-accent)_58%,var(--t-warm)_100%)]"
             style={{ width: `${Math.max(displayedProgressPercent, 4)}%` }}
           />
         </div>
 
-        <div className="mt-2 flex items-center justify-between text-xs text-[#7A8698]">
+        <div className="mt-2 flex items-center justify-between text-xs text-text-muted">
           <span>{progressMeta.levelStartXp} XP</span>
           <span>{progressMeta.levelEndXp} XP</span>
         </div>

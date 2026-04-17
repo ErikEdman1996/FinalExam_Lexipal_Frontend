@@ -3,6 +3,8 @@ import { Sparkles, X } from 'lucide-react';
 import { motion, useMotionValue, useSpring, useTransform } from 'motion/react';
 import { Button } from './Button';
 import {
+  type CodexOverallProgressDTO,
+  type CodexPageProgressDTO,
   createCodexEntry,
   extractDictionarySenses,
   extractDefinitionFromDefinitions,
@@ -23,10 +25,16 @@ interface WordLookupModalProps {
     lemma: string;
     definition: string;
     synonyms: string[];
-    newCapture: boolean;
+    isCollectible: boolean;
+    isNewCapture: boolean;
+    alreadyCaptured: boolean;
     xpValue: number;
     xpUpdate: XpUpdateResponseDTO | null;
     rarityTier: RarityTier;
+    pageNumber: number | null;
+    slotNumber: number | null;
+    pageProgress: CodexPageProgressDTO | null;
+    overallProgress: CodexOverallProgressDTO | null;
   }) => void;
   codexEntryLemmas: string[];
   sessionId?: number | null;
@@ -39,9 +47,15 @@ interface LookupResult {
   synonyms: string[];
   partsOfSpeech: string[];
   phoneticText: string;
-  newCapture: boolean;
+  isCollectible: boolean;
+  isNewCapture: boolean;
+  alreadyCaptured: boolean;
   rarityTier: RarityTier;
   xpValue: number;
+  pageNumber: number | null;
+  slotNumber: number | null;
+  pageProgress: CodexPageProgressDTO | null;
+  overallProgress: CodexOverallProgressDTO | null;
 }
 
 const getRarityTierFromScore = (score: number | null | undefined): RarityTier => {
@@ -73,7 +87,7 @@ const getRarityBorderClass = (tier: LookupResult['rarityTier']) => {
     return 'border-[#7FB7FF] shadow-[0_0_0_1px_rgba(127,183,255,0.35),0_8px_24px_rgba(127,183,255,0.18)]';
   }
 
-  return 'border-[rgba(0,0,0,0.12)]';
+  return 'border-border';
 };
 
 const getRarityPillClass = (tier: LookupResult['rarityTier']) => {
@@ -89,11 +103,11 @@ const getRarityPillClass = (tier: LookupResult['rarityTier']) => {
     return 'bg-[#E8F3FF] text-[#2B6CB0]';
   }
 
-  return 'bg-[#F0F2F5] text-[#4A5568]';
+  return 'bg-surface-muted text-text-muted';
 };
 
-const getRevealDelayMs = (tier: LookupResult['rarityTier'], isNewCapture: boolean, reducedMotion: boolean) => {
-  if (!isNewCapture || reducedMotion) {
+const getRevealDelayMs = (tier: LookupResult['rarityTier'], isNewCapture: boolean, isCollectible: boolean, reducedMotion: boolean) => {
+  if (!isCollectible || !isNewCapture || reducedMotion) {
     return 0;
   }
 
@@ -125,7 +139,7 @@ const getRaritySurfaceClass = (tier: LookupResult['rarityTier']) => {
     return 'bg-[radial-gradient(circle_at_top,#f8fbff_0%,#eef5ff_46%,#fcfdff_100%)]';
   }
 
-  return 'bg-white';
+  return 'bg-surface';
 };
 
 const getRarityAuraClass = (tier: LookupResult['rarityTier']) => {
@@ -157,7 +171,7 @@ const getInnerPanelClass = (tier: LookupResult['rarityTier']) => {
     return 'bg-[linear-gradient(180deg,rgba(255,255,255,0.97),rgba(247,251,255,0.94))]';
   }
 
-  return 'bg-white';
+  return 'bg-surface';
 };
 
 const getLookupCardHeight = (result: LookupResult | null) => {
@@ -174,6 +188,25 @@ const getLookupCardHeight = (result: LookupResult | null) => {
 
   return Math.min(760, Math.max(500, estimatedHeight));
 };
+
+const getResultEyebrow = (result: LookupResult) => {
+  if (!result.isCollectible) {
+    return 'Dictionary entry';
+  }
+
+  if (result.isNewCapture) {
+    return 'New collectible';
+  }
+
+  if (result.alreadyCaptured) {
+    return 'Already collected';
+  }
+
+  return 'Collectible entry';
+};
+
+const searchInputClassName = 'w-full rounded-[16px] border border-border bg-surface-muted px-4 py-3 text-text placeholder:text-text-subtle transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-brand';
+const resultInfoCardClassName = 'rounded-[18px] border border-border bg-surface-alt p-3 dark:bg-surface-muted';
 
 export function WordLookupModal({
   isOpen,
@@ -218,7 +251,7 @@ export function WordLookupModal({
   }, [isOpen]);
 
   useEffect(() => {
-    if (!isFlipped || !result?.newCapture || prefersReducedMotion) {
+    if (!isFlipped || !result?.isNewCapture || !result.isCollectible || prefersReducedMotion) {
       return;
     }
 
@@ -230,7 +263,7 @@ export function WordLookupModal({
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [isFlipped, prefersReducedMotion, result?.newCapture]);
+  }, [isFlipped, prefersReducedMotion, result?.isCollectible, result?.isNewCapture]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -291,9 +324,15 @@ export function WordLookupModal({
           synonyms: mappedSynonyms,
           partsOfSpeech: mappedPartsOfSpeech,
           phoneticText: mappedPhoneticText,
-          newCapture: codexEntryResponse.newCapture,
+          isCollectible: codexEntryResponse.isCollectible,
+          isNewCapture: codexEntryResponse.isNewCapture,
+          alreadyCaptured: codexEntryResponse.alreadyCaptured,
           rarityTier: normalizeRarityTier(codexEntryResponse.rarityTier),
           xpValue: codexEntry.xpValue ?? 0,
+          pageNumber: codexEntryResponse.pageNumber,
+          slotNumber: codexEntryResponse.slotNumber,
+          pageProgress: codexEntryResponse.pageProgress,
+          overallProgress: codexEntryResponse.overallProgress,
         };
         nextXpUpdate = codexEntryResponse.xpUpdate;
       } else {
@@ -308,9 +347,15 @@ export function WordLookupModal({
           synonyms: extractSynonymsFromDefinitions(fetchedWord.definitions),
           partsOfSpeech: extractPartsOfSpeechFromDefinitions(fetchedWord.definitions),
           phoneticText: extractPhoneticText(fetchedWord.phonetics),
-          newCapture: fallbackNewCapture,
+          isCollectible: fallbackNewCapture,
+          isNewCapture: fallbackNewCapture,
+          alreadyCaptured: !fallbackNewCapture,
           rarityTier: getRarityTierFromScore(fetchedWord.rarityScore),
           xpValue: fallbackNewCapture ? 10 : 0,
+          pageNumber: null,
+          slotNumber: null,
+          pageProgress: null,
+          overallProgress: null,
         };
       }
 
@@ -322,7 +367,7 @@ export function WordLookupModal({
         window.clearTimeout(revealTimeoutRef.current);
       }
 
-      const revealDelayMs = getRevealDelayMs(nextResult.rarityTier, nextResult.newCapture, prefersReducedMotion);
+      const revealDelayMs = getRevealDelayMs(nextResult.rarityTier, nextResult.isNewCapture, nextResult.isCollectible, prefersReducedMotion);
 
       if (revealDelayMs > 0) {
         setIsRevealing(true);
@@ -340,14 +385,20 @@ export function WordLookupModal({
         lemma: nextResult.lemma,
         definition: nextResult.definition,
         synonyms: nextResult.synonyms,
-        newCapture: nextResult.newCapture,
+        isCollectible: nextResult.isCollectible,
+        isNewCapture: nextResult.isNewCapture,
+        alreadyCaptured: nextResult.alreadyCaptured,
         xpValue: nextResult.xpValue,
         xpUpdate: nextXpUpdate,
         rarityTier: nextResult.rarityTier,
+        pageNumber: nextResult.pageNumber,
+        slotNumber: nextResult.slotNumber,
+        pageProgress: nextResult.pageProgress,
+        overallProgress: nextResult.overallProgress,
       });
     } catch (error) {
       console.error('Error creating codex entry:', error);
-      setLookupError('Could not capture this word right now. Please try again.');
+      setLookupError('Could not look up this word right now. Please try again.');
     } finally {
       searchInFlightRef.current = false;
       setIsSearching(false);
@@ -376,9 +427,9 @@ export function WordLookupModal({
   const raritySurfaceClass = getRaritySurfaceClass(result?.rarityTier ?? 'COMMON');
   const rarityAuraClass = getRarityAuraClass(result?.rarityTier ?? 'COMMON');
   const innerPanelClass = getInnerPanelClass(result?.rarityTier ?? 'COMMON');
-  const hasHighRarityReveal = !!result?.newCapture && (result.rarityTier === 'UNCOMMON' || result.rarityTier === 'RARE' || result.rarityTier === 'MYTHIC');
-  const hasMythicReveal = !!result?.newCapture && result.rarityTier === 'MYTHIC';
-  const canTiltCard = !prefersReducedMotion && !!result?.newCapture && (result?.rarityTier === 'UNCOMMON' || result?.rarityTier === 'RARE' || result?.rarityTier === 'MYTHIC');
+  const hasHighRarityReveal = !!result?.isCollectible && !!result?.isNewCapture && (result.rarityTier === 'UNCOMMON' || result.rarityTier === 'RARE' || result.rarityTier === 'MYTHIC');
+  const hasMythicReveal = !!result?.isCollectible && !!result?.isNewCapture && result.rarityTier === 'MYTHIC';
+  const canTiltCard = !prefersReducedMotion && !!result?.isCollectible && !!result?.isNewCapture && (result?.rarityTier === 'UNCOMMON' || result?.rarityTier === 'RARE' || result?.rarityTier === 'MYTHIC');
   const lookupCardHeight = getLookupCardHeight(result);
 
   const handleCardPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
@@ -400,9 +451,9 @@ export function WordLookupModal({
   };
   
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4">
       <div
-        className="bg-white rounded-t-[32px] sm:rounded-[32px] w-full max-w-lg max-h-[94vh] overflow-y-auto shadow-[0_8px_32px_rgba(0,0,0,0.12)] animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 duration-300"
+        className="w-full max-w-lg max-h-[94vh] overflow-y-auto rounded-t-[32px] border border-border bg-surface shadow-[0_8px_32px_rgba(0,0,0,0.12)] animate-in slide-in-from-bottom duration-300 sm:rounded-[32px] sm:slide-in-from-bottom-0"
         role="dialog"
         aria-modal="true"
         aria-label="Word lookup"
@@ -411,10 +462,10 @@ export function WordLookupModal({
           <div className="mb-4 flex justify-end">
             <button
               onClick={onClose}
-              className="flex h-10 w-10 items-center justify-center rounded-full hover:bg-[#F0F2F5] transition-colors"
+              className="flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-surface-muted"
               aria-label="Close word lookup modal"
             >
-              <X size={20} className="text-[#6C757D]" />
+              <X size={20} className="text-text-muted" />
             </button>
           </div>
           <div
@@ -430,7 +481,7 @@ export function WordLookupModal({
               }}
             >
               <div
-                className="absolute inset-0 rounded-[24px] border border-[rgba(0,0,0,0.08)] bg-white p-5"
+                className="absolute inset-0 rounded-[24px] border border-border bg-surface p-5"
                 style={{ backfaceVisibility: 'hidden' }}
               >
                 <input
@@ -444,18 +495,18 @@ export function WordLookupModal({
                       void handleSearch();
                     }
                   }}
-                  className="w-full px-4 py-3 rounded-[16px] bg-[#F8F9FA] border border-[rgba(0,0,0,0.08)] focus:outline-none focus:ring-2 focus:ring-[#D4C5F9] focus:border-transparent transition-all"
+                  className={searchInputClassName}
                   placeholder="Enter word"
                   autoFocus
                   aria-label="Enter word"
                 />
 
                 {lookupError ? (
-                  <p className="text-sm text-[#FF6B6B] mt-2">{lookupError}</p>
+                  <p className="mt-2 text-sm text-danger">{lookupError}</p>
                 ) : null}
 
                 {!sessionId ? (
-                  <p className="text-xs text-[#6C757D] mt-3">
+                  <p className="mt-3 text-xs leading-relaxed text-text-muted">
                     Running in fallback mode: this capture is tracked in-session only until session context is available.
                   </p>
                 ) : null}
@@ -491,7 +542,7 @@ export function WordLookupModal({
                       transition={{ duration: result.rarityTier === 'MYTHIC' ? 1.35 : result.rarityTier === 'RARE' ? 1.05 : 0.95, repeat: Infinity, ease: 'easeInOut' }}
                     />
                     <div className="absolute inset-x-0 bottom-7 text-center">
-                      <p className="text-xs uppercase tracking-[0.32em] text-[#2C3E50]/70">
+                      <p className="text-xs uppercase tracking-[0.32em] text-text/70">
                         {result.rarityTier === 'MYTHIC' ? 'Mythic resonance' : result.rarityTier === 'RARE' ? 'Rare signal' : 'Uncommon signal'}
                       </p>
                     </div>
@@ -600,47 +651,83 @@ export function WordLookupModal({
                     ) : null}
 
                     <div className="relative z-10 flex h-full flex-col overflow-y-auto px-5 py-4">
-                      <div className="flex items-start justify-between gap-4 border-b border-[rgba(36,52,71,0.08)] pb-4">
+                      <div className="flex items-start justify-between gap-4 border-b border-border pb-4">
                         <div>
-                          {result.newCapture ? (
-                            <p className="text-[0.72rem] uppercase tracking-[0.22em] text-[#6C757D]">Captured entry</p>
-                          ) : (
-                            <p className="text-[0.72rem] uppercase tracking-[0.22em] text-[#6C757D]">Dictionary entry</p>
-                          )}
-                          <h3 className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-[#23324A]">{result.lemma}</h3>
-                          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-[#5A6678]">
+                          <p className="text-[0.72rem] uppercase tracking-[0.22em] text-text-subtle">{getResultEyebrow(result)}</p>
+                          <h3 className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-text">{result.lemma}</h3>
+                          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-text-muted">
                             {result.phoneticText ? (
-                              <span className="font-medium italic text-[#4B5E77]">/{result.phoneticText}/</span>
+                              <span className="font-medium italic text-text">/{result.phoneticText}/</span>
                             ) : null}
                             {result.partsOfSpeech.length > 0 ? (
-                              <span className="rounded-full bg-white/70 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-[#516275]">
+                              <span className="rounded-full bg-surface-alt px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-text">
                                 {result.partsOfSpeech[0]}
                               </span>
                             ) : null}
                           </div>
                         </div>
-                        <span className={`text-xs px-3 py-1 rounded-full font-medium ${rarityPillClass}`}>
-                          {result.rarityTier}
-                        </span>
+                        {result.isCollectible ? (
+                          <span className={`text-xs px-3 py-1 rounded-full font-medium ${rarityPillClass}`}>
+                            {result.rarityTier}
+                          </span>
+                        ) : null}
                       </div>
 
-                      {result.newCapture && result.xpValue > 0 ? (
-                        <div className="mt-3 inline-flex self-start items-center gap-2 rounded-full bg-[#EAFBF3] text-[#2C7A5C] px-3 py-1 text-sm font-medium">
+                      {result.isNewCapture && result.isCollectible && result.xpValue > 0 ? (
+                        <div className="mt-3 inline-flex self-start items-center gap-2 rounded-full bg-brand-soft px-3 py-1 text-sm font-medium text-brand-strong">
                           <Sparkles size={14} />
                           +{result.xpValue} XP
                         </div>
                       ) : null}
 
+                      {result.isCollectible && result.pageNumber != null && result.slotNumber != null ? (
+                        <div className="mt-4 grid grid-cols-2 gap-3">
+                          <div className={resultInfoCardClassName}>
+                            <p className="text-[0.68rem] uppercase tracking-[0.2em] text-text-subtle">Board slot</p>
+                            <p className="mt-2 text-sm font-semibold text-text">
+                              Page {result.pageNumber}, Slot {result.slotNumber}
+                            </p>
+                          </div>
+                          <div className={resultInfoCardClassName}>
+                            <p className="text-[0.68rem] uppercase tracking-[0.2em] text-text-subtle">Collection</p>
+                            <p className="mt-2 text-sm font-semibold text-text">
+                              {result.isNewCapture ? 'Added to Volume 1' : 'Already in Volume 1'}
+                            </p>
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {result.isCollectible && (result.pageProgress || result.overallProgress) ? (
+                        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                          {result.pageProgress ? (
+                            <div className={resultInfoCardClassName}>
+                              <p className="text-[0.68rem] uppercase tracking-[0.2em] text-text-subtle">Page progress</p>
+                              <p className="mt-2 text-sm font-semibold text-text">
+                                {result.pageProgress.capturedCount} / {result.pageProgress.totalCount}
+                              </p>
+                            </div>
+                          ) : null}
+                          {result.overallProgress ? (
+                            <div className={resultInfoCardClassName}>
+                              <p className="text-[0.68rem] uppercase tracking-[0.2em] text-text-subtle">Overall progress</p>
+                              <p className="mt-2 text-sm font-semibold text-text">
+                                {result.overallProgress.capturedWords} / {result.overallProgress.totalWords}
+                              </p>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+
                       <div className="mt-5">
-                        <p className="text-[0.72rem] uppercase tracking-[0.24em] text-[#6C757D]">Definitions</p>
+                        <p className="text-[0.72rem] uppercase tracking-[0.24em] text-text-subtle">Definitions</p>
                         <div className="mt-3 space-y-4">
                           {(result.senses.length > 0 ? result.senses : [{ definition: result.definition, examples: [] }]).map((sense, index) => (
                             <div key={`${sense.definition}-${index}`} className="flex gap-3">
-                              <span className="pt-0.5 text-sm font-semibold text-[#7A5E2A]">{index + 1}.</span>
+                              <span className="pt-0.5 text-sm font-semibold text-accent-strong">{index + 1}.</span>
                               <div className="min-w-0 flex-1">
-                                <p className="text-sm leading-relaxed text-[#23324A]">{sense.definition}</p>
+                                <p className="text-sm leading-relaxed text-text">{sense.definition}</p>
                                 {sense.examples.length > 0 ? (
-                                  <ul className="mt-2 space-y-1 text-sm italic text-[#5B687A]">
+                                  <ul className="mt-2 space-y-1 text-sm italic text-text-muted">
                                     {sense.examples.slice(0, 3).map((example) => (
                                       <li key={example} className="leading-relaxed">
                                         {example}
@@ -654,33 +741,33 @@ export function WordLookupModal({
                         </div>
                       </div>
 
-                      <div className="mt-5 border-t border-[rgba(36,52,71,0.08)] pt-4">
-                        <p className="text-[0.72rem] uppercase tracking-[0.24em] text-[#6C757D]">Synonyms</p>
-                        <p className="mt-2 text-sm leading-relaxed text-[#2C3E50]">
+                      <div className="mt-5 border-t border-border pt-4">
+                        <p className="text-[0.72rem] uppercase tracking-[0.24em] text-text-subtle">Synonyms</p>
+                        <p className="mt-2 text-sm leading-relaxed text-text">
                           {result.synonyms.length > 0 ? result.synonyms.join(', ') : 'No synonyms available.'}
                         </p>
                       </div>
 
-                      <div className="mt-auto pt-6 flex gap-3">
+                      <div className="mt-auto flex gap-3 pt-6">
                         <Button
                           variant="outline"
-                          className="flex-1 border-white/85 bg-white/92 shadow-[0_10px_24px_rgba(15,23,42,0.08)] backdrop-blur-sm hover:bg-white"
+                          className="flex-1"
                           onClick={handleSearchAnother}
                         >
                           Search another
                         </Button>
                         <Button
-                          className="flex-1 border border-white/30 bg-[linear-gradient(135deg,#d9f7ea,#a8e6cf)] shadow-[0_10px_24px_rgba(76,167,132,0.22)] hover:bg-[linear-gradient(135deg,#cff4e4,#9fe0c8)]"
+                          className="flex-1"
                           onClick={onClose}
                         >
                           Close
                         </Button>
                       </div>
                     </div>
-                    <div className="pointer-events-none absolute inset-[10px] z-0 rounded-[18px] border border-white/55" />
+                    <div className="pointer-events-none absolute inset-[10px] z-0 rounded-[18px] border border-white/55 dark:border-border" />
                   </motion.div>
                 ) : (
-                  <div className="h-full flex items-center justify-center text-[#6C757D] text-sm">
+                  <div className="flex h-full items-center justify-center text-sm text-text-muted">
                     No result available.
                   </div>
                 )}

@@ -15,11 +15,13 @@ export function AddBookModal({ isOpen, onClose, onAdd }: AddBookModalProps) {
   const [totalPages, setTotalPages] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  
-  if (!isOpen) return null;
-  
-  const handleSubmit = async (e: FormEvent) => {
-    e.preventDefault();
+
+  if (!isOpen) {
+    return null;
+  }
+
+  const handleSubmit = async (event: FormEvent) => {
+    event.preventDefault();
     const trimmedTitle = title.trim();
     const trimmedAuthor = author.trim();
     const parsedTotalPages = Number(totalPages);
@@ -48,70 +50,70 @@ export function AddBookModal({ isOpen, onClose, onAdd }: AddBookModalProps) {
       setIsSubmitting(false);
     }
   };
-  
+
+  const inputClassName = 'w-full rounded-[16px] border border-border bg-surface-muted px-4 py-3 text-text outline-none transition-all focus:border-brand focus:bg-surface focus:ring-2 focus:ring-brand';
+
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-[28px] w-full max-w-md p-6 shadow-[0_8px_32px_rgba(0,0,0,0.12)] animate-in fade-in zoom-in duration-200">
-        {/* Header */}
-        <div className="flex justify-between items-center mb-6">
-          <h2 className="text-xl font-semibold text-[#2C3E50]">Add New Book</h2>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
+      <div className="w-full max-w-md rounded-[28px] border border-border bg-surface p-6 shadow-[0_8px_32px_rgba(0,0,0,0.12)] animate-in fade-in zoom-in duration-200">
+        <div className="mb-6 flex items-center justify-between">
+          <h2 className="text-xl font-semibold text-text">Add New Book</h2>
           <button
             onClick={onClose}
-            className="w-10 h-10 rounded-full hover:bg-[#F0F2F5] flex items-center justify-center transition-colors"
+            className="flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-surface-muted"
           >
-            <X size={20} className="text-[#6C757D]" />
+            <X size={20} className="text-text-muted" />
           </button>
         </div>
-        
-        {/* Form */}
+
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label htmlFor="title" className="block text-sm text-[#2C3E50] mb-2">
+            <label htmlFor="title" className="mb-2 block text-sm text-text">
               Book Title
             </label>
             <input
               id="title"
               type="text"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              className="w-full px-4 py-3 rounded-[16px] bg-[#F8F9FA] border border-[rgba(0,0,0,0.08)] focus:outline-none focus:ring-2 focus:ring-[#A8E6CF] focus:border-transparent transition-all"
+              onChange={(event) => setTitle(event.target.value)}
+              className={inputClassName}
               placeholder="Enter book title"
               required
             />
           </div>
-          
+
           <div>
-            <label htmlFor="author" className="block text-sm text-[#2C3E50] mb-2">
+            <label htmlFor="author" className="mb-2 block text-sm text-text">
               Author
             </label>
             <input
               id="author"
               type="text"
               value={author}
-              onChange={(e) => setAuthor(e.target.value)}
-              className="w-full px-4 py-3 rounded-[16px] bg-[#F8F9FA] border border-[rgba(0,0,0,0.08)] focus:outline-none focus:ring-2 focus:ring-[#A8E6CF] focus:border-transparent transition-all"
+              onChange={(event) => setAuthor(event.target.value)}
+              className={inputClassName}
               placeholder="Enter author name"
               required
             />
           </div>
-          
+
           <div>
-            <label htmlFor="pages" className="block text-sm text-[#2C3E50] mb-2">
+            <label htmlFor="pages" className="mb-2 block text-sm text-text">
               Total Pages
             </label>
             <input
               id="pages"
               type="number"
               value={totalPages}
-              onChange={(e) => setTotalPages(e.target.value)}
-              className="w-full px-4 py-3 rounded-[16px] bg-[#F8F9FA] border border-[rgba(0,0,0,0.08)] focus:outline-none focus:ring-2 focus:ring-[#A8E6CF] focus:border-transparent transition-all"
+              onChange={(event) => setTotalPages(event.target.value)}
+              className={inputClassName}
               placeholder="Enter total pages"
               min="1"
               required
             />
           </div>
-          
-          <div className="flex gap-3 mt-6">
+
+          <div className="mt-6 flex gap-3">
             <Button type="button" variant="outline" className="flex-1" onClick={onClose} disabled={isSubmitting}>
               Cancel
             </Button>
@@ -121,7 +123,7 @@ export function AddBookModal({ isOpen, onClose, onAdd }: AddBookModalProps) {
           </div>
 
           {submitError ? (
-            <p className="text-sm text-[#FF6B6B] mt-2">{submitError}</p>
+            <p className="mt-2 text-sm text-danger">{submitError}</p>
           ) : null}
         </form>
       </div>

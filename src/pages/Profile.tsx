@@ -2,6 +2,7 @@ import { useEffect, useState, type ComponentType } from 'react';
 import { BookOpen, Brain, Clock3, Flame, LogOut, Target, Trophy, Zap } from 'lucide-react';
 import { BottomNav } from '../components/BottomNav';
 import { Button } from '../components/Button';
+import { ThemeToggle } from '../features/theme/ThemeToggle.tsx';
 import { useAuth } from '../features/auth/AuthProvider';
 import { getXpProgressMeta, XP_PER_LEVEL } from '../features/xp/xp';
 import {
@@ -61,8 +62,7 @@ interface ProfileStatCardProps {
   label: string;
   value: string | number;
   icon: ComponentType<{ size?: number; className?: string }>;
-  iconWrapClassName: string;
-  iconClassName: string;
+  tone: 'brand' | 'accent';
   delayMs: number;
 }
 
@@ -70,20 +70,29 @@ function ProfileStatCard({
   label,
   value,
   icon: Icon,
-  iconWrapClassName,
-  iconClassName,
+  tone,
   delayMs,
 }: ProfileStatCardProps) {
+  const toneClasses = tone === 'accent'
+    ? {
+      chip: 'bg-accent-soft',
+      icon: 'text-accent-strong',
+    }
+    : {
+      chip: 'bg-brand-soft',
+      icon: 'text-brand-strong',
+    };
+
   return (
     <div
-      className="rounded-[28px] border border-[rgba(36,52,71,0.08)] bg-white/90 p-5 shadow-[0_14px_30px_rgba(31,41,55,0.06)]"
+      className="rounded-[28px] border border-border bg-surface p-5 shadow-[0_14px_30px_rgba(31,41,55,0.06)]"
       style={{ animationDelay: `${delayMs}ms` }}
     >
-      <div className={`flex h-12 w-12 items-center justify-center rounded-[16px] ${iconWrapClassName}`}>
-        <Icon size={22} className={iconClassName} />
+      <div className={`flex h-12 w-12 items-center justify-center rounded-[16px] ${toneClasses.chip}`}>
+        <Icon size={22} className={toneClasses.icon} />
       </div>
-      <p className="mt-5 text-[2rem] font-semibold leading-none text-[#22324A]">{value}</p>
-      <p className="mt-2 text-sm text-[#6A7687]">{label}</p>
+      <p className="mt-5 text-[2rem] font-semibold leading-none text-text">{value}</p>
+      <p className="mt-2 text-sm text-text-muted">{label}</p>
     </div>
   );
 }
@@ -96,10 +105,10 @@ interface DetailCardProps {
 
 function DetailCard({ title, value, description }: DetailCardProps) {
   return (
-    <div className="rounded-[26px] border border-[rgba(36,52,71,0.08)] bg-white/88 p-5 shadow-[0_12px_26px_rgba(31,41,55,0.05)]">
-      <p className="text-xs uppercase tracking-[0.22em] text-[#8A94A6]">{title}</p>
-      <p className="mt-3 text-lg font-semibold text-[#22324A]">{value}</p>
-      <p className="mt-2 text-sm leading-relaxed text-[#6A7687]">{description}</p>
+    <div className="rounded-[26px] border border-border bg-surface p-5 shadow-[0_12px_26px_rgba(31,41,55,0.05)]">
+      <p className="text-xs uppercase tracking-[0.22em] text-text-subtle">{title}</p>
+      <p className="mt-3 text-lg font-semibold text-text">{value}</p>
+      <p className="mt-2 text-sm leading-relaxed text-text-muted">{description}</p>
     </div>
   );
 }
@@ -110,19 +119,19 @@ interface RecentActivitySectionProps {
 
 function RecentActivitySection({ activities }: RecentActivitySectionProps) {
   return (
-    <section className="rounded-[30px] border border-[rgba(36,52,71,0.08)] bg-white/90 p-6 shadow-[0_16px_34px_rgba(31,41,55,0.06)]">
+    <section className="rounded-[30px] border border-border bg-surface p-6 shadow-[0_16px_34px_rgba(31,41,55,0.06)]">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <p className="text-xs uppercase tracking-[0.24em] text-[#8A94A6]">Recent Activity</p>
-          <h2 className="mt-2 text-2xl font-semibold text-[#22324A]">Latest milestones</h2>
+          <p className="text-xs uppercase tracking-[0.24em] text-text-subtle">Recent Activity</p>
+          <h2 className="mt-2 text-2xl font-semibold text-text">Latest milestones</h2>
         </div>
-        <div className="flex h-12 w-12 items-center justify-center rounded-[18px] bg-[#FDECD9]">
-          <Zap size={20} className="text-[#DD8A3D]" />
+        <div className="flex h-12 w-12 items-center justify-center rounded-[18px] bg-accent-soft">
+          <Zap size={20} className="text-accent-strong" />
         </div>
       </div>
 
       {activities.length === 0 ? (
-        <div className="mt-5 rounded-[22px] bg-[#F7F9FC] px-4 py-5 text-sm leading-relaxed text-[#6A7687]">
+        <div className="mt-5 rounded-[22px] bg-surface-muted px-4 py-5 text-sm leading-relaxed text-text-muted">
           Your recent sessions and XP moments will appear here once you start reading.
         </div>
       ) : (
@@ -130,16 +139,16 @@ function RecentActivitySection({ activities }: RecentActivitySectionProps) {
           {activities.slice(0, 4).map((activity) => (
             <div
               key={activity.id}
-              className="flex items-center justify-between gap-4 rounded-[22px] bg-[#F7F9FC] px-4 py-4"
+              className="flex items-center justify-between gap-4 rounded-[22px] bg-surface-muted px-4 py-4"
             >
               <div className="min-w-0">
-                <p className="text-sm font-medium text-[#22324A]">{toReadableActivityLabel(activity.activityType)}</p>
-                <p className="mt-1 text-sm text-[#6A7687]">
+                <p className="text-sm font-medium text-text">{toReadableActivityLabel(activity.activityType)}</p>
+                <p className="mt-1 text-sm text-text-muted">
                   {formatActivityDate(activity.activityDate)}
-                  {activity.sessionId != null ? ` • Session #${activity.sessionId}` : ''}
+                  {activity.sessionId != null ? ` - Session #${activity.sessionId}` : ''}
                 </p>
               </div>
-              <span className="shrink-0 rounded-full bg-[#E8F7EF] px-3 py-1 text-sm font-medium text-[#2F7D5F]">
+              <span className="shrink-0 rounded-full bg-accent-soft px-3 py-1 text-sm font-medium text-accent-strong">
                 +{activity.xpEarned} XP
               </span>
             </div>
@@ -190,8 +199,8 @@ export default function Profile() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-[linear-gradient(180deg,#F7FBF8_0%,#F8F5FF_100%)] pb-24">
-        <div className="mx-auto max-w-3xl px-5 py-16 text-center text-[#6A7687]">
+      <div className="page-bg min-h-screen pb-24 lg:pl-60 lg:pb-0">
+        <div className="mx-auto max-w-3xl px-5 py-16 text-center text-text-muted">
           Loading your profile...
         </div>
         <BottomNav />
@@ -201,10 +210,10 @@ export default function Profile() {
 
   if (errorMessage || !profile) {
     return (
-      <div className="min-h-screen bg-[linear-gradient(180deg,#F7FBF8_0%,#F8F5FF_100%)] pb-24">
+      <div className="page-bg min-h-screen pb-24 lg:pl-60 lg:pb-0">
         <div className="mx-auto max-w-3xl px-5 py-16 text-center">
-          <p className="text-lg text-[#FF6B6B]">{errorMessage ?? 'Profile not found.'}</p>
-          <p className="mt-2 text-sm text-[#6A7687]">Check backend connection and try again.</p>
+          <p className="text-lg text-danger">{errorMessage ?? 'Profile not found.'}</p>
+          <p className="mt-2 text-sm text-text-muted">Check backend connection and try again.</p>
         </div>
         <BottomNav />
       </div>
@@ -223,101 +232,97 @@ export default function Profile() {
       label: 'Current Streak',
       value: `${currentStreak} days`,
       icon: Flame,
-      iconWrapClassName: 'bg-[#FFE6D5]',
-      iconClassName: 'text-[#F27847]',
+      tone: 'brand' as const,
     },
     {
       label: 'Longest Streak',
       value: `${longestStreak} days`,
       icon: Trophy,
-      iconWrapClassName: 'bg-[#FFF1BF]',
-      iconClassName: 'text-[#D8A100]',
+      tone: 'accent' as const,
     },
     {
       label: 'Books Read',
       value: stats.totalBooksRead,
       icon: BookOpen,
-      iconWrapClassName: 'bg-[#DFF5EA]',
-      iconClassName: 'text-[#3D9B7A]',
+      tone: 'brand' as const,
     },
     {
       label: 'Pages Read',
       value: stats.totalPagesRead,
       icon: Target,
-      iconWrapClassName: 'bg-[#DCEFFF]',
-      iconClassName: 'text-[#4B93D1]',
+      tone: 'accent' as const,
     },
     {
       label: 'Minutes Read',
       value: stats.totalMinutesRead,
       icon: Clock3,
-      iconWrapClassName: 'bg-[#FFF2E6]',
-      iconClassName: 'text-[#D9822B]',
+      tone: 'brand' as const,
     },
     {
       label: 'Words Captured',
       value: stats.totalCapturedWords,
       icon: Brain,
-      iconWrapClassName: 'bg-[#EDE0FF]',
-      iconClassName: 'text-[#8A61D7]',
+      tone: 'accent' as const,
     },
     {
       label: 'Sessions',
       value: stats.totalSessionsCompleted,
       icon: Zap,
-      iconWrapClassName: 'bg-[#FFDDEA]',
-      iconClassName: 'text-[#D85B9C]',
+      tone: 'brand' as const,
     },
   ];
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#F7FBF8_0%,#F6F9FF_52%,#F8F4FF_100%)] pb-24">
+    <div className="page-bg min-h-screen pb-24 lg:pl-60 lg:pb-0">
       <div className="mx-auto max-w-3xl px-5 py-8 sm:px-6 sm:py-10">
         <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
           <div>
-            <h1 className="text-4xl font-semibold tracking-[-0.03em] text-[#22324A]">Profile</h1>
-            <p className="mt-2 max-w-xl text-sm leading-relaxed text-[#6A7687]">
+            <h1 className="text-4xl font-semibold tracking-[-0.03em] text-text">Profile</h1>
+            <p className="mt-2 max-w-xl text-sm leading-relaxed text-text-muted">
               Track your reading level, streaks, and milestones in one place.
             </p>
             {username ? (
-              <p className="mt-2 text-sm text-[#8A94A6]">Signed in as {username}</p>
+              <p className="mt-2 text-sm text-text-subtle">Signed in as {username}</p>
             ) : null}
           </div>
-          <Button variant="outline" className="rounded-full px-5" onClick={() => void logout()}>
-            <span className="inline-flex items-center gap-2">
-              <LogOut size={16} />
-              Log out
-            </span>
-          </Button>
+          <div className="flex w-full flex-col gap-3 sm:w-auto sm:items-end">
+            <ThemeToggle variant="row" className="sm:min-w-[15rem]" />
+            <Button variant="outline" className="rounded-full px-5" onClick={() => void logout()}>
+              <span className="inline-flex items-center gap-2">
+                <LogOut size={16} />
+                Log out
+              </span>
+            </Button>
+          </div>
         </div>
 
-        <section className="rounded-[32px] border border-[rgba(36,52,71,0.08)] bg-white/92 px-6 py-7 text-center shadow-[0_18px_36px_rgba(31,41,55,0.07)] sm:px-8">
-          <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-[radial-gradient(circle_at_top,#DDF7EE_0%,#C8EFE1_55%,#BDE8D8_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.65)]">
-            <span className="text-4xl font-semibold text-[#3E9D7B]">{level}</span>
+        <section className="rounded-[32px] border border-border bg-surface px-6 py-7 text-center shadow-[0_18px_36px_rgba(31,41,55,0.07)] sm:px-8">
+          <div className="mx-auto flex h-24 w-24 items-center justify-center rounded-full bg-[radial-gradient(circle_at_top,var(--color-brand-soft)_0%,var(--color-accent-soft)_100%)] shadow-[inset_0_1px_0_rgba(255,255,255,0.65)]">
+            <span className="text-4xl font-semibold text-brand-strong">{level}</span>
           </div>
-          <h2 className="mt-5 text-3xl font-semibold text-[#22324A]">Level {level}</h2>
-          <p className="mt-2 text-sm text-[#6A7687]">{stats.totalXpEarned} total XP</p>
+          <h2 className="mt-5 text-3xl font-semibold text-text">Level {level}</h2>
+          <p className="mt-2 text-sm text-text-muted">{stats.totalXpEarned} total XP</p>
 
           <div className="mt-5">
-            <div className="h-3.5 overflow-hidden rounded-full bg-[#F7D8BE]">
+            <div className="h-3.5 overflow-hidden rounded-full bg-surface-muted">
               <div
-                className="h-full rounded-full bg-[linear-gradient(90deg,#FFC79C_0%,#F7B58A_40%,#F4C1A5_100%)] transition-[width] duration-500"
+                className="h-full rounded-full bg-accent transition-[width] duration-500"
                 style={{ width: `${Math.max(progressPercent, 6)}%` }}
               />
             </div>
-            <p className="mt-2 text-xs text-[#6A7687]">{xpIntoLevel}/{XP_PER_LEVEL} XP to next level</p>
+            <p className="mt-2 text-xs text-text-muted">{xpIntoLevel}/{XP_PER_LEVEL} XP to next level</p>
           </div>
 
-          <div className="mt-5 flex flex-wrap items-center justify-center gap-2 text-sm text-[#6A7687]">
-            <span className="rounded-full bg-[#F5F7FB] px-3 py-1.5">Member since {formatMemberSince(createdAt)}</span>
-            <span className="rounded-full bg-[#EAF7F1] px-3 py-1.5 text-[#2F7D5F]">Status: {status}</span>
+          <div className="mt-5 flex flex-wrap items-center justify-center gap-2 text-sm text-text-muted">
+            <span className="rounded-full bg-surface-muted px-3 py-1.5">Member since {formatMemberSince(createdAt)}</span>
+            <span className="rounded-full bg-brand-soft px-3 py-1.5 text-brand-strong">Status: {status}</span>
           </div>
         </section>
 
         {showNewUserState ? (
-          <section className="mt-6 rounded-[28px] border border-[rgba(36,52,71,0.08)] bg-[linear-gradient(135deg,#FFF6EA_0%,#F0FBF6_100%)] p-5 shadow-[0_14px_30px_rgba(31,41,55,0.05)]">
-            <p className="text-base font-medium text-[#22324A]">Your journey is just getting started</p>
-            <p className="mt-2 text-sm leading-relaxed text-[#6A7687]">
+          <section className="mt-6 rounded-[28px] border border-border bg-[linear-gradient(135deg,var(--color-surface)_0%,var(--color-brand-soft)_100%)] p-5 shadow-[0_14px_30px_rgba(31,41,55,0.05)]">
+            <p className="text-base font-medium text-text">Your journey is just getting started</p>
+            <p className="mt-2 text-sm leading-relaxed text-text-muted">
               Finish your first reading session to begin earning XP, building streaks, and filling out your profile.
             </p>
           </section>
@@ -330,8 +335,7 @@ export default function Profile() {
               label={card.label}
               value={card.value}
               icon={card.icon}
-              iconWrapClassName={card.iconWrapClassName}
-              iconClassName={card.iconClassName}
+              tone={card.tone}
               delayMs={index * 80}
             />
           ))}

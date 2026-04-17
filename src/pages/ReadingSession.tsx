@@ -4,13 +4,26 @@ import { ArrowLeft, BookOpen, Pause, Play, Search, Square } from 'lucide-react';
 import { Button } from '../components/Button';
 import { WordLookupModal } from '../components/WordLookupModal';
 import { useXpGain } from '../features/xp/XpGainProvider';
-import { createSession, getBook, updateSession, type ApiBook, type RarityTier, type XpUpdateResponseDTO } from '../api/api';
+import {
+  completeSession,
+  createSession,
+  getActiveSessionByBook,
+  getBook,
+  updateSession,
+  type ApiBook,
+  type ApiSession,
+  type RarityTier,
+  type UpdateSessionPayload,
+  type XpUpdateResponseDTO,
+} from '../api/api';
 
 interface SessionCodexEntry {
   lemma: string;
   definition: string;
   synonyms: string[];
 }
+
+const AUTOSAVE_INTERVAL_SECONDS = 15;
 
 const formatTime = (totalSeconds: number) => {
   const hours = Math.floor(totalSeconds / 3600);
@@ -20,46 +33,105 @@ const formatTime = (totalSeconds: number) => {
   return `${hours > 0 ? `${hours.toString().padStart(2, '0')}:` : ''}${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 };
 
+const getErrorMessage = (error: unknown, fallbackMessage: string) => {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+
+  return fallbackMessage;
+};
+
 export default function ReadingSession() {
   const { bookId } = useParams();
   const navigate = useNavigate();
   const [book, setBook] = useState<ApiBook | null>(null);
   const [isLoadingBook, setIsLoadingBook] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [showReflectionModal, setShowReflectionModal] = useState(false);
   const [showWordLookupModal, setShowWordLookupModal] = useState(false);
   const [seconds, setSeconds] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const [codexEntries, setCodexEntries] = useState<SessionCodexEntry[]>([]);
-  const [activeSessionId, setActiveSessionId] = useState<number | null>(null);
-  const [sessionError, setSessionError] = useState<string | null>(null);
+  const [activeSession, setActiveSession] = useState<ApiSession | null>(null);
   const { showXpGain } = useXpGain();
   const intervalRef = useRef<number | null>(null);
   const shouldResumeAfterLookupRef = useRef(false);
-  const sessionInitializationRef = useRef<Promise<number> | null>(null);
+  const sessionInitializationRef = useRef<Promise<ApiSession> | null>(null);
+  const activeSessionRef = useRef<ApiSession | null>(null);
+  const secondsRef = useRef(0);
+  const wasRunningRef = useRef(false);
+  const lastAutosavedSecondRef = useRef(0);
+
+  useEffect(() => {
+    activeSessionRef.current = activeSession;
+  }, [activeSession]);
+
+  useEffect(() => {
+    secondsRef.current = seconds;
+  }, [seconds]);
 
   const ensureSessionInitialized = useCallback(async (parsedBookId: number) => {
-    if (activeSessionId) {
-      return activeSessionId;
+    if (activeSessionRef.current) {
+      return activeSessionRef.current;
     }
 
     if (!sessionInitializationRef.current) {
-      sessionInitializationRef.current = createSession({
-        bookId: parsedBookId,
-        durationSeconds: 0,
-        startPage: 0,
-        endPage: 0,
-        reflection: '',
-      }).then((createdSession) => {
-        setActiveSessionId(createdSession.id);
-        return createdSession.id;
-      }).catch((error) => {
-        sessionInitializationRef.current = null;
-        throw error;
-      });
+      sessionInitializationRef.current = (async () => {
+        try {
+          const createdSession = await createSession({
+            bookId: parsedBookId,
+            startPage: Math.max(0, book?.readPages ?? 0),
+          });
+          activeSessionRef.current = createdSession;
+          setActiveSession(createdSession);
+          return createdSession;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : '';
+
+          if (message.includes('You already have an active session for this book.')) {
+            const existingSession = await getActiveSessionByBook(parsedBookId);
+
+            if (existingSession) {
+              activeSessionRef.current = existingSession;
+              setActiveSession(existingSession);
+              setSeconds((currentSeconds) => Math.max(currentSeconds, existingSession.durationSeconds));
+              return existingSession;
+            }
+          }
+
+          throw error;
+        } finally {
+          sessionInitializationRef.current = null;
+        }
+      })();
     }
 
     return sessionInitializationRef.current;
-  }, [activeSessionId]);
+  }, [book?.readPages]);
+
+  const persistDraftSession = useCallback(async (overrides: UpdateSessionPayload = {}) => {
+    const currentSession = activeSessionRef.current;
+
+    if (!currentSession || currentSession.status === 'COMPLETED') {
+      return null;
+    }
+
+    try {
+      const updatedSession = await updateSession(currentSession.id, {
+        durationSeconds: overrides.durationSeconds ?? secondsRef.current,
+        endPage: overrides.endPage ?? Math.max(currentSession.endPage, currentSession.startPage),
+        reflection: overrides.reflection ?? currentSession.reflection,
+      });
+
+      activeSessionRef.current = updatedSession;
+      setActiveSession(updatedSession);
+      return updatedSession;
+    } catch (error) {
+      console.error('Error autosaving reading session:', error);
+      return null;
+    }
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -79,20 +151,26 @@ export default function ReadingSession() {
 
       try {
         setIsLoadingBook(true);
-        setSessionError(null);
-        const [loadedBook] = await Promise.all([
+        setLoadError(null);
+        setActionError(null);
+
+        const [loadedBook, activeDraft] = await Promise.all([
           getBook(parsedBookId),
-          ensureSessionInitialized(parsedBookId),
+          getActiveSessionByBook(parsedBookId),
         ]);
 
-        if (isMounted) {
-          setBook(loadedBook);
+        if (!isMounted) {
+          return;
         }
+
+        setBook(loadedBook);
+        setActiveSession(activeDraft);
+        setSeconds(activeDraft?.durationSeconds ?? 0);
       } catch (error) {
         console.error('Error loading reading session:', error);
 
         if (isMounted) {
-          setSessionError('Could not start this reading session right now.');
+          setLoadError('Could not prepare this reading session right now.');
         }
       } finally {
         if (isMounted) {
@@ -106,7 +184,7 @@ export default function ReadingSession() {
     return () => {
       isMounted = false;
     };
-  }, [bookId, ensureSessionInitialized, navigate]);
+  }, [bookId, navigate]);
 
   useEffect(() => {
     if (isRunning) {
@@ -128,7 +206,7 @@ export default function ReadingSession() {
 
   useEffect(() => {
     if (showWordLookupModal) {
-      shouldResumeAfterLookupRef.current = true;
+      shouldResumeAfterLookupRef.current = isRunning;
       setIsRunning(false);
       return;
     }
@@ -139,12 +217,33 @@ export default function ReadingSession() {
     }
   }, [isRunning, showReflectionModal, showWordLookupModal]);
 
+  useEffect(() => {
+    if (!activeSession || !isRunning || seconds <= 0) {
+      return;
+    }
+
+    if (seconds % AUTOSAVE_INTERVAL_SECONDS !== 0 || lastAutosavedSecondRef.current === seconds) {
+      return;
+    }
+
+    lastAutosavedSecondRef.current = seconds;
+    void persistDraftSession();
+  }, [activeSession, isRunning, persistDraftSession, seconds]);
+
+  useEffect(() => {
+    if (wasRunningRef.current && !isRunning && activeSession && seconds > 0) {
+      void persistDraftSession();
+    }
+
+    wasRunningRef.current = isRunning;
+  }, [activeSession, isRunning, persistDraftSession, seconds]);
+
   const handleStopSession = () => {
     setIsRunning(false);
     setShowReflectionModal(true);
   };
 
-  const handleSaveSession = async (reflection: string, startPage: number, endPage: number) => {
+  const handleSaveSession = async (reflection: string, endPage: number) => {
     if (!bookId) {
       throw new Error('Missing book id');
     }
@@ -159,41 +258,48 @@ export default function ReadingSession() {
       throw new Error('Session duration must be greater than 0');
     }
 
-    if (!Number.isInteger(startPage) || startPage < 0) {
-      throw new Error('Start page must be zero or greater');
-    }
-
-    if (!Number.isInteger(endPage) || endPage < 0) {
-      throw new Error('End page must be zero or greater');
-    }
-
+    const session = await ensureSessionInitialized(parsedBookId);
     const trimmedReflection = reflection.trim();
+
+    if (endPage < session.startPage) {
+      throw new Error('End page must be greater than or equal to start page.');
+    }
+
+    if (!trimmedReflection) {
+      throw new Error('Reflection is required.');
+    }
 
     if (trimmedReflection.length > 2000) {
       throw new Error('Reflection must be 2000 characters or fewer');
     }
 
-    const sessionId = await ensureSessionInitialized(parsedBookId);
-
-    const updatedSession = await updateSession(sessionId, {
+    const completedSession = await completeSession(session.id, {
       durationSeconds: seconds,
       endPage,
       reflection: trimmedReflection,
-      status: 'COMPLETED',
     });
 
-    if (updatedSession.xpUpdate) {
+    if (completedSession.xpUpdate) {
       showXpGain({
-        xpUpdate: updatedSession.xpUpdate,
+        xpUpdate: completedSession.xpUpdate,
         source: 'session',
       });
     }
 
+    activeSessionRef.current = null;
+    setActiveSession(null);
     navigate(`/book/${bookId}`);
   };
 
-  const handleCaptureWord = (captureResult: SessionCodexEntry & { newCapture: boolean; xpValue: number; xpUpdate: XpUpdateResponseDTO | null; rarityTier: RarityTier }) => {
-    if (!captureResult.newCapture) {
+  const handleCaptureWord = (captureResult: SessionCodexEntry & {
+    isCollectible: boolean;
+    isNewCapture: boolean;
+    alreadyCaptured: boolean;
+    xpValue: number;
+    xpUpdate: XpUpdateResponseDTO | null;
+    rarityTier: RarityTier;
+  }) => {
+    if (!captureResult.isCollectible || !captureResult.isNewCapture) {
       return;
     }
 
@@ -218,29 +324,59 @@ export default function ReadingSession() {
     }
   };
 
-  const handleToggleTimer = () => {
-    setIsRunning((currentValue) => !currentValue);
+  const handleToggleTimer = async () => {
+    if (isRunning) {
+      setIsRunning(false);
+      return;
+    }
+
+    if (!bookId) {
+      setActionError('Missing book id.');
+      return;
+    }
+
+    const parsedBookId = Number(bookId);
+
+    if (!Number.isFinite(parsedBookId) || parsedBookId <= 0) {
+      setActionError('Invalid book id.');
+      return;
+    }
+
+    try {
+      setActionError(null);
+      await ensureSessionInitialized(parsedBookId);
+      setIsRunning(true);
+    } catch (error) {
+      console.error('Error starting reading session:', error);
+      setActionError(getErrorMessage(error, 'Could not start this reading session right now.'));
+    }
   };
+
+  const draftStartPage = activeSession?.startPage ?? Math.max(0, book?.readPages ?? 0);
+  const draftEndPage = activeSession
+    ? Math.max(activeSession.endPage, activeSession.startPage)
+    : Math.max(0, book?.readPages ?? 0);
+  const draftReflection = activeSession?.reflection ?? '';
 
   if (isLoadingBook) {
     return (
-      <div className="min-h-screen bg-[linear-gradient(180deg,#F7FBF8_0%,#F6F9FF_58%,#F8F5FF_100%)] pb-24">
-        <div className="mx-auto flex min-h-screen max-w-lg items-center justify-center px-5 text-[#6A7687]">
+      <div className="page-bg min-h-screen pb-24">
+        <div className="mx-auto flex min-h-screen max-w-lg items-center justify-center px-5 text-text-muted">
           Preparing your reading session...
         </div>
       </div>
     );
   }
 
-  if (sessionError || !book) {
+  if (loadError || !book) {
     return (
-      <div className="min-h-screen bg-[linear-gradient(180deg,#F7FBF8_0%,#F6F9FF_58%,#F8F5FF_100%)] pb-24">
+      <div className="page-bg min-h-screen pb-24">
         <div className="mx-auto flex min-h-screen max-w-lg items-center justify-center px-5">
           <div className="text-center">
-            <p className="text-lg text-[#FF6B6B]">{sessionError ?? 'Session not found.'}</p>
+            <p className="text-lg text-danger">{loadError ?? 'Session not found.'}</p>
             <button
               onClick={() => navigate('/library')}
-              className="mt-4 inline-flex h-11 items-center rounded-full bg-[#A8E6CF] px-5 text-sm font-medium text-[#22324A]"
+              className="mt-4 inline-flex h-11 items-center rounded-full bg-brand px-5 text-sm font-medium text-text-on-brand"
             >
               Back to library
             </button>
@@ -251,38 +387,40 @@ export default function ReadingSession() {
   }
 
   return (
-    <div className="min-h-screen bg-[linear-gradient(180deg,#F7FBF8_0%,#F6F9FF_58%,#F8F5FF_100%)] px-4 py-6">
+    <div className="page-bg min-h-screen px-4 py-6">
       <div className="mx-auto max-w-lg">
         <div className="flex items-center gap-4">
           <button
             onClick={() => navigate(-1)}
-            className="flex h-11 w-11 items-center justify-center rounded-full border border-[rgba(36,52,71,0.08)] bg-white/90 text-[#22324A] shadow-[0_10px_20px_rgba(31,41,55,0.05)] transition-colors hover:bg-white"
+            className="flex h-11 w-11 items-center justify-center rounded-full border border-border bg-surface text-text shadow-[0_10px_20px_rgba(31,41,55,0.05)] transition-colors hover:bg-surface-alt"
           >
             <ArrowLeft size={20} />
           </button>
           <div className="min-w-0 flex-1">
-            <p className="text-xs uppercase tracking-[0.22em] text-[#8A94A6]">Reading Session</p>
-            <h1 className="truncate text-2xl font-semibold text-[#22324A]">{book.title}</h1>
-            <p className="mt-1 truncate text-sm text-[#6A7687]">{book.author}</p>
+            <p className="text-xs uppercase tracking-[0.22em] text-text-subtle">Reading Session</p>
+            <h1 className="truncate text-2xl font-semibold text-text">{book.title}</h1>
+            <p className="mt-1 truncate text-sm text-text-muted">{book.author}</p>
           </div>
         </div>
 
-        <section className="mt-5 rounded-[32px] border border-[rgba(36,52,71,0.08)] bg-white/92 px-6 py-8 text-center shadow-[0_18px_38px_rgba(31,41,55,0.07)]">
-          <p className="text-sm text-[#6A7687]">Focus timer</p>
+        <section className="mt-5 rounded-[32px] border border-border bg-surface px-6 py-8 text-center shadow-[0_18px_38px_rgba(31,41,55,0.07)]">
+          <p className="text-sm text-text-muted">Focus timer</p>
           <div
-            className={`mt-4 text-6xl font-semibold tabular-nums tracking-[-0.05em] text-[#22324A] transition-all duration-300 sm:text-7xl ${
+            className={`mt-4 text-6xl font-semibold tabular-nums tracking-[-0.05em] text-text transition-all duration-300 sm:text-7xl ${
               isRunning ? 'scale-[1.01]' : ''
             }`}
           >
             {formatTime(seconds)}
           </div>
-          <p className="mt-3 text-sm text-[#6A7687]">{isRunning ? 'Reading in progress' : seconds === 0 ? 'Ready when you are' : 'Timer paused'}</p>
+          <p className="mt-3 text-sm text-text-muted">
+            {isRunning ? 'Reading in progress' : seconds === 0 ? 'Ready when you are' : 'Timer paused'}
+          </p>
 
           <div className="mt-7 flex flex-wrap justify-center gap-3">
             {seconds === 0 ? (
               <Button
                 className="h-12 rounded-full px-8 shadow-[0_12px_24px_rgba(76,167,132,0.18)]"
-                onClick={handleToggleTimer}
+                onClick={() => void handleToggleTimer()}
               >
                 <span className="inline-flex items-center gap-2">
                   <Play size={18} />
@@ -293,7 +431,7 @@ export default function ReadingSession() {
               <>
                 <Button
                   className="h-12 rounded-full px-8 shadow-[0_12px_24px_rgba(76,167,132,0.18)]"
-                  onClick={handleToggleTimer}
+                  onClick={() => void handleToggleTimer()}
                 >
                   <span className="inline-flex items-center gap-2">
                     {isRunning ? <Pause size={18} /> : <Play size={18} />}
@@ -302,7 +440,7 @@ export default function ReadingSession() {
                 </Button>
                 <Button
                   variant="outline"
-                  className="h-12 rounded-full border-[#F2B9AE] bg-white text-[#B75B50] hover:bg-[#FFF6F4]"
+                  className="h-12 rounded-full border-danger/35 bg-surface text-danger hover:bg-danger-soft"
                   onClick={handleStopSession}
                 >
                   <span className="inline-flex items-center gap-2">
@@ -316,23 +454,25 @@ export default function ReadingSession() {
 
           <button
             onClick={() => setShowWordLookupModal(true)}
-            className="mt-5 inline-flex h-11 items-center gap-2 rounded-full bg-[#EFF4FF] px-5 text-sm font-medium text-[#375B87] transition-colors hover:bg-[#E5EEFF]"
+            className="mt-5 inline-flex h-11 items-center gap-2 rounded-full bg-accent-soft px-5 text-sm font-medium text-accent-strong transition-colors hover:bg-accent-soft/80"
           >
             <Search size={16} />
             Look up Word
           </button>
+
+          {actionError ? <p className="mt-4 text-sm text-danger">{actionError}</p> : null}
         </section>
 
-        <section className="mt-6 rounded-[28px] border border-[rgba(36,52,71,0.08)] bg-white/90 p-5 shadow-[0_14px_30px_rgba(31,41,55,0.06)]">
+        <section className="mt-6 rounded-[28px] border border-border bg-surface p-5 shadow-[0_14px_30px_rgba(31,41,55,0.06)]">
           <div>
-            <p className="text-xs uppercase tracking-[0.22em] text-[#8A94A6]">Captured Words</p>
-            <p className="mt-2 text-sm text-[#6A7687]">
+            <p className="text-xs uppercase tracking-[0.22em] text-text-subtle">Captured Words</p>
+            <p className="mt-2 text-sm text-text-muted">
               {codexEntries.length === 0 ? 'No words captured yet' : `${codexEntries.length} words captured this session`}
             </p>
           </div>
 
           {codexEntries.length === 0 ? (
-            <div className="mt-4 rounded-[22px] bg-[#F7F9FC] px-4 py-5 text-sm leading-relaxed text-[#6A7687]">
+            <div className="mt-4 rounded-[22px] bg-surface-muted px-4 py-5 text-sm leading-relaxed text-text-muted">
               Pause for interesting vocabulary as you read, and your captured words will show up here.
             </div>
           ) : (
@@ -340,7 +480,7 @@ export default function ReadingSession() {
               {codexEntries.map((entry) => (
                 <div
                   key={entry.lemma}
-                  className="rounded-full border border-[rgba(138,97,215,0.14)] bg-[#F3EDFF] px-3 py-1.5 text-sm font-medium text-[#6E53B5]"
+                  className="rounded-full border border-accent/25 bg-accent-soft px-3 py-1.5 text-sm font-medium text-accent-strong"
                 >
                   {entry.lemma}
                 </div>
@@ -354,7 +494,7 @@ export default function ReadingSession() {
         isOpen={showWordLookupModal}
         onClose={() => setShowWordLookupModal(false)}
         codexEntryLemmas={codexEntries.map((codexEntry) => codexEntry.lemma)}
-        sessionId={activeSessionId}
+        sessionId={activeSession?.id}
         onCapture={handleCaptureWord}
       />
 
@@ -362,6 +502,9 @@ export default function ReadingSession() {
         <ReflectionModal
           durationSeconds={seconds}
           book={book}
+          startPage={draftStartPage}
+          initialEndPage={draftEndPage}
+          initialReflection={draftReflection}
           wordsCount={codexEntries.length}
           onClose={() => setShowReflectionModal(false)}
           onSubmit={handleSaveSession}
@@ -374,23 +517,34 @@ export default function ReadingSession() {
 interface ReflectionModalProps {
   durationSeconds: number;
   book: ApiBook;
+  startPage: number;
+  initialEndPage: number;
+  initialReflection: string;
   wordsCount: number;
   onClose: () => void;
-  onSubmit: (reflection: string, startPage: number, endPage: number) => Promise<void>;
+  onSubmit: (reflection: string, endPage: number) => Promise<void>;
 }
 
 function ReflectionModal({
   durationSeconds,
   book,
+  startPage,
+  initialEndPage,
+  initialReflection,
   wordsCount,
   onClose,
   onSubmit,
 }: ReflectionModalProps) {
-  const [reflection, setReflection] = useState('');
-  const [startPage, setStartPage] = useState(String(book.readPages));
-  const [endPage, setEndPage] = useState(String(book.readPages));
+  const [reflection, setReflection] = useState(initialReflection);
+  const [endPage, setEndPage] = useState(String(initialEndPage));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setReflection(initialReflection);
+    setEndPage(String(initialEndPage));
+    setSubmitError(null);
+  }, [initialEndPage, initialReflection, startPage]);
 
   const trimmedReflectionLength = reflection.trim().length;
   const isValidReflection = trimmedReflectionLength >= 50 && trimmedReflectionLength <= 2000;
@@ -398,21 +552,20 @@ function ReflectionModal({
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
 
-    const parsedStartPage = Number(startPage);
     const parsedEndPage = Number(endPage);
     const trimmedReflection = reflection.trim();
 
-    if (!Number.isInteger(parsedStartPage) || !Number.isInteger(parsedEndPage)) {
-      setSubmitError('Enter valid whole numbers for start and end page.');
+    if (!Number.isInteger(parsedEndPage)) {
+      setSubmitError('Enter a valid whole number for end page.');
       return;
     }
 
-    if (parsedStartPage < 0 || parsedEndPage < 0) {
-      setSubmitError('Start page and end page must be zero or greater.');
+    if (parsedEndPage < 0) {
+      setSubmitError('End page must be zero or greater.');
       return;
     }
 
-    if (parsedEndPage < parsedStartPage) {
+    if (parsedEndPage < startPage) {
       setSubmitError('End page must be greater than or equal to start page.');
       return;
     }
@@ -430,10 +583,10 @@ function ReflectionModal({
     try {
       setIsSubmitting(true);
       setSubmitError(null);
-      await onSubmit(trimmedReflection, parsedStartPage, parsedEndPage);
+      await onSubmit(trimmedReflection, parsedEndPage);
     } catch (error) {
-      console.error('Error saving session:', error);
-      setSubmitError('Could not save session. Please try again.');
+      console.error('Error completing session:', error);
+      setSubmitError(getErrorMessage(error, 'Could not save session. Please try again.'));
     } finally {
       setIsSubmitting(false);
     }
@@ -441,61 +594,55 @@ function ReflectionModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-[32px] border border-white/70 bg-white/95 p-6 shadow-[0_24px_48px_rgba(17,24,39,0.18)]">
+      <div className="w-full max-w-md rounded-[32px] border border-border bg-surface p-6 shadow-[0_24px_48px_rgba(17,24,39,0.18)]">
         <div className="text-center">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-[#DFF5EA]">
-            <BookOpen size={28} className="text-[#3D9B7A]" />
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-brand-soft">
+            <BookOpen size={28} className="text-brand-strong" />
           </div>
-          <h2 className="mt-4 text-2xl font-semibold text-[#22324A]">Session Complete</h2>
-          <p className="mt-2 text-sm text-[#6A7687]">
-            {formatTime(durationSeconds)} • {wordsCount} words captured
+          <h2 className="mt-4 text-2xl font-semibold text-text">Session Complete</h2>
+          <p className="mt-2 text-sm text-text-muted">
+            {formatTime(durationSeconds)} - {wordsCount} words captured
           </p>
         </div>
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
-          <div className="rounded-[24px] bg-[#F7F9FC] p-4">
-            <p className="text-xs uppercase tracking-[0.22em] text-[#8A94A6]">Book</p>
-            <p className="mt-2 text-base font-semibold text-[#22324A]">{book.title}</p>
-            <p className="mt-1 text-sm text-[#6A7687]">{book.author}</p>
+          <div className="rounded-[24px] bg-surface-muted p-4">
+            <p className="text-xs uppercase tracking-[0.22em] text-text-subtle">Book</p>
+            <p className="mt-2 text-base font-semibold text-text">{book.title}</p>
+            <p className="mt-1 text-sm text-text-muted">{book.author}</p>
           </div>
 
           <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="mb-2 block text-sm font-medium text-[#22324A]">Start Page</label>
-              <input
-                type="number"
-                value={startPage}
-                onChange={(event) => setStartPage(event.target.value)}
-                className="w-full rounded-[16px] border border-[rgba(36,52,71,0.08)] bg-[#F7F9FC] px-4 py-3 text-[#22324A] outline-none transition-all focus:border-[#A8E6CF] focus:bg-white focus:ring-2 focus:ring-[#CFEFDF]"
-                required
-              />
+            <div className="rounded-[16px] bg-surface-muted px-4 py-3">
+              <p className="text-xs uppercase tracking-[0.18em] text-text-subtle">Start Page</p>
+              <p className="mt-2 text-lg font-semibold text-text">{startPage}</p>
             </div>
             <div>
-              <label className="mb-2 block text-sm font-medium text-[#22324A]">End Page</label>
+              <label className="mb-2 block text-sm font-medium text-text">End Page</label>
               <input
                 type="number"
                 value={endPage}
                 onChange={(event) => setEndPage(event.target.value)}
-                className="w-full rounded-[16px] border border-[rgba(36,52,71,0.08)] bg-[#F7F9FC] px-4 py-3 text-[#22324A] outline-none transition-all focus:border-[#A8E6CF] focus:bg-white focus:ring-2 focus:ring-[#CFEFDF]"
+                className="w-full rounded-[16px] border border-border bg-surface-muted px-4 py-3 text-text outline-none transition-all focus:border-brand focus:bg-surface focus:ring-2 focus:ring-brand"
                 required
               />
             </div>
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-medium text-[#22324A]">Reflection</label>
+            <label className="mb-2 block text-sm font-medium text-text">Reflection</label>
             <textarea
               value={reflection}
               onChange={(event) => setReflection(event.target.value)}
               placeholder="What stood out in this session? What did you notice, learn, or enjoy?"
-              className="min-h-[140px] w-full resize-none rounded-[18px] border border-[rgba(36,52,71,0.08)] bg-[#F7F9FC] px-4 py-3 text-[#22324A] outline-none transition-all focus:border-[#A8E6CF] focus:bg-white focus:ring-2 focus:ring-[#CFEFDF]"
+              className="min-h-[140px] w-full resize-none rounded-[18px] border border-border bg-surface-muted px-4 py-3 text-text outline-none transition-all focus:border-brand focus:bg-surface focus:ring-2 focus:ring-brand"
             />
-            <p className={`mt-2 text-xs ${isValidReflection ? 'text-[#3D9B7A]' : 'text-[#6A7687]'}`}>
+            <p className={`mt-2 text-xs ${isValidReflection ? 'text-brand-strong' : 'text-text-muted'}`}>
               {trimmedReflectionLength}/50 characters minimum
             </p>
           </div>
 
-          {submitError ? <p className="text-sm text-[#FF6B6B]">{submitError}</p> : null}
+          {submitError ? <p className="text-sm text-danger">{submitError}</p> : null}
 
           <div className="flex gap-3 pt-2">
             <Button

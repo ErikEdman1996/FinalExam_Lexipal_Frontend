@@ -1,84 +1,67 @@
-import { useDeferredValue, useEffect, useState } from 'react';
-import { BookOpen, Search, Sparkles, Star, Volume2, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { BookOpen, ChevronLeft, ChevronRight, LockKeyhole, Star, X } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
+import { useNavigate, useParams } from 'react-router-dom';
 import { BottomNav } from '../components/BottomNav';
 import { Button } from '../components/Button';
 import {
   extractDefinitionFromDefinitions,
+  extractDictionarySenses,
   extractPartsOfSpeechFromDefinitions,
   extractPhoneticText,
   extractSynonymsFromDefinitions,
-  getCodexEntries,
-  type CodexEntryReadResponseDTO,
+  getCodexBoard,
+  getDictionaryWord,
   normalizeRarityTier,
+  type CodexBoardPageDTO,
+  type CodexBoardResponseDTO,
+  type CodexBoardSlotDTO,
+  type DictionarySense,
   type RarityTier,
 } from '../api/api';
 
-type RarityFilter = 'ALL' | RarityTier;
-type SortOption = 'NEWEST' | 'ALPHABETICAL' | 'HIGHEST_XP' | 'RAREST' | 'PART_OF_SPEECH';
+const PAGE_COUNT = 12;
+const SLOTS_PER_PAGE = 25;
 
-const rarityOptions: { id: RarityFilter; label: string }[] = [
-  { id: 'ALL', label: 'All' },
-  { id: 'MYTHIC', label: 'Mythic' },
-  { id: 'RARE', label: 'Rare' },
-  { id: 'UNCOMMON', label: 'Uncommon' },
-  { id: 'COMMON', label: 'Common' },
-];
-
-const sortOptions: { id: SortOption; label: string }[] = [
-  { id: 'NEWEST', label: 'Newest first' },
-  { id: 'RAREST', label: 'Rarest first' },
-  { id: 'HIGHEST_XP', label: 'Highest XP' },
-  { id: 'ALPHABETICAL', label: 'A-Z' },
-  { id: 'PART_OF_SPEECH', label: 'Part of speech' },
-];
-
-const getRarityTier = (word: CodexEntryReadResponseDTO): RarityTier => normalizeRarityTier(word.rarityTier);
-
-const getRarityBadgeClassName = (rarity: RarityTier) => {
-  if (rarity === 'MYTHIC') {
-    return 'border border-transparent bg-[linear-gradient(135deg,#FF7A59_0%,#FFD866_22%,#6DE7C8_44%,#8BE8FF_64%,#B084F5_82%,#FF7A59_100%)] text-white shadow-[0_10px_24px_rgba(176,132,245,0.28)]';
-  }
-
-  if (rarity === 'RARE') {
-    return 'bg-[#FFF2D6] text-[#A36F00] border border-[rgba(199,134,46,0.18)]';
-  }
-
-  if (rarity === 'UNCOMMON') {
-    return 'bg-[#E8F1FF] text-[#356A9A] border border-[rgba(75,147,209,0.16)]';
-  }
-
-  return 'bg-[#F1F3F5] text-[#5C6770] border border-[rgba(92,103,112,0.14)]';
+const rarityBadgeClassNames: Record<RarityTier, string> = {
+  COMMON: 'border border-[rgba(99,115,129,0.12)] bg-white/88 text-[#5F6C79]',
+  UNCOMMON: 'border border-[rgba(75,147,209,0.16)] bg-[#EAF3FF] text-[#356A9A]',
+  RARE: 'border border-[rgba(199,134,46,0.18)] bg-[#FFF4DC] text-[#9F6B00]',
+  MYTHIC:
+    'border border-transparent bg-[linear-gradient(135deg,#FF7A59_0%,#FFD866_22%,#8BE8FF_62%,#B084F5_100%)] text-white shadow-[0_10px_22px_rgba(176,132,245,0.26)]',
 };
 
-const getRarityCardAccentClassName = (rarity: RarityTier) => {
-  if (rarity === 'MYTHIC') {
-    return 'from-[#FFF6F3] via-[#FFF7D6] via-[35%] to-[#F4EEFF] border-[rgba(176,132,245,0.24)]';
-  }
-
-  if (rarity === 'RARE') {
-    return 'from-[#FFF9EC] to-[#FFF2D6] border-[rgba(199,134,46,0.22)]';
-  }
-
-  if (rarity === 'UNCOMMON') {
-    return 'from-[#F4F9FF] to-[#E8F1FF] border-[rgba(75,147,209,0.18)]';
-  }
-
-  return 'from-[#FFFFFF] to-[#F6F7F9] border-[rgba(0,0,0,0.06)]';
+const rarityGlowClassNames: Record<RarityTier, string> = {
+  COMMON: 'from-white via-[#F9FAFB] to-[#F2F5F8]',
+  UNCOMMON: 'from-[#F8FBFF] via-[#EFF5FF] to-[#E5F1FF]',
+  RARE: 'from-[#FFFDF6] via-[#FFF6E2] to-[#FFF0D2]',
+  MYTHIC: 'from-[#FFF9F0] via-[#F9F3FF] to-[#EEF8FF]',
 };
 
-const getSpecificOrFallbackDefinition = (word: CodexEntryReadResponseDTO) => {
-  return word.specificDefinition || extractDefinitionFromDefinitions(word.definitions) || 'No definition available yet.';
-};
+interface CapturedSlotDetails {
+  pageNumber: number;
+  slot: CodexBoardSlotDTO;
+}
 
-const getPartsOfSpeech = (word: CodexEntryReadResponseDTO) => {
-  return extractPartsOfSpeechFromDefinitions(word.definitions);
-};
+interface CodexDictionaryEntry {
+  lemma: string;
+  phoneticText: string;
+  partsOfSpeech: string[];
+  senses: DictionarySense[];
+  synonyms: string[];
+}
 
-const formatCreatedDate = (createdAt: string) => {
-  const parsed = new Date(createdAt);
+const formatPercent = (value: number) => `${Math.round(value)}%`;
+
+const formatCapturedDate = (value?: string) => {
+  if (!value) {
+    return 'Recently captured';
+  }
+
+  const parsed = new Date(value);
 
   if (Number.isNaN(parsed.getTime())) {
-    return 'Unknown date';
+    return 'Recently captured';
   }
 
   return parsed.toLocaleDateString('en-US', {
@@ -88,187 +71,369 @@ const formatCreatedDate = (createdAt: string) => {
   });
 };
 
-const getSortWeight = (rarity: RarityTier) => {
-  if (rarity === 'MYTHIC') {
-    return 4;
-  }
+const buildBoardPages = (board: CodexBoardResponseDTO | null) => {
+  const pageMap = new Map<number, CodexBoardPageDTO>();
 
-  if (rarity === 'RARE') {
-    return 3;
-  }
+  board?.pages.forEach((page) => {
+    pageMap.set(page.pageNumber, page);
+  });
 
-  if (rarity === 'UNCOMMON') {
-    return 2;
-  }
+  return Array.from({ length: PAGE_COUNT }, (_, index) => {
+    const pageNumber = index + 1;
+    const existingPage = pageMap.get(pageNumber);
 
-  return 1;
+    if (!existingPage) {
+      return {
+        pageNumber,
+        capturedCount: 0,
+        totalCount: SLOTS_PER_PAGE,
+        completionPercentage: 0,
+        slots: Array.from({ length: SLOTS_PER_PAGE }, (_, slotIndex) => ({
+          slotNumber: slotIndex + 1,
+          isCaptured: false,
+        })),
+      } satisfies CodexBoardPageDTO;
+    }
+
+    const slotMap = new Map(existingPage.slots.map((slot) => [slot.slotNumber, slot]));
+    const totalCount = existingPage.totalCount > 0 ? existingPage.totalCount : SLOTS_PER_PAGE;
+    const slots = Array.from({ length: totalCount }, (_, slotIndex) => {
+      return slotMap.get(slotIndex + 1) ?? {
+        slotNumber: slotIndex + 1,
+        isCaptured: false,
+      };
+    });
+
+    return {
+      ...existingPage,
+      totalCount,
+      slots,
+      capturedCount: existingPage.capturedCount ?? slots.filter((slot) => slot.isCaptured).length,
+    };
+  });
 };
 
-interface CodexWordDetailsProps {
-  word: CodexEntryReadResponseDTO | null;
-  onClose: () => void;
+function BoardSkeleton() {
+  return (
+    <section className="rounded-[36px] border border-border bg-surface p-5 shadow-[0_24px_54px_rgba(15,23,42,0.08)] sm:p-7">
+      <div className="flex items-center justify-between gap-4">
+        <div>
+          <div className="h-4 w-24 rounded-full bg-surface-muted" />
+          <div className="mt-3 h-8 w-44 rounded-full bg-surface-alt" />
+        </div>
+        <div className="h-11 w-28 rounded-full bg-surface-alt" />
+      </div>
+
+      <div className="mt-6 h-3 rounded-full bg-surface-alt" />
+
+      <div className="mt-8 flex items-center justify-center gap-3 sm:gap-5">
+        <div className="h-12 w-12 rounded-full bg-surface-alt sm:h-14 sm:w-14" />
+        <div className="grid flex-1 max-w-[32rem] grid-cols-5 gap-2.5 sm:gap-3">
+          {Array.from({ length: SLOTS_PER_PAGE }, (_, index) => (
+            <div key={index} className="aspect-square rounded-[18px] bg-surface-muted" />
+          ))}
+        </div>
+        <div className="h-12 w-12 rounded-full bg-surface-alt sm:h-14 sm:w-14" />
+      </div>
+    </section>
+  );
 }
 
-function CodexWordDetails({ word, onClose }: CodexWordDetailsProps) {
-  if (!word) {
+function CapturedSlotModal({ details, onClose }: { details: CapturedSlotDetails | null; onClose: () => void }) {
+  const [entry, setEntry] = useState<CodexDictionaryEntry | null>(null);
+  const [isLoadingEntry, setIsLoadingEntry] = useState(false);
+  const [entryError, setEntryError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadEntry = async () => {
+      if (!details) {
+        setEntry(null);
+        setEntryError(null);
+        setIsLoadingEntry(false);
+        return;
+      }
+
+      if (!details.slot.lemma) {
+        setEntry(null);
+        setEntryError('No dictionary details are available for this word yet.');
+        return;
+      }
+
+      try {
+        setIsLoadingEntry(true);
+        setEntryError(null);
+        const word = await getDictionaryWord(details.slot.lemma);
+
+        if (!isMounted) {
+          return;
+        }
+
+        const senses = extractDictionarySenses(word.definitions);
+        const fallbackDefinition = extractDefinitionFromDefinitions(word.definitions);
+
+        setEntry({
+          lemma: word.lemma ?? details.slot.lemma,
+          phoneticText: extractPhoneticText(word.phonetics),
+          partsOfSpeech: extractPartsOfSpeechFromDefinitions(word.definitions),
+          senses: senses.length > 0
+            ? senses
+            : fallbackDefinition
+              ? [{ definition: fallbackDefinition, examples: [] }]
+              : [],
+          synonyms: extractSynonymsFromDefinitions(word.definitions),
+        });
+      } catch {
+        if (isMounted) {
+          setEntry(null);
+          setEntryError('Could not load dictionary details for this word right now.');
+        }
+      } finally {
+        if (isMounted) {
+          setIsLoadingEntry(false);
+        }
+      }
+    };
+
+    void loadEntry();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [details]);
+
+  if (!details) {
     return null;
   }
 
-  const rarity = getRarityTier(word);
-  const phoneticText = extractPhoneticText(word.phonetics);
-  const synonyms = extractSynonymsFromDefinitions(word.definitions);
-  const definition = getSpecificOrFallbackDefinition(word);
-  const partsOfSpeech = getPartsOfSpeech(word);
+  const rarity = normalizeRarityTier(details.slot.rarityTier);
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 p-0 sm:p-4">
-      <div
-        className="bg-white rounded-t-[32px] sm:rounded-[32px] w-full max-w-md shadow-[0_8px_32px_rgba(0,0,0,0.12)] animate-in slide-in-from-bottom sm:slide-in-from-bottom-0 duration-300"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="codex-word-title"
-      >
-        <div className="sticky top-0 bg-white border-b border-[rgba(0,0,0,0.05)] px-6 py-4 rounded-t-[32px]">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <p className="text-xs uppercase tracking-[0.24em] text-[#7B8794]">Codex Entry</p>
-              <h2 id="codex-word-title" className="text-2xl font-semibold text-[#2C3E50] mt-1">
-                {word.lemma}
-              </h2>
-            </div>
-            <button
-              onClick={onClose}
-              className="w-10 h-10 rounded-full hover:bg-[#F0F2F5] flex items-center justify-center transition-colors"
-              aria-label="Close codex entry details"
-            >
-              <X size={20} className="text-[#6C757D]" />
-            </button>
-          </div>
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-5">
+      <div className="w-full max-w-xl rounded-t-[32px] border border-white/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,255,0.96))] shadow-[0_26px_60px_rgba(15,23,42,0.22)] sm:max-w-2xl sm:rounded-[32px]">
+        <div className="flex items-center justify-end px-5 pt-5">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-9 w-9 items-center justify-center rounded-full text-[#7B8794] transition-colors hover:bg-[rgba(36,52,71,0.06)]"
+            aria-label="Close dictionary details"
+          >
+            <X size={18} />
+          </button>
         </div>
 
-        <div className="px-6 py-5 max-h-[78vh] overflow-y-auto space-y-5">
-          <div
-            className={`rounded-[24px] border bg-gradient-to-br p-5 ${getRarityCardAccentClassName(rarity)}`}
-            style={
-              rarity === 'MYTHIC'
-                ? {
-                    backgroundImage:
-                      'linear-gradient(135deg, rgba(255,122,89,0.18) 0%, rgba(255,216,102,0.16) 22%, rgba(109,231,200,0.15) 44%, rgba(139,232,255,0.16) 64%, rgba(176,132,245,0.18) 82%, rgba(255,122,89,0.16) 100%)',
-                  }
-                : undefined
-            }
+        <div className="px-5 pb-5 sm:px-6 sm:pb-6">
+          <div className={`rounded-[24px] border p-5 ${rarity === 'MYTHIC'
+            ? 'border-[#B084F5] bg-[radial-gradient(circle_at_top,#fef7ff_0%,#f7f1ff_34%,#eef6ff_68%,#fdfdfd_100%)] shadow-[0_0_0_1px_rgba(176,132,245,0.18),0_10px_26px_rgba(176,132,245,0.12)]'
+            : rarity === 'RARE'
+              ? 'border-[#D6A332] bg-[radial-gradient(circle_at_top,#fffaf0_0%,#fff2d6_44%,#fffdf8_100%)] shadow-[0_0_0_1px_rgba(214,163,50,0.16),0_10px_24px_rgba(214,163,50,0.10)]'
+              : rarity === 'UNCOMMON'
+                ? 'border-[#7FB7FF] bg-[radial-gradient(circle_at_top,#f8fbff_0%,#eef5ff_46%,#fcfdff_100%)] shadow-[0_0_0_1px_rgba(127,183,255,0.16),0_10px_24px_rgba(127,183,255,0.10)]'
+                : 'border-[rgba(36,52,71,0.10)] bg-white'} overflow-hidden`}
           >
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-sm text-[#6C757D]">
-                  {word.sourceSessionId != null ? `Saved from session #${word.sourceSessionId}` : 'Saved to your codex'}
-                </p>
-                <div className="flex items-center gap-2 mt-2">
-                  <span className={`text-xs px-3 py-1 rounded-full font-medium ${getRarityBadgeClassName(rarity)}`}>
-                    {rarity}
-                  </span>
-                  <span className="text-sm text-[#52606D]">{formatCreatedDate(word.createdAt)}</span>
+            <div className="h-full overflow-hidden rounded-[20px] border border-white/70 bg-[linear-gradient(180deg,rgba(255,255,255,0.97),rgba(248,250,255,0.94))] shadow-[inset_0_1px_0_rgba(255,255,255,0.7)]">
+              <div className="max-h-[68vh] overflow-y-auto px-5 py-4">
+                <div className="flex items-start justify-between gap-4 border-b border-[rgba(36,52,71,0.08)] pb-4">
+                  <div>
+                    <p className="text-[0.72rem] uppercase tracking-[0.22em] text-[#6C757D]">Dictionary entry</p>
+                    <h2 className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-[#23324A]">
+                      {entry?.lemma ?? details.slot.lemma ?? 'Captured word'}
+                    </h2>
+                    {isLoadingEntry ? (
+                      <div className="mt-3 h-5 w-32 rounded-full bg-[#EEF3F7]" />
+                    ) : (
+                      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-[#5A6678]">
+                        {entry?.phoneticText ? (
+                          <span className="font-medium italic text-[#4B5E77]">/{entry.phoneticText}/</span>
+                        ) : null}
+                        {entry?.partsOfSpeech?.[0] ? (
+                          <span className="rounded-full bg-white/70 px-2.5 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-[#516275]">
+                            {entry.partsOfSpeech[0]}
+                          </span>
+                        ) : null}
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex flex-col items-end gap-2">
+                    <span className={`rounded-full px-3 py-1 text-xs font-semibold ${rarityBadgeClassNames[rarity]}`}>
+                      {rarity}
+                    </span>
+                    <span className="rounded-full border border-[rgba(36,52,71,0.08)] bg-white/80 px-3 py-1 text-xs font-medium text-[#5F6C79]">
+                      {formatCapturedDate(details.slot.capturedAt)}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="mt-4 rounded-[18px] border border-[rgba(36,52,71,0.08)] bg-white/72 p-3">
+                  <p className="text-[0.68rem] uppercase tracking-[0.2em] text-[#7B8794]">Board slot</p>
+                  <p className="mt-2 text-sm font-semibold text-[#23324A]">
+                    Page {details.pageNumber}, Slot {details.slot.slotNumber}
+                  </p>
+                </div>
+
+                <div className="mt-5">
+                  <p className="text-[0.72rem] uppercase tracking-[0.24em] text-[#6C757D]">Definitions</p>
+                  {isLoadingEntry ? (
+                    <div className="mt-3 space-y-3">
+                      {Array.from({ length: 3 }, (_, index) => (
+                        <div key={index} className="flex gap-3">
+                          <div className="mt-1 h-4 w-4 rounded-full bg-[#EEF3F7]" />
+                          <div className="flex-1 space-y-2">
+                            <div className="h-3 rounded-full bg-[#EEF3F7]" />
+                            <div className="h-3 w-5/6 rounded-full bg-[#F4F7FA]" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : entryError ? (
+                    <p className="mt-3 text-sm leading-relaxed text-[#5B687A]">{entryError}</p>
+                  ) : entry && entry.senses.length > 0 ? (
+                    <div className="mt-3 space-y-4">
+                      {entry.senses.map((sense, index) => (
+                        <div key={`${sense.definition}-${index}`} className="flex gap-3">
+                          <span className="pt-0.5 text-sm font-semibold text-[#7A5E2A]">{index + 1}.</span>
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm leading-relaxed text-[#23324A]">{sense.definition}</p>
+                            {sense.examples.length > 0 ? (
+                              <ul className="mt-2 space-y-1 text-sm italic text-[#5B687A]">
+                                {sense.examples.slice(0, 3).map((example) => (
+                                  <li key={example} className="leading-relaxed">
+                                    {example}
+                                  </li>
+                                ))}
+                              </ul>
+                            ) : null}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="mt-3 text-sm leading-relaxed text-[#5B687A]">No definitions available right now.</p>
+                  )}
+                </div>
+
+                <div className="mt-5 border-t border-[rgba(36,52,71,0.08)] pt-4">
+                  <p className="text-[0.72rem] uppercase tracking-[0.24em] text-[#6C757D]">Synonyms</p>
+                  <p className="mt-2 text-sm leading-relaxed text-[#2C3E50]">
+                    {isLoadingEntry ? 'Loading synonyms...' : entry && entry.synonyms.length > 0 ? entry.synonyms.join(', ') : 'No synonyms available.'}
+                  </p>
                 </div>
               </div>
-              <div className="rounded-[18px] bg-white/70 px-4 py-3 text-right">
-                <p className="text-xs uppercase tracking-[0.18em] text-[#7B8794]">XP</p>
-                <p className="text-xl font-semibold text-[#2C3E50]">{word.xpValue ?? 0}</p>
-              </div>
             </div>
-
-            {phoneticText ? (
-              <div className="mt-4 inline-flex items-center gap-2 rounded-full bg-white/80 px-3 py-2 text-sm text-[#52606D]">
-                <Volume2 size={14} />
-                <span>{phoneticText}</span>
-              </div>
-            ) : null}
           </div>
 
-          <section>
-            <p className="text-xs uppercase tracking-[0.22em] text-[#7B8794]">Definition</p>
-            <p className="text-sm text-[#2C3E50] mt-2 leading-relaxed">{definition}</p>
-          </section>
-
-          {partsOfSpeech.length > 0 ? (
-            <section>
-              <div className="flex flex-wrap gap-2">
-                {partsOfSpeech.map((partOfSpeech) => (
-                  <span
-                    key={partOfSpeech}
-                    className="px-3 py-1.5 rounded-full bg-[#EEF3F8] text-sm text-[#52606D] border border-[rgba(0,0,0,0.06)]"
-                  >
-                    {partOfSpeech}
-                  </span>
-                ))}
-              </div>
-            </section>
-          ) : null}
-
-          {synonyms.length > 0 ? (
-            <section>
-              <p className="text-xs uppercase tracking-[0.22em] text-[#7B8794]">Synonyms</p>
-              <div className="flex flex-wrap gap-2 mt-3">
-                {synonyms.slice(0, 10).map((synonym) => (
-                  <span
-                    key={synonym}
-                    className="px-3 py-1.5 rounded-full bg-[#F4F6F8] text-sm text-[#52606D] border border-[rgba(0,0,0,0.06)]"
-                  >
-                    {synonym}
-                  </span>
-                ))}
-              </div>
-            </section>
-          ) : null}
-
-          <section className="grid grid-cols-2 gap-3">
-            <div className="rounded-[20px] bg-[#F8F9FA] p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-[#7B8794]">Source</p>
-              <p className="text-sm text-[#2C3E50] mt-2">{word.source || 'Unknown source'}</p>
-            </div>
-            <div className="rounded-[20px] bg-[#F8F9FA] p-4">
-              <p className="text-xs uppercase tracking-[0.18em] text-[#7B8794]">Rarity Score</p>
-              <p className="text-sm text-[#2C3E50] mt-2">
-                {word.rarityScore != null ? word.rarityScore.toFixed(2) : 'N/A'}
-              </p>
-            </div>
-          </section>
-
-          <Button className="w-full" onClick={onClose}>
-            Close
-          </Button>
+          <div className="mt-4 flex gap-3">
+            <Button variant="outline" className="flex-1 rounded-full" onClick={onClose}>
+              Close
+            </Button>
+          </div>
         </div>
       </div>
     </div>
   );
 }
 
+function CodexSlotCard({
+  pageNumber,
+  slot,
+  onSelect,
+}: {
+  pageNumber: number;
+  slot: CodexBoardSlotDTO;
+  onSelect: (details: CapturedSlotDetails) => void;
+}) {
+  if (!slot.isCaptured) {
+    return (
+      <div className="group relative aspect-[0.88] overflow-hidden rounded-[22px] border border-[rgba(36,52,71,0.09)] bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(244,248,252,0.96))] p-2.5 shadow-[0_12px_28px_rgba(15,23,42,0.04),inset_0_1px_0_rgba(255,255,255,0.82)] sm:p-3">
+        <div className="flex h-full flex-col overflow-hidden rounded-[18px] border border-dashed border-[rgba(36,52,71,0.14)] bg-[linear-gradient(180deg,rgba(251,252,255,0.98),rgba(242,246,250,0.94))]">
+          <div className="flex flex-1 items-center justify-center px-3 py-3">
+            <div className="flex h-11 w-11 items-center justify-center rounded-full border border-[rgba(36,52,71,0.08)] bg-white/90 shadow-[0_8px_18px_rgba(15,23,42,0.05)] sm:h-12 sm:w-12">
+              <LockKeyhole size={16} className="text-[#7B8794]" />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  const rarity = normalizeRarityTier(slot.rarityTier);
+
+  return (
+    <button
+      type="button"
+      onClick={() => onSelect({ pageNumber, slot })}
+      className={`group relative aspect-[0.88] overflow-hidden rounded-[22px] border bg-gradient-to-br p-2.5 text-left shadow-[0_12px_24px_rgba(15,23,42,0.08)] transition-all duration-200 hover:-translate-y-1 hover:shadow-[0_16px_30px_rgba(15,23,42,0.12)] sm:p-3 ${rarityGlowClassNames[rarity]} ${
+        rarity === 'MYTHIC'
+          ? 'border-[rgba(176,132,245,0.24)]'
+          : rarity === 'RARE'
+            ? 'border-[rgba(199,134,46,0.20)]'
+            : rarity === 'UNCOMMON'
+              ? 'border-[rgba(75,147,209,0.18)]'
+              : 'border-[rgba(36,52,71,0.08)]'
+      }`}
+    >
+      <div className="flex h-full flex-col overflow-hidden rounded-[18px] border border-white/70 bg-white/86 shadow-[inset_0_1px_0_rgba(255,255,255,0.78)]">
+        <div className="flex h-full items-center px-3 py-3 sm:px-4">
+          <p className="line-clamp-3 text-[0.98rem] font-semibold tracking-[-0.04em] text-[#22324A] sm:text-[1.06rem]">
+            {slot.lemma}
+          </p>
+        </div>
+      </div>
+    </button>
+  );
+}
+
+function BoardNavigationButton({
+  direction,
+  disabled,
+  onClick,
+}: {
+  direction: 'previous' | 'next';
+  disabled: boolean;
+  onClick: () => void;
+}) {
+  const Icon = direction === 'previous' ? ChevronLeft : ChevronRight;
+  const label = direction === 'previous' ? 'Previous page' : 'Next page';
+
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      disabled={disabled}
+      onClick={onClick}
+      className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-border bg-surface text-text shadow-[0_14px_28px_rgba(15,23,42,0.08)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:translate-y-0 sm:h-14 sm:w-14"
+    >
+      <Icon size={22} />
+    </button>
+  );
+}
+
 export default function Codex() {
-  const [codexEntries, setCodexEntries] = useState<CodexEntryReadResponseDTO[]>([]);
+  const navigate = useNavigate();
+  const { pageNumber: pageNumberParam } = useParams();
+  const [board, setBoard] = useState<CodexBoardResponseDTO | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [rarityFilter, setRarityFilter] = useState<RarityFilter>('ALL');
-  const [sortBy, setSortBy] = useState<SortOption>('NEWEST');
-  const [selectedWord, setSelectedWord] = useState<CodexEntryReadResponseDTO | null>(null);
-  const deferredSearchQuery = useDeferredValue(searchQuery);
+  const [selectedSlot, setSelectedSlot] = useState<CapturedSlotDetails | null>(null);
+  const [navigationDirection, setNavigationDirection] = useState<1 | -1>(1);
+  const previousPageNumberRef = useRef<number>(1);
 
   useEffect(() => {
     let isMounted = true;
 
-    const loadCodexEntries = async () => {
+    const loadBoard = async () => {
       try {
         setIsLoading(true);
         setErrorMessage(null);
-        const entries = await getCodexEntries();
+        const nextBoard = await getCodexBoard();
 
         if (isMounted) {
-          setCodexEntries(entries);
+          setBoard(nextBoard);
         }
-      } catch (error) {
-        console.error('Error loading codex entries:', error);
-
+      } catch {
         if (isMounted) {
-          setErrorMessage('Could not load your codex right now.');
+          setErrorMessage('Could not load your Codex board right now.');
         }
       } finally {
         if (isMounted) {
@@ -277,261 +442,178 @@ export default function Codex() {
       }
     };
 
-    void loadCodexEntries();
+    void loadBoard();
 
     return () => {
       isMounted = false;
     };
   }, []);
 
-  const normalizedQuery = deferredSearchQuery.trim().toLowerCase();
-  const totalXp = codexEntries.reduce((sum, word) => sum + Math.max(0, word.xpValue ?? 0), 0);
-  const mythicCount = codexEntries.filter((word) => getRarityTier(word) === 'MYTHIC').length;
-  const rareCount = codexEntries.filter((word) => getRarityTier(word) === 'RARE').length;
-  const uncommonCount = codexEntries.filter((word) => getRarityTier(word) === 'UNCOMMON').length;
-  const commonCount = codexEntries.filter((word) => getRarityTier(word) === 'COMMON').length;
+  const pages = useMemo(() => buildBoardPages(board), [board]);
+  const parsedPageNumber = pageNumberParam ? Number(pageNumberParam) : 1;
+  const isValidRoutePage = Number.isInteger(parsedPageNumber) && parsedPageNumber >= 1 && parsedPageNumber <= PAGE_COUNT;
+  const currentPageNumber = isValidRoutePage ? parsedPageNumber : 1;
+  const selectedPage = pages.find((page) => page.pageNumber === currentPageNumber) ?? pages[0];
+  const totalWords = board?.totalWords ?? PAGE_COUNT * SLOTS_PER_PAGE;
+  const capturedWords = board?.capturedWords ?? pages.reduce((sum, page) => sum + page.capturedCount, 0);
+  const completionPercentage = board?.completionPercentage ?? (totalWords > 0 ? (capturedWords / totalWords) * 100 : 0);
 
-  const filteredWords = codexEntries
-    .filter((word) => {
-      const rarity = getRarityTier(word);
-      const definition = getSpecificOrFallbackDefinition(word).toLowerCase();
-      const source = (word.source ?? '').toLowerCase();
-      const partsOfSpeech = getPartsOfSpeech(word).join(' ').toLowerCase();
-      const matchesFilter = rarityFilter === 'ALL' || rarity === rarityFilter;
-      const matchesSearch = !normalizedQuery
-        || word.lemma.toLowerCase().includes(normalizedQuery)
-        || definition.includes(normalizedQuery)
-        || source.includes(normalizedQuery)
-        || partsOfSpeech.includes(normalizedQuery);
+  useEffect(() => {
+    if (pageNumberParam && !isValidRoutePage) {
+      navigate('/codex/page/1', { replace: true });
+    }
+  }, [isValidRoutePage, navigate, pageNumberParam]);
 
-      return matchesFilter && matchesSearch;
-    })
-    .sort((left, right) => {
-      if (sortBy === 'ALPHABETICAL') {
-        return left.lemma.localeCompare(right.lemma);
-      }
+  useEffect(() => {
+    const previousPageNumber = previousPageNumberRef.current;
 
-      if (sortBy === 'HIGHEST_XP') {
-        return (right.xpValue ?? 0) - (left.xpValue ?? 0);
-      }
+    if (currentPageNumber !== previousPageNumber) {
+      setNavigationDirection(currentPageNumber > previousPageNumber ? 1 : -1);
+      previousPageNumberRef.current = currentPageNumber;
+    }
+  }, [currentPageNumber]);
 
-      if (sortBy === 'RAREST') {
-        const rarityDifference = getSortWeight(getRarityTier(right)) - getSortWeight(getRarityTier(left));
+  useEffect(() => {
+    setSelectedSlot(null);
+  }, [currentPageNumber]);
 
-        if (rarityDifference !== 0) {
-          return rarityDifference;
-        }
+  const handlePageChange = (pageNumber: number) => {
+    setNavigationDirection(pageNumber > currentPageNumber ? 1 : -1);
+    navigate(`/codex/page/${pageNumber}`);
+  };
 
-        return (right.rarityScore ?? 0) - (left.rarityScore ?? 0);
-      }
+  const pageEnterState = {
+    opacity: 0,
+    x: navigationDirection > 0 ? 96 : -96,
+    scale: 0.96,
+    rotateY: navigationDirection > 0 ? -8 : 8,
+  };
 
-      if (sortBy === 'PART_OF_SPEECH') {
-        const leftPartOfSpeech = getPartsOfSpeech(left)[0] ?? 'zzzz';
-        const rightPartOfSpeech = getPartsOfSpeech(right)[0] ?? 'zzzz';
-        const comparison = leftPartOfSpeech.localeCompare(rightPartOfSpeech);
-
-        if (comparison !== 0) {
-          return comparison;
-        }
-
-        return left.lemma.localeCompare(right.lemma);
-      }
-
-      const leftTime = new Date(left.createdAt).getTime();
-      const rightTime = new Date(right.createdAt).getTime();
-      return rightTime - leftTime;
-    });
+  const pageExitState = {
+    opacity: 0,
+    x: navigationDirection > 0 ? -96 : 96,
+    scale: 0.97,
+    rotateY: navigationDirection > 0 ? 8 : -8,
+  };
 
   return (
-    <div className="min-h-screen bg-[#F6F8F7] pb-20">
-      <div className="bg-white/88 border-b border-[rgba(0,0,0,0.08)] backdrop-blur-sm">
-        <div className="max-w-[480px] mx-auto px-6 py-4">
+    <div className="page-bg-radial min-h-screen pb-24 lg:pl-60 lg:pb-0">
+      <div className="mx-auto max-w-[92rem] px-6 py-4 sm:px-8 sm:py-6">
+        <header className="rounded-[30px] border border-border bg-surface p-4 shadow-[0_20px_48px_rgba(15,23,42,0.07)] sm:p-5">
           <div className="flex items-start justify-between gap-4">
-            <div>
-              <h1 className="text-2xl font-semibold text-[#2C3E50]">Codex</h1>
-              <p className="text-sm text-[#6C757D] mt-1">Every word you have saved, organized and searchable.</p>
+            <div className="min-w-0">
+              <p className="text-[0.72rem] uppercase tracking-[0.32em] text-text-subtle">{board?.volume ?? 'Volume 1'}</p>
+              <h1 className="mt-2 text-[1.8rem] font-semibold tracking-[-0.07em] text-text sm:text-[2.2rem]">Codex</h1>
+              <p className="mt-1.5 max-w-xl text-sm leading-relaxed text-text-muted">
+                Try to find all the hidden words and fill the board one page at a time.
+              </p>
             </div>
-            <div className="w-12 h-12 rounded-[18px] bg-[#FFF0E1] flex items-center justify-center shadow-[0_6px_18px_rgba(255,208,163,0.28)]">
-              <BookOpen size={22} className="text-[#B35C1E]" />
-            </div>
-          </div>
-        </div>
-      </div>
 
-      <div className="border-b border-[rgba(0,0,0,0.06)] bg-[#F6F8F7]/92 backdrop-blur-md">
-        <div className="max-w-[480px] mx-auto px-6 py-4">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="rounded-[22px] bg-gradient-to-br from-[#FFF5EB] to-[#FFE6CF] p-4 border border-[rgba(255,186,122,0.26)]">
-              <p className="text-xs uppercase tracking-[0.18em] text-[#9A6A43]">Saved</p>
-              <p className="text-2xl font-semibold text-[#2C3E50] mt-2">{codexEntries.length}</p>
-            </div>
-            <div className="rounded-[22px] bg-gradient-to-br from-[#EDF9F3] to-[#DDF4EC] p-4 border border-[rgba(61,163,122,0.22)]">
-              <p className="text-xs uppercase tracking-[0.18em] text-[#477A65]">Total XP</p>
-              <p className="text-2xl font-semibold text-[#2C3E50] mt-2">{totalXp}</p>
+            <div className="flex h-14 w-14 items-center justify-center rounded-[20px] bg-brand-soft shadow-[0_10px_24px_rgba(76,167,132,0.12)]">
+              <BookOpen size={24} className="text-brand-strong" />
             </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 mt-3 sm:grid-cols-4">
-            <div className="rounded-[18px] bg-white p-3 border border-[rgba(0,0,0,0.05)]">
-              <p className="text-xs uppercase tracking-[0.16em] text-[#7B8794]">Mythic</p>
-              <p className="text-lg font-semibold text-[#2C3E50] mt-1">{mythicCount}</p>
+          <div className="mt-4 rounded-[24px] border border-border bg-[linear-gradient(135deg,var(--color-surface-alt)_0%,var(--color-brand-soft)_54%,var(--color-accent-soft)_100%)] p-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.75)]">
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <p className="text-xs uppercase tracking-[0.22em] text-text-subtle">Overall progression</p>
+                <p className="mt-2 text-3xl font-semibold tracking-[-0.05em] text-text">
+                  {capturedWords} / {totalWords}
+                </p>
+              </div>
+              <div className="rounded-full border border-border bg-surface/88 px-4 py-2 text-sm font-semibold text-brand-strong shadow-[0_10px_22px_rgba(15,23,42,0.04)]">
+                {formatPercent(completionPercentage)} complete
+              </div>
             </div>
-            <div className="rounded-[18px] bg-white p-3 border border-[rgba(0,0,0,0.05)]">
-              <p className="text-xs uppercase tracking-[0.16em] text-[#7B8794]">Rare</p>
-              <p className="text-lg font-semibold text-[#2C3E50] mt-1">{rareCount}</p>
-            </div>
-            <div className="rounded-[18px] bg-white p-3 border border-[rgba(0,0,0,0.05)]">
-              <p className="text-xs uppercase tracking-[0.16em] text-[#7B8794]">Uncommon</p>
-              <p className="text-lg font-semibold text-[#2C3E50] mt-1">{uncommonCount}</p>
-            </div>
-            <div className="rounded-[18px] bg-white p-3 border border-[rgba(0,0,0,0.05)]">
-              <p className="text-xs uppercase tracking-[0.16em] text-[#7B8794]">Common</p>
-              <p className="text-lg font-semibold text-[#2C3E50] mt-1">{commonCount}</p>
-            </div>
-          </div>
 
-          <div className="relative mt-5">
-            <Search size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-[#7B8794]" />
-            <input
-              type="search"
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Search words, definitions, or source"
-              className="w-full pl-11 pr-4 py-3 rounded-[18px] bg-[#F8F9FA] border border-[rgba(0,0,0,0.08)] focus:outline-none focus:ring-2 focus:ring-[#FFD6B1] focus:border-transparent transition-all"
-            />
-          </div>
-
-          <div className="flex gap-2 mt-4 overflow-x-auto pb-1">
-            {rarityOptions.map((option) => (
-              <button
-                key={option.id}
-                onClick={() => setRarityFilter(option.id)}
-                className={`px-4 py-2 rounded-full text-sm whitespace-nowrap transition-all duration-200 ${
-                  rarityFilter === option.id
-                    ? 'bg-[#2C3E50] text-white shadow-[0_6px_16px_rgba(44,62,80,0.18)]'
-                    : 'bg-white text-[#52606D] border border-[rgba(0,0,0,0.08)]'
-                }`}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="mt-4">
-            <label htmlFor="codex-sort" className="block text-xs uppercase tracking-[0.16em] text-[#7B8794] mb-2">
-              Sort By
-            </label>
-            <select
-              id="codex-sort"
-              value={sortBy}
-              onChange={(event) => setSortBy(event.target.value as SortOption)}
-              className="w-full px-4 py-3 rounded-[18px] bg-white border border-[rgba(0,0,0,0.08)] text-[#2C3E50] focus:outline-none focus:ring-2 focus:ring-[#FFD6B1] focus:border-transparent"
-            >
-              {sortOptions.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-      </div>
-
-      <div className="max-w-[480px] mx-auto px-6 py-6">
-        {isLoading ? (
-          <div className="text-center py-16">
-            <p className="text-[#6C757D] text-lg">Loading your codex...</p>
-          </div>
-        ) : errorMessage ? (
-          <div className="text-center py-16">
-            <p className="text-[#FF6B6B] text-lg">{errorMessage}</p>
-            <p className="text-sm text-[#6C757D] mt-2">Check backend connection and try again.</p>
-          </div>
-        ) : codexEntries.length === 0 ? (
-          <div className="rounded-[28px] bg-white border border-[rgba(0,0,0,0.05)] p-8 text-center shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
-            <div className="w-16 h-16 mx-auto rounded-[22px] bg-[#FFF0E1] flex items-center justify-center">
-              <Sparkles size={28} className="text-[#B35C1E]" />
+            <div className="mt-4 h-3 overflow-hidden rounded-full bg-surface/75">
+              <div
+                className="h-full rounded-full bg-brand transition-[width] duration-500"
+                style={{ width: `${completionPercentage}%` }}
+              />
             </div>
-            <p className="text-[#2C3E50] text-lg font-medium mt-5">No codex entries yet</p>
-            <p className="text-sm text-[#6C757D] mt-2 leading-relaxed">
-              Start a reading session and use word lookup to begin building your Codex.
-            </p>
           </div>
-        ) : filteredWords.length === 0 ? (
-          <div className="rounded-[28px] bg-white border border-[rgba(0,0,0,0.05)] p-8 text-center shadow-[0_10px_24px_rgba(15,23,42,0.04)]">
-            <div className="w-16 h-16 mx-auto rounded-[22px] bg-[#EEF5F2] flex items-center justify-center">
-              <Search size={26} className="text-[#326B59]" />
-            </div>
-            <p className="text-[#2C3E50] text-lg font-medium mt-5">No matches found</p>
-            <p className="text-sm text-[#6C757D] mt-2 leading-relaxed">
-              Try another search term or clear your rarity filter.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-4">
-            {filteredWords.map((word) => {
-              const rarity = getRarityTier(word);
-              const definition = getSpecificOrFallbackDefinition(word);
-              const partsOfSpeech = getPartsOfSpeech(word);
+        </header>
 
-              return (
-                <button
-                  key={word.id}
-                  type="button"
-                  onClick={() => setSelectedWord(word)}
-                  className={`w-full text-left rounded-[26px] border bg-gradient-to-br p-5 shadow-[0_8px_22px_rgba(15,23,42,0.05)] transition-all duration-200 hover:-translate-y-0.5 ${getRarityCardAccentClassName(rarity)}`}
-                  style={
-                    rarity === 'MYTHIC'
-                      ? {
-                          backgroundImage:
-                            'linear-gradient(135deg, rgba(255,122,89,0.18) 0%, rgba(255,216,102,0.17) 22%, rgba(109,231,200,0.15) 44%, rgba(139,232,255,0.17) 64%, rgba(176,132,245,0.18) 82%, rgba(255,122,89,0.16) 100%)',
-                        }
-                      : undefined
-                  }
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <h2 className="text-lg font-semibold text-[#2C3E50] break-words">{word.lemma}</h2>
-                        <span className={`text-xs px-3 py-1 rounded-full font-medium ${getRarityBadgeClassName(rarity)}`}>
-                          {rarity}
-                        </span>
-                        {partsOfSpeech.map((partOfSpeech) => (
-                          <span
-                            key={partOfSpeech}
-                            className="text-xs px-3 py-1 rounded-full font-medium bg-[#EEF3F8] text-[#52606D] border border-[rgba(0,0,0,0.06)]"
-                          >
-                            {partOfSpeech}
-                          </span>
+        <main className="mt-6">
+          {isLoading ? (
+            <BoardSkeleton />
+          ) : errorMessage ? (
+            <div className="rounded-[32px] border border-border bg-surface p-8 text-center shadow-[0_18px_40px_rgba(15,23,42,0.06)]">
+              <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-danger-soft">
+                <Star size={24} className="text-danger" />
+              </div>
+              <p className="mt-5 text-lg font-medium text-text">{errorMessage}</p>
+              <p className="mt-2 text-sm leading-relaxed text-text-muted">
+                The board should still feel stable, so this state keeps the Codex framing instead of dropping you into a blank screen.
+              </p>
+              <Button className="mt-5 rounded-full px-6" onClick={() => window.location.reload()}>
+                Retry
+              </Button>
+            </div>
+          ) : selectedPage ? (
+            <section className="rounded-[36px] border border-border bg-surface p-5 shadow-[0_24px_54px_rgba(15,23,42,0.08)] sm:p-7">
+              <div>
+                <p className="text-[0.72rem] uppercase tracking-[0.26em] text-text-subtle">
+                  Page {selectedPage.pageNumber} of {PAGE_COUNT}
+                </p>
+              </div>
+
+              <div className="mt-8 flex items-center justify-center gap-3 lg:grid lg:grid-cols-[4.5rem_minmax(48rem,64rem)_4.5rem] lg:gap-5">
+                <BoardNavigationButton
+                  direction="previous"
+                  disabled={selectedPage.pageNumber === 1}
+                  onClick={() => handlePageChange(selectedPage.pageNumber - 1)}
+                />
+
+                <div className="relative w-full max-w-[42rem] overflow-hidden rounded-[30px] sm:max-w-[46rem] lg:max-w-none">
+                  <AnimatePresence custom={navigationDirection} initial={false} mode="wait">
+                    <motion.div
+                      key={selectedPage.pageNumber}
+                      custom={navigationDirection}
+                      initial={pageEnterState}
+                      animate={{
+                        opacity: 1,
+                        x: 0,
+                        scale: 1,
+                        rotateY: 0,
+                      }}
+                      exit={pageExitState}
+                      transition={{
+                        duration: 0.34,
+                        ease: [0.22, 1, 0.36, 1],
+                      }}
+                      className="w-full rounded-[30px] border border-border bg-[linear-gradient(180deg,var(--color-surface-alt)_0%,var(--color-surface)_100%)] p-5 shadow-[inset_0_1px_0_rgba(255,255,255,0.75),0_18px_36px_rgba(15,23,42,0.06)] sm:p-6"
+                      style={{ transformPerspective: 1400 }}
+                    >
+                      <div className="grid grid-cols-5 gap-4 sm:gap-5">
+                        {selectedPage.slots.slice(0, SLOTS_PER_PAGE).map((slot) => (
+                          <CodexSlotCard
+                            key={slot.slotNumber}
+                            pageNumber={selectedPage.pageNumber}
+                            slot={slot}
+                            onSelect={setSelectedSlot}
+                          />
                         ))}
                       </div>
-                      <p className="text-sm text-[#52606D] mt-1">{formatCreatedDate(word.createdAt)}</p>
-                    </div>
-                    <div className="rounded-[18px] bg-white/80 px-3 py-2 flex items-center gap-2 shrink-0">
-                      <Star size={14} className="text-[#D9923B]" />
-                      <span className="text-sm font-medium text-[#2C3E50]">{word.xpValue ?? 0} XP</span>
-                    </div>
-                  </div>
+                    </motion.div>
+                  </AnimatePresence>
+                </div>
 
-                  <p className="text-sm text-[#2C3E50] mt-4 leading-relaxed line-clamp-3">
-                    {definition}
-                  </p>
-
-                  <div className="flex items-center justify-between gap-3 mt-4 text-sm text-[#52606D]">
-                    <span className="truncate">Source: {word.source || 'Unknown source'}</span>
-                    <span className="shrink-0">
-                      {word.sourceSessionId != null ? `Session #${word.sourceSessionId}` : 'No session source'}
-                    </span>
-                  </div>
-                </button>
-              );
-            })}
-          </div>
-        )}
+                <BoardNavigationButton
+                  direction="next"
+                  disabled={selectedPage.pageNumber === PAGE_COUNT}
+                  onClick={() => handlePageChange(selectedPage.pageNumber + 1)}
+                />
+              </div>
+            </section>
+          ) : null}
+        </main>
       </div>
 
+      <CapturedSlotModal details={selectedSlot} onClose={() => setSelectedSlot(null)} />
       <BottomNav />
-      <CodexWordDetails word={selectedWord} onClose={() => setSelectedWord(null)} />
     </div>
   );
 }

@@ -9,6 +9,7 @@ export interface ApiSession {
     id: number;
     bookId: number;
     sessionDate: string;
+    completedAt: string | null;
     durationSeconds: number;
     startPage: number;
     endPage: number;
@@ -60,17 +61,22 @@ export interface UpdateBookRequest {
 
 export interface CreateSessionPayload {
     bookId: number;
-    durationSeconds: number;
     startPage: number;
-    endPage: number;
-    reflection: string;
+    durationSeconds?: number;
+    endPage?: number;
+    reflection?: string;
 }
 
 export interface UpdateSessionPayload {
     durationSeconds?: number;
     endPage?: number;
     reflection?: string;
-    status?: 'IN_PROGRESS' | 'COMPLETED';
+}
+
+export interface CompleteSessionPayload {
+    durationSeconds: number;
+    endPage: number;
+    reflection: string;
 }
 
 export type ApiJsonValue =
@@ -159,6 +165,42 @@ export interface CodexEntryReadResponseDTO {
     phonetics: Pronunciation[] | null;
 }
 
+export interface CodexBoardSlotDTO {
+    slotNumber: number;
+    isCaptured: boolean;
+    lemma?: string;
+    rarityTier?: RarityTier | string;
+    capturedAt?: string;
+}
+
+export interface CodexBoardPageDTO {
+    pageNumber: number;
+    capturedCount: number;
+    totalCount: number;
+    completionPercentage: number;
+    slots: CodexBoardSlotDTO[];
+}
+
+export interface CodexBoardResponseDTO {
+    volume: string;
+    totalWords: number;
+    capturedWords: number;
+    completionPercentage: number;
+    pages: CodexBoardPageDTO[];
+}
+
+export interface CodexPageProgressDTO {
+    capturedCount: number;
+    totalCount: number;
+    completionPercentage: number;
+}
+
+export interface CodexOverallProgressDTO {
+    capturedWords: number;
+    totalWords: number;
+    completionPercentage: number;
+}
+
 export interface ProfileStatsResponseDTO {
     totalPagesRead: number;
     totalBooksRead: number;
@@ -209,10 +251,17 @@ export interface DictionarySense {
 }
 
 export interface CodexEntryCreateResponseDTO {
+    lookupSucceeded: boolean;
+    isCollectible: boolean;
+    isNewCapture: boolean;
+    alreadyCaptured: boolean;
     codexEntry: CodexEntryReadResponseDTO;
-    newCapture: boolean;
     rarityTier: RarityTier | string;
     xpUpdate: XpUpdateResponseDTO | null;
+    pageNumber: number | null;
+    slotNumber: number | null;
+    pageProgress: CodexPageProgressDTO | null;
+    overallProgress: CodexOverallProgressDTO | null;
 }
 
 export type ChallengeType = 'FLASHCARD' | string;
@@ -374,6 +423,51 @@ const toCodexEntry = (value: Record<string, unknown>): CodexEntryReadResponseDTO
     };
 };
 
+const toCodexBoardSlot = (value: unknown, fallbackSlotNumber = 0): CodexBoardSlotDTO | null => {
+    if (!isRecord(value)) {
+        return null;
+    }
+
+    const slotNumber = toFiniteNumber(value.slotNumber) ?? fallbackSlotNumber;
+
+    if (slotNumber <= 0) {
+        return null;
+    }
+
+    return {
+        slotNumber,
+        isCaptured: value.isCaptured === true,
+        lemma: typeof value.lemma === 'string' ? value.lemma : undefined,
+        rarityTier: typeof value.rarityTier === 'string' ? value.rarityTier : undefined,
+        capturedAt: typeof value.capturedAt === 'string' ? value.capturedAt : undefined,
+    };
+};
+
+const toCodexBoardPage = (value: unknown, fallbackPageNumber = 0): CodexBoardPageDTO | null => {
+    if (!isRecord(value)) {
+        return null;
+    }
+
+    const pageNumber = toFiniteNumber(value.pageNumber) ?? fallbackPageNumber;
+    const slots = Array.isArray(value.slots)
+        ? value.slots
+            .map((slot, index) => toCodexBoardSlot(slot, index + 1))
+            .filter((slot): slot is CodexBoardSlotDTO => slot !== null)
+        : [];
+
+    if (pageNumber <= 0) {
+        return null;
+    }
+
+    return {
+        pageNumber,
+        capturedCount: toFiniteNumber(value.capturedCount) ?? slots.filter((slot) => slot.isCaptured).length,
+        totalCount: toFiniteNumber(value.totalCount) ?? Math.max(25, slots.length),
+        completionPercentage: toFiniteNumber(value.completionPercentage) ?? 0,
+        slots,
+    };
+};
+
 export const normalizeRarityTier = (rarityTier: unknown): RarityTier => {
     if (rarityTier === 'MYTHIC' || rarityTier === 'RARE' || rarityTier === 'UNCOMMON') {
         return rarityTier;
@@ -429,6 +523,36 @@ const toXpUpdate = (value: unknown): XpUpdateResponseDTO | null => {
         xpIntoLevel: Math.max(0, xpIntoLevel),
         xpPerLevel,
         leveledUp: value.leveledUp === true,
+    };
+};
+
+const toCodexPageProgress = (value: unknown): CodexPageProgressDTO | null => {
+    if (!isRecord(value)) {
+        return null;
+    }
+
+    const totalCount = toFiniteNumber(value.totalCount) ?? toFiniteNumber(value.totalWords) ?? 25;
+    const capturedCount = toFiniteNumber(value.capturedCount) ?? toFiniteNumber(value.capturedWords) ?? 0;
+
+    return {
+        capturedCount,
+        totalCount,
+        completionPercentage: toFiniteNumber(value.completionPercentage) ?? (totalCount > 0 ? (capturedCount / totalCount) * 100 : 0),
+    };
+};
+
+const toCodexOverallProgress = (value: unknown): CodexOverallProgressDTO | null => {
+    if (!isRecord(value)) {
+        return null;
+    }
+
+    const totalWords = toFiniteNumber(value.totalWords) ?? toFiniteNumber(value.totalCount) ?? 300;
+    const capturedWords = toFiniteNumber(value.capturedWords) ?? toFiniteNumber(value.capturedCount) ?? 0;
+
+    return {
+        capturedWords,
+        totalWords,
+        completionPercentage: toFiniteNumber(value.completionPercentage) ?? (totalWords > 0 ? (capturedWords / totalWords) * 100 : 0),
     };
 };
 
@@ -547,22 +671,32 @@ const isSessionLikeRecord = (value: unknown): value is Record<string, unknown> =
         return false;
     }
 
+    const directBookId = toFiniteNumber(value.bookId);
+    const nestedBookId = isRecord(value.book) ? toFiniteNumber(value.book.id) : null;
+    const startPage = toFiniteNumber(value.startPage);
+    const endPage = toFiniteNumber(value.endPage);
+
     return (
         toFiniteNumber(value.id) !== null
-        && toFiniteNumber(value.bookId) !== null
-        && toFiniteNumber(value.startPage) !== null
-        && toFiniteNumber(value.endPage) !== null
+        && (directBookId !== null || nestedBookId !== null)
+        && (startPage !== null || endPage !== null)
     );
 };
 
 const toApiSession = (value: Record<string, unknown>): ApiSession => {
     const id = toFiniteNumber(value.id) ?? 0;
-    const bookId = toFiniteNumber(value.bookId) ?? 0;
+    const bookId = toFiniteNumber(value.bookId)
+        ?? (isRecord(value.book) ? (toFiniteNumber(value.book.id) ?? 0) : 0);
     const durationSeconds = toFiniteNumber(value.durationSeconds) ?? 0;
-    const startPage = toFiniteNumber(value.startPage) ?? 0;
-    const endPage = toFiniteNumber(value.endPage) ?? 0;
+    const rawStartPage = toFiniteNumber(value.startPage);
+    const rawEndPage = toFiniteNumber(value.endPage);
+    const startPage = rawStartPage ?? rawEndPage ?? 0;
+    const endPage = rawEndPage ?? startPage;
     const pagesRead = toFiniteNumber(value.pagesRead) ?? Math.max(0, endPage - startPage);
     const sessionDate = typeof value.sessionDate === 'string' ? value.sessionDate : '';
+    const completedAt = typeof value.completedAt === 'string' && value.completedAt.trim()
+        ? value.completedAt
+        : null;
     const reflection = typeof value.reflection === 'string' ? value.reflection : '';
     const status = value.status === 'COMPLETED' ? 'COMPLETED' : 'IN_PROGRESS';
     const capturedWordCount = toFiniteNumber(value.capturedWordCount) ?? 0;
@@ -570,6 +704,7 @@ const toApiSession = (value: Record<string, unknown>): ApiSession => {
     return {
         id,
         bookId,
+        completedAt,
         durationSeconds,
         startPage,
         endPage,
@@ -683,6 +818,23 @@ const normalizeCodexEntriesResponse = (value: unknown): CodexEntryReadResponseDT
     }
 
     return [];
+};
+
+const normalizeCodexBoardResponse = (value: unknown): CodexBoardResponseDTO => {
+    const record = isRecord(value) ? value : {};
+    const pages = Array.isArray(record.pages)
+        ? record.pages
+            .map((page, index) => toCodexBoardPage(page, index + 1))
+            .filter((page): page is CodexBoardPageDTO => page !== null)
+        : [];
+
+    return {
+        volume: typeof record.volume === 'string' ? record.volume : 'Volume 1',
+        totalWords: toFiniteNumber(record.totalWords) ?? 300,
+        capturedWords: toFiniteNumber(record.capturedWords) ?? pages.reduce((sum, page) => sum + page.capturedCount, 0),
+        completionPercentage: toFiniteNumber(record.completionPercentage) ?? 0,
+        pages,
+    };
 };
 
 const normalizeProfileResponse = (value: unknown): ProfileReadResponseDTO => {
@@ -863,11 +1015,36 @@ export const getSessionsByBook = async (bookId: string | number) => {
         const res = await fetch(`${API_BASE_URL}/sessions/book/${bookId}`, {
             headers: await buildAuthHeaders(),
         });
-        if (!res.ok) throw new Error('Failed to fetch sessions');
+        if (!res.ok) {
+            throw new Error(await getErrorMessage(res, 'Failed to fetch sessions'));
+        }
         const data = await res.json();
         return normalizeSessionsResponse(data);
     } catch (error) {
         console.error('Error fetching sessions:', error);
+        throw error;
+    }
+};
+
+
+export const getActiveSessionByBook = async (bookId: string | number) => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/sessions/book/${bookId}/active`, {
+            headers: await buildAuthHeaders(),
+        });
+
+        if (res.status === 204) {
+            return null;
+        }
+
+        if (!res.ok) {
+            throw new Error(await getErrorMessage(res, 'Failed to fetch active session'));
+        }
+
+        const data = await res.json();
+        return normalizeSessionResponse(data);
+    } catch (error) {
+        console.error('Error fetching active session:', error);
         throw error;
     }
 };
@@ -898,7 +1075,9 @@ export const getSession = async (sessionId: string | number) => {
         const res = await fetch(`${API_BASE_URL}/sessions/${sessionId}`, {
             headers: await buildAuthHeaders(),
         });
-        if (!res.ok) throw new Error('Failed to fetch session');
+        if (!res.ok) {
+            throw new Error(await getErrorMessage(res, 'Failed to fetch session'));
+        }
         const data = await res.json();
         return normalizeSessionResponse(data);
     } catch (error) {
@@ -917,6 +1096,22 @@ export const getCodexEntries = async () => {
         return normalizeCodexEntriesResponse(data);
     } catch (error) {
         console.error('Error fetching codex entries:', error);
+        throw error;
+    }
+};
+
+export const getCodexBoard = async () => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/codexBoard`, {
+            headers: await buildAuthHeaders(),
+        });
+        if (!res.ok) {
+            throw new Error(await getErrorMessage(res, 'Failed to fetch codex board'));
+        }
+        const data = await res.json();
+        return normalizeCodexBoardResponse(data);
+    } catch (error) {
+        console.error('Error fetching codex board:', error);
         throw error;
     }
 };
@@ -1067,7 +1262,9 @@ export const createSession = async (payload: CreateSessionPayload) => {
             },
             body: JSON.stringify(payload),
         });
-        if (!res.ok) throw new Error('Failed to create session');
+        if (!res.ok) {
+            throw new Error(await getErrorMessage(res, 'Failed to create session'));
+        }
         const data = await res.json();
         return normalizeSessionResponse(data);
     } catch (error) {
@@ -1087,11 +1284,35 @@ export const updateSession = async (sessionId: number, payload: UpdateSessionPay
             },
             body: JSON.stringify(payload),
         });
-        if (!res.ok) throw new Error('Failed to update session');
+        if (!res.ok) {
+            throw new Error(await getErrorMessage(res, 'Failed to update session'));
+        }
         const data = await res.json();
         return normalizeSessionResponse(data);
     } catch (error) {
         console.error('Error updating session:', error);
+        throw error;
+    }
+};
+
+
+export const completeSession = async (sessionId: number, payload: CompleteSessionPayload) => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/sessions/${sessionId}/complete`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(await buildAuthHeaders()),
+            },
+            body: JSON.stringify(payload),
+        });
+        if (!res.ok) {
+            throw new Error(await getErrorMessage(res, 'Failed to complete session'));
+        }
+        const data = await res.json();
+        return normalizeSessionResponse(data);
+    } catch (error) {
+        console.error('Error completing session:', error);
         throw error;
     }
 };
@@ -1527,10 +1748,17 @@ export const createCodexEntry = async (sessionId: number, payload: CodexEntryCre
         const data = await res.json() as Record<string, unknown>;
 
         return {
+            lookupSucceeded: data.lookupSucceeded !== false,
+            isCollectible: data.isCollectible === true,
+            isNewCapture: data.isNewCapture === true || data.newCapture === true,
+            alreadyCaptured: data.alreadyCaptured === true,
             codexEntry: toCodexEntry(isRecord(data.codexEntry) ? data.codexEntry : {}),
-            newCapture: data.newCapture === true,
             rarityTier: typeof data.rarityTier === 'string' ? data.rarityTier : 'COMMON',
             xpUpdate: toXpUpdate(data.xpUpdate),
+            pageNumber: toFiniteNumber(data.pageNumber),
+            slotNumber: toFiniteNumber(data.slotNumber),
+            pageProgress: toCodexPageProgress(data.pageProgress),
+            overallProgress: toCodexOverallProgress(data.overallProgress),
         } satisfies CodexEntryCreateResponseDTO;
     } catch (error) {
         console.error('Error creating codex entry:', error);

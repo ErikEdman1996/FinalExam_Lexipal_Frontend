@@ -15,12 +15,12 @@ export function Button({
 }: ButtonProps) {
   const variantClassName =
     variant === 'outline'
-      ? 'bg-white text-[#2C3E50] border border-[rgba(0,0,0,0.12)] hover:bg-[#F8F9FA]'
-      : 'bg-[#A8E6CF] text-[#2C3E50] border border-transparent hover:bg-[#96ddc1]';
+      ? 'bg-surface text-text border border-border hover:bg-surface-alt'
+      : 'bg-brand text-text-on-brand border border-transparent hover:bg-brand-hover';
 
   return (
     <button
-      className={`h-11 px-4 rounded-[14px] font-medium transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-[#A8E6CF] ${variantClassName} ${className}`.trim()}
+      className={`h-11 px-4 rounded-[14px] font-medium transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-brand ${variantClassName} ${className}`.trim()}
       {...props}
     >
       {children}
