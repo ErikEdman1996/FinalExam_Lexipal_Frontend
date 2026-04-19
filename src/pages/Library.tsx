@@ -14,6 +14,7 @@ import { createBook, getBooks, type ApiBook, type CreateBookRequest } from '../a
 import { AddBookModal } from '../components/AddBookModal.tsx';
 import { BookCard, type BookData } from '../components/BookCard.tsx';
 import { BottomNav } from '../components/BottomNav.tsx';
+import { useBookTransition } from '../features/bookTransition/BookTransitionContext.tsx';
 
 type BookStatus = 'active' | 'completed' | 'archived';
 type TabKey = 'all' | 'active' | 'completed' | 'archived';
@@ -166,6 +167,7 @@ function LibraryEmptyFiltered({ query, activeTab, onClear }: FilteredEmptyProps)
 
 export default function Library() {
   const navigate = useNavigate();
+  const { start: startBookTransition, activeBook } = useBookTransition();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [books, setBooks] = useState<LibraryBook[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -338,12 +340,20 @@ export default function Library() {
               onClear={handleClearFilters}
             />
           ) : (
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+            <div
+              className={`grid grid-cols-1 gap-4 transition-opacity duration-200 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 ${
+                activeBook ? 'pointer-events-none opacity-40' : ''
+              }`}
+            >
               {visibleBooks.map((book) => (
                 <BookCard
                   key={book.id}
                   book={book}
-                  onClick={() => navigate(`/book/${book.id}`)}
+                  onSelect={(rect) => {
+                    if (activeBook) return;
+                    startBookTransition(book, rect);
+                    window.setTimeout(() => navigate(`/book/${book.id}`), 600);
+                  }}
                 />
               ))}
             </div>

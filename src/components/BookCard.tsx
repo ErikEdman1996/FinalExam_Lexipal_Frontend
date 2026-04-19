@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { ProgressBar } from './ProgressBar.tsx';
 
 export interface BookData {
@@ -13,12 +14,24 @@ export interface BookData {
 interface BookCardProps {
   book: BookData;
   onClick?: () => void;
+  onSelect?: (rect: DOMRect) => void;
 }
 
-export function BookCard({ book, onClick }: BookCardProps) {
+export function BookCard({ book, onClick, onSelect }: BookCardProps) {
+  const rootRef = useRef<HTMLDivElement>(null);
+
+  const handleClick = () => {
+    if (onSelect && rootRef.current) {
+      onSelect(rootRef.current.getBoundingClientRect());
+      return;
+    }
+    onClick?.();
+  };
+
   return (
     <div
-      onClick={onClick}
+      ref={rootRef}
+      onClick={handleClick}
       className="cursor-pointer rounded-[26px] border border-border bg-surface p-5 shadow-[0_14px_28px_rgba(31,41,55,0.06)] transition-all duration-300 hover:-translate-y-0.5 hover:bg-surface-alt hover:shadow-[0_18px_32px_rgba(31,41,55,0.08)]"
     >
       <div className="min-w-0">

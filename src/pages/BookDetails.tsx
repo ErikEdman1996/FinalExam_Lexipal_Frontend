@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Clock, FileText, Play, Trash2 } from 'lucide-react';
+import { motion } from 'motion/react';
 import { BottomNav } from '../components/BottomNav';
 import { Button } from '../components/Button';
 import { deleteBook, getActiveSessionByBook, getBook, getSessionsByBook, type ApiBook, type ApiSession } from '../api/api';
@@ -180,7 +181,12 @@ export default function BookDetails() {
   }
 
   return (
-    <div className="page-bg min-h-screen pb-24 lg:pl-60 lg:pb-0">
+    <motion.div
+      className="page-bg min-h-screen pb-24 lg:pl-60 lg:pb-0"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
+    >
       <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8 lg:py-10">
         <button
           onClick={() => navigate('/library')}
@@ -390,6 +396,6 @@ export default function BookDetails() {
       </div>
 
       <BottomNav />
-    </div>
+    </motion.div>
   );
 }

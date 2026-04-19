@@ -15,7 +15,7 @@ const MINIGAMES: MinigameTile[] = [
   {
     id: 'flashcard',
     title: 'Flashcard',
-    description: 'Recall a word meaning from memory, then self-grade pass or fail.',
+    description: 'Pick the right definition from four choices before the timer runs out.',
     icon: Swords,
     route: '/challenges/flashcard',
     locked: false,

@@ -1,17 +1,16 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import {
-  Brain,
-  CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
-  RotateCcw,
-  Sparkles,
-  XCircle,
-} from 'lucide-react';
+import { Brain, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
 import { BottomNav } from '../components/BottomNav';
 import { Button } from '../components/Button';
+import { QuestionCard } from '../components/flashcard/QuestionCard';
+import { TimerBar } from '../components/flashcard/TimerBar';
+import { StreakChip } from '../components/flashcard/StreakChip';
+import { GameOverSummary } from '../components/flashcard/GameOverSummary';
 import { useXpGain } from '../features/xp/XpGainProvider';
+import { useFlashcardGame } from '../features/flashcard/useFlashcardGame';
+import { buildDeck } from '../features/flashcard/buildDeck';
+import { toFlashcardCandidate, type FlashcardCandidate } from '../features/flashcard/types';
 import {
   createChallengeAttempt,
   extractDefinitionFromDefinitions,
@@ -20,46 +19,13 @@ import {
   getCodexEntries,
   type Challenge,
   type ChallengeAttempt,
-  type ChallengeAttemptResult,
-  type CodexEntryReadResponseDTO,
 } from '../api/api';
 
-type ViewMode = 'menu' | 'playing' | 'summary';
-
-interface FlashcardCandidate {
-  codexEntryId: number;
-  lemma: string;
-  definition: string;
-  source: string | null;
-  createdAt: string;
-}
-
-interface FlashcardSessionSummary {
-  totalCards: number;
-  completedCards: number;
-  passCount: number;
-  failCount: number;
-  totalXp: number;
-}
-
-interface FlashcardStageProps {
-  card: FlashcardCandidate;
-  currentIndex: number;
-  totalCards: number;
-  userAnswer: string;
-  isFlipped: boolean;
-  isSubmitting: boolean;
-  onAnswerChange: (value: string) => void;
-  onFlip: () => void;
-  onGrade: (result: ChallengeAttemptResult) => void;
-  onEndSession: () => void;
-}
-
-interface SessionSummaryCardProps {
-  summary: FlashcardSessionSummary;
-  onPlayAgain: () => void;
-  onBackToMenu: () => void;
-}
+const CARD_DURATION_MS = 10000;
+const FEEDBACK_CORRECT_MS = 800;
+const FEEDBACK_WRONG_MS = 1200;
+const DECK_SIZE = 10;
+const MIN_CODEX_WORDS = 2;
 
 interface AttemptHistorySectionProps {
   attempts: ChallengeAttempt[];
@@ -77,19 +43,6 @@ const formatAttemptDate = (value: string) => {
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
-  });
-};
-
-const formatCreatedDate = (value: string) => {
-  const parsed = new Date(value);
-
-  if (Number.isNaN(parsed.getTime())) {
-    return 'Saved recently';
-  }
-
-  return parsed.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
   });
 };
 
@@ -120,162 +73,6 @@ const toReadableDefinitionPreview = (value: string | null) => {
 
   return trimmedValue;
 };
-
-const toFlashcardCandidate = (entry: CodexEntryReadResponseDTO): FlashcardCandidate | null => {
-  const definition = entry.specificDefinition || extractDefinitionFromDefinitions(entry.definitions);
-
-  if (!definition) {
-    return null;
-  }
-
-  return {
-    codexEntryId: entry.id,
-    lemma: entry.lemma,
-    definition,
-    source: entry.source,
-    createdAt: entry.createdAt,
-  };
-};
-
-const shuffleCards = (cards: FlashcardCandidate[]) => {
-  const nextCards = [...cards];
-
-  for (let index = nextCards.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(Math.random() * (index + 1));
-    const currentValue = nextCards[index];
-    nextCards[index] = nextCards[swapIndex];
-    nextCards[swapIndex] = currentValue;
-  }
-
-  return nextCards;
-};
-
-function FlashcardStage({
-  card,
-  currentIndex,
-  totalCards,
-  userAnswer,
-  isFlipped,
-  isSubmitting,
-  onAnswerChange,
-  onFlip,
-  onGrade,
-  onEndSession,
-}: FlashcardStageProps) {
-  return (
-    <section className="rounded-[30px] border border-border bg-surface p-6 shadow-[0_16px_34px_rgba(31,41,55,0.06)]">
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <p className="text-xs uppercase tracking-[0.24em] text-text-subtle">Card Progress</p>
-          <h2 className="mt-2 text-2xl font-semibold text-text">
-            Card {currentIndex + 1} of {totalCards}
-          </h2>
-        </div>
-        <button
-          type="button"
-          onClick={onEndSession}
-          className="rounded-full bg-surface-muted px-4 py-2 text-sm font-medium text-text-muted transition-colors hover:bg-surface-alt"
-        >
-          End session
-        </button>
-      </div>
-
-      <div className="mt-5 overflow-hidden rounded-[28px] border border-border bg-[linear-gradient(180deg,var(--color-surface-alt)_0%,var(--color-surface)_100%)]">
-        <div className="border-b border-border px-5 py-4">
-          <p className="text-xs uppercase tracking-[0.22em] text-text-subtle">Front</p>
-          <h3 className="mt-2 text-4xl font-semibold tracking-[-0.03em] text-text">{card.lemma}</h3>
-          <p className="mt-2 text-sm text-text-muted">
-            Saved {formatCreatedDate(card.createdAt)}
-            {card.source ? ` from ${card.source}` : ''}
-          </p>
-        </div>
-
-        <div className="px-5 py-5">
-          <label htmlFor="challenge-answer" className="text-xs uppercase tracking-[0.22em] text-text-subtle">
-            Your Guess
-          </label>
-          <textarea
-            id="challenge-answer"
-            value={userAnswer}
-            onChange={(event) => onAnswerChange(event.target.value)}
-            placeholder="Type what you think it means before revealing the answer..."
-            className="mt-3 min-h-28 w-full rounded-[20px] border border-border bg-surface-muted px-4 py-3 text-sm text-text outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-brand"
-          />
-
-          {isFlipped ? (
-            <div className="mt-5 rounded-[22px] bg-brand-soft px-4 py-4">
-              <p className="text-xs uppercase tracking-[0.22em] text-brand-strong">Back</p>
-              <p className="mt-2 text-sm leading-relaxed text-text">{card.definition}</p>
-            </div>
-          ) : null}
-
-          <div className="mt-5 flex flex-wrap gap-3">
-            <Button variant="outline" onClick={onFlip} disabled={isFlipped || isSubmitting}>
-              Reveal answer
-            </Button>
-            <Button
-              onClick={() => onGrade('PASS')}
-              disabled={!isFlipped || isSubmitting}
-              className="bg-brand-soft text-brand-strong hover:bg-brand-soft/80"
-            >
-              <CheckCircle2 size={18} className="mr-2 inline-flex" />
-              {isSubmitting ? 'Saving...' : 'Pass'}
-            </Button>
-            <Button
-              onClick={() => onGrade('FAIL')}
-              disabled={!isFlipped || isSubmitting}
-              className="bg-danger-soft text-danger hover:bg-danger-soft/80"
-            >
-              <XCircle size={18} className="mr-2 inline-flex" />
-              {isSubmitting ? 'Saving...' : 'Fail'}
-            </Button>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function SessionSummaryCard({ summary, onPlayAgain, onBackToMenu }: SessionSummaryCardProps) {
-  return (
-    <section className="rounded-[30px] border border-border bg-surface p-6 shadow-[0_16px_34px_rgba(31,41,55,0.06)]">
-      <p className="text-xs uppercase tracking-[0.24em] text-text-subtle">Session Summary</p>
-      <h2 className="mt-2 text-3xl font-semibold text-text">Flashcards complete</h2>
-      <p className="mt-2 text-sm leading-relaxed text-text-muted">
-        Your results are already saved. Backend-awarded XP is reflected below.
-      </p>
-
-      <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <div className="rounded-[22px] bg-surface-muted p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-text-subtle">Cards</p>
-          <p className="mt-2 text-2xl font-semibold text-text">{summary.completedCards}/{summary.totalCards}</p>
-        </div>
-        <div className="rounded-[22px] bg-brand-soft p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-brand-strong">Pass</p>
-          <p className="mt-2 text-2xl font-semibold text-brand-strong">{summary.passCount}</p>
-        </div>
-        <div className="rounded-[22px] bg-danger-soft p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-danger">Fail</p>
-          <p className="mt-2 text-2xl font-semibold text-danger">{summary.failCount}</p>
-        </div>
-        <div className="rounded-[22px] bg-accent-soft p-4">
-          <p className="text-xs uppercase tracking-[0.18em] text-accent-strong">XP Earned</p>
-          <p className="mt-2 text-2xl font-semibold text-accent-strong">{summary.totalXp}</p>
-        </div>
-      </div>
-
-      <div className="mt-6 flex flex-wrap gap-3">
-        <Button onClick={onPlayAgain}>
-          <RotateCcw size={18} className="mr-2 inline-flex" />
-          Play again
-        </Button>
-        <Button variant="outline" onClick={onBackToMenu}>
-          Back to menu
-        </Button>
-      </div>
-    </section>
-  );
-}
 
 function AttemptHistorySection({ attempts }: AttemptHistorySectionProps) {
   return (
@@ -334,17 +131,11 @@ export default function Flashcard() {
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [codexCards, setCodexCards] = useState<FlashcardCandidate[]>([]);
   const [attempts, setAttempts] = useState<ChallengeAttempt[]>([]);
-  const [viewMode, setViewMode] = useState<ViewMode>('menu');
-  const [activeDeck, setActiveDeck] = useState<FlashcardCandidate[]>([]);
-  const [currentIndex, setCurrentIndex] = useState(0);
-  const [isFlipped, setIsFlipped] = useState(false);
-  const [userAnswer, setUserAnswer] = useState('');
   const [isLoading, setIsLoading] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
-  const [sessionSummary, setSessionSummary] = useState<FlashcardSessionSummary | null>(null);
   const { showXpGain } = useXpGain();
+  const game = useFlashcardGame();
 
   useEffect(() => {
     let isMounted = true;
@@ -365,7 +156,11 @@ export default function Flashcard() {
         }
 
         setChallenges(challengeList);
-        setCodexCards(codexEntries.map(toFlashcardCandidate).filter((entry): entry is FlashcardCandidate => entry !== null));
+        setCodexCards(
+          codexEntries
+            .map(toFlashcardCandidate)
+            .filter((entry): entry is FlashcardCandidate => entry !== null),
+        );
         setAttempts(attemptList);
       } catch (error) {
         console.error('Error loading flashcard page:', error);
@@ -391,136 +186,83 @@ export default function Flashcard() {
   const flashcardAttempts = flashcardChallenge
     ? attempts.filter((attempt) => attempt.challengeId === flashcardChallenge.id)
     : [];
-  const currentCard = activeDeck[currentIndex] ?? null;
   const totalXpEarned = flashcardAttempts.reduce((sum, attempt) => sum + Math.max(0, attempt.xpAwarded), 0);
   const totalPasses = flashcardAttempts.filter((attempt) => attempt.result === 'PASS').length;
-  const isLocked = codexCards.length === 0;
+  const isLocked = codexCards.length < MIN_CODEX_WORDS;
 
-  const resetSession = () => {
-    setActiveDeck([]);
-    setCurrentIndex(0);
-    setIsFlipped(false);
-    setUserAnswer('');
-    setIsSubmitting(false);
-    setSubmissionError(null);
-  };
+  useEffect(() => {
+    if (game.phase !== 'locked') return;
+    const delay = game.feedback === 'correct' ? FEEDBACK_CORRECT_MS : FEEDBACK_WRONG_MS;
+    const timer = window.setTimeout(() => {
+      game.advance();
+    }, delay);
+    return () => window.clearTimeout(timer);
+  }, [game.phase, game.feedback, game.advance]);
 
-  const startFlashcardSession = () => {
-    if (!flashcardChallenge || codexCards.length === 0) {
-      return;
-    }
-
-    const nextDeck = shuffleCards(codexCards);
-
-    resetSession();
-    setSessionSummary(null);
-    setActiveDeck(nextDeck);
-    setViewMode('playing');
-  };
-
-  const finishSession = (summary: FlashcardSessionSummary) => {
-    setSessionSummary(summary);
-    setViewMode('summary');
-    setActiveDeck([]);
-    setCurrentIndex(0);
-    setIsFlipped(false);
-    setUserAnswer('');
-    setSubmissionError(null);
-    setIsSubmitting(false);
-  };
-
-  const handleGradeCard = async (result: ChallengeAttemptResult) => {
-    if (!flashcardChallenge || !currentCard || isSubmitting) {
-      return;
-    }
-
-    setIsSubmitting(true);
-    setSubmissionError(null);
-
+  const submitAttempt = async (
+    codexEntryId: number,
+    result: 'PASS' | 'FAIL',
+    userAnswer: string | undefined,
+  ) => {
+    if (!flashcardChallenge) return;
     try {
-      const createdAttempt = await createChallengeAttempt(flashcardChallenge.id, {
+      const attempt = await createChallengeAttempt(flashcardChallenge.id, {
         result,
-        userAnswer: userAnswer.trim() || undefined,
-        codexEntryId: currentCard.codexEntryId,
+        userAnswer,
+        codexEntryId,
       });
-
-      setAttempts((previousAttempts) => [createdAttempt, ...previousAttempts]);
-
-      if (createdAttempt.xpUpdate) {
-        showXpGain({
-          xpUpdate: createdAttempt.xpUpdate,
-          source: 'challenge',
-        });
+      setAttempts((prev) => [attempt, ...prev]);
+      game.applyXp(attempt.xpAwarded);
+      if (attempt.xpUpdate) {
+        showXpGain({ xpUpdate: attempt.xpUpdate, source: 'challenge' });
       }
-
-      const isFinalCard = currentIndex >= activeDeck.length - 1;
-
-      if (isFinalCard) {
-        const nextSummary = {
-          totalCards: activeDeck.length,
-          completedCards: activeDeck.length,
-          passCount: sessionSummary?.passCount ?? 0,
-          failCount: sessionSummary?.failCount ?? 0,
-          totalXp: sessionSummary?.totalXp ?? 0,
-        };
-
-        if (result === 'PASS') {
-          nextSummary.passCount += 1;
-        } else {
-          nextSummary.failCount += 1;
-        }
-
-        nextSummary.totalXp += createdAttempt.xpAwarded;
-        finishSession(nextSummary);
-        return;
-      }
-
-      setSessionSummary((previousSummary) => {
-        const baseSummary = previousSummary ?? {
-          totalCards: activeDeck.length,
-          completedCards: 0,
-          passCount: 0,
-          failCount: 0,
-          totalXp: 0,
-        };
-
-        return {
-          ...baseSummary,
-          completedCards: baseSummary.completedCards + 1,
-          passCount: baseSummary.passCount + (result === 'PASS' ? 1 : 0),
-          failCount: baseSummary.failCount + (result === 'FAIL' ? 1 : 0),
-          totalXp: baseSummary.totalXp + createdAttempt.xpAwarded,
-        };
-      });
-      setCurrentIndex((previousIndex) => previousIndex + 1);
-      setIsFlipped(false);
-      setUserAnswer('');
     } catch (error) {
       console.error('Error submitting challenge attempt:', error);
-      setSubmissionError(error instanceof Error ? error.message : 'Could not save this challenge attempt.');
-    } finally {
-      setIsSubmitting(false);
+      setSubmissionError(
+        error instanceof Error ? error.message : 'Could not save this challenge attempt.',
+      );
     }
+  };
+
+  const handlePick = (optionIndex: number) => {
+    if (!flashcardChallenge || !game.currentCard || game.phase !== 'question') {
+      return;
+    }
+    setSubmissionError(null);
+    const pickedOption = game.currentCard.options[optionIndex];
+    const { correct } = game.pick(optionIndex);
+    void submitAttempt(
+      game.currentCard.card.codexEntryId,
+      correct ? 'PASS' : 'FAIL',
+      pickedOption?.text,
+    );
+  };
+
+  const handleTimeout = () => {
+    if (!flashcardChallenge || !game.currentCard || game.phase !== 'question') {
+      return;
+    }
+    setSubmissionError(null);
+    const codexEntryId = game.currentCard.card.codexEntryId;
+    game.timeout();
+    void submitAttempt(codexEntryId, 'FAIL', undefined);
+  };
+
+  const handleStartSession = () => {
+    if (!flashcardChallenge || isLocked) return;
+    const deck = buildDeck(codexCards, DECK_SIZE);
+    if (deck.length === 0) return;
+    setSubmissionError(null);
+    game.start(deck);
   };
 
   const handleEndSession = () => {
-    const completedCards = Math.min(currentIndex, activeDeck.length);
-    const totalCards = activeDeck.length;
-
-    finishSession(sessionSummary ?? {
-      totalCards,
-      completedCards,
-      passCount: 0,
-      failCount: 0,
-      totalXp: 0,
-    });
+    game.reset();
   };
 
-  const handleBackToSummaryMenu = () => {
-    resetSession();
-    setSessionSummary(null);
-    setViewMode('menu');
-  };
+  const isMenu = game.phase === 'idle';
+  const isPlaying = game.phase === 'question' || game.phase === 'locked';
+  const isEnded = game.phase === 'ended';
 
   if (isLoading) {
     return (
@@ -560,7 +302,7 @@ export default function Flashcard() {
             </button>
             <h1 className="mt-3 text-4xl font-semibold tracking-[-0.03em] text-text">Flashcard</h1>
             <p className="mt-2 max-w-xl text-sm leading-relaxed text-text-muted">
-              Review a word by recalling its meaning from memory.
+              Pick the right definition from four choices before the timer runs out.
             </p>
           </div>
           <div className="flex h-14 w-14 items-center justify-center rounded-[20px] bg-brand-soft shadow-[0_10px_24px_rgba(62,157,123,0.16)]">
@@ -594,7 +336,7 @@ export default function Flashcard() {
           </section>
         ) : null}
 
-        {flashcardChallenge && viewMode === 'menu' ? (
+        {flashcardChallenge && isMenu ? (
           <div className="mt-6 space-y-6">
             <section className="rounded-[30px] border border-border bg-surface p-6 shadow-[0_16px_34px_rgba(31,41,55,0.06)]">
               <div className="flex flex-wrap gap-2 text-sm">
@@ -608,22 +350,24 @@ export default function Flashcard() {
 
               <div className="mt-6 flex items-center justify-between gap-4 rounded-[24px] bg-[linear-gradient(135deg,var(--color-surface-alt)_0%,var(--color-brand-soft)_100%)] px-4 py-4">
                 <div>
-                  <p className="text-sm font-medium text-text">Codex-powered flashcards</p>
+                  <p className="text-sm font-medium text-text">Multiple-choice quiz</p>
                   <p className="mt-1 text-sm text-text-muted">
-                    Reveal the definition, then self-grade with pass or fail.
+                    {DECK_SIZE} cards per round · {CARD_DURATION_MS / 1000}s per card · auto-graded
                   </p>
                 </div>
-                <Button onClick={startFlashcardSession} disabled={isLocked} className="shrink-0">
-                  {isLocked ? 'Need Codex words' : 'Start'}
+                <Button onClick={handleStartSession} disabled={isLocked} className="shrink-0">
+                  {isLocked ? `Save ${MIN_CODEX_WORDS}+ words` : 'Start'}
                 </Button>
               </div>
             </section>
 
             {isLocked ? (
               <section className="rounded-[28px] border border-border bg-[linear-gradient(135deg,var(--color-surface-alt)_0%,var(--color-brand-soft)_100%)] p-5 shadow-[0_14px_30px_rgba(31,41,55,0.05)]">
-                <p className="text-base font-medium text-text">Your Codex is the first deck source</p>
+                <p className="text-base font-medium text-text">
+                  Save at least {MIN_CODEX_WORDS} Codex words to unlock this challenge
+                </p>
                 <p className="mt-2 text-sm leading-relaxed text-text-muted">
-                  Save words in Codex first, then this flashcard challenge can turn them into your practice deck.
+                  Your Codex is the deck source. Distractor options are drawn from your other saved words.
                 </p>
               </section>
             ) : (
@@ -632,7 +376,7 @@ export default function Flashcard() {
                   <div>
                     <p className="text-xs uppercase tracking-[0.22em] text-text-subtle">Ready Deck</p>
                     <p className="mt-2 text-lg font-semibold text-text">
-                      {codexCards.length} saved words are ready for flashcards
+                      {codexCards.length} saved words are ready for the quiz
                     </p>
                   </div>
                   <div className="flex h-12 w-12 items-center justify-center rounded-[18px] bg-brand-soft">
@@ -646,19 +390,36 @@ export default function Flashcard() {
           </div>
         ) : null}
 
-        {flashcardChallenge && viewMode === 'playing' && currentCard ? (
+        {flashcardChallenge && isPlaying && game.currentCard ? (
           <div className="mt-6 space-y-5">
-            <FlashcardStage
-              card={currentCard}
-              currentIndex={currentIndex}
-              totalCards={activeDeck.length}
-              userAnswer={userAnswer}
-              isFlipped={isFlipped}
-              isSubmitting={isSubmitting}
-              onAnswerChange={setUserAnswer}
-              onFlip={() => setIsFlipped(true)}
-              onGrade={handleGradeCard}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3 text-sm text-text-muted">
+                <span>
+                  Streak: <span className="font-semibold text-text">{game.streak}</span>
+                </span>
+                <span>
+                  Correct: <span className="font-semibold text-text">{game.correctCount}</span>
+                </span>
+              </div>
+              <StreakChip streak={game.streak} />
+            </div>
+
+            <QuestionCard
+              quizCard={game.currentCard}
+              currentIndex={game.currentIndex}
+              totalCards={game.totalCards}
+              pickedIndex={game.pickedIndex}
+              feedback={game.feedback}
+              locked={game.phase === 'locked'}
+              onPick={handlePick}
               onEndSession={handleEndSession}
+            />
+
+            <TimerBar
+              durationMs={CARD_DURATION_MS}
+              runKey={game.currentIndex}
+              paused={game.phase === 'locked'}
+              onExpire={handleTimeout}
             />
 
             {submissionError ? (
@@ -669,12 +430,17 @@ export default function Flashcard() {
           </div>
         ) : null}
 
-        {flashcardChallenge && viewMode === 'summary' && sessionSummary ? (
+        {flashcardChallenge && isEnded ? (
           <div className="mt-6 space-y-6">
-            <SessionSummaryCard
-              summary={sessionSummary}
-              onPlayAgain={startFlashcardSession}
-              onBackToMenu={handleBackToSummaryMenu}
+            <GameOverSummary
+              results={game.results}
+              totalCards={game.totalCards}
+              correctCount={game.correctCount}
+              wrongCount={game.wrongCount}
+              bestStreak={game.bestStreak}
+              totalXp={game.totalXp}
+              onPlayAgain={handleStartSession}
+              onBackToMenu={() => game.reset()}
             />
             <AttemptHistorySection attempts={flashcardAttempts} />
           </div>

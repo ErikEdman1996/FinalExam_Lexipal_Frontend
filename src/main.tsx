@@ -4,13 +4,16 @@ import { RouterProvider } from 'react-router-dom';
 import { router } from './router/routes.ts';
 import { AuthProvider } from './features/auth/AuthProvider.tsx';
 import { ThemeProvider } from './features/theme/ThemeProvider.tsx';
+import { BookTransitionProvider } from './features/bookTransition/BookTransitionContext.tsx';
 import './styles/index.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ThemeProvider>
       <AuthProvider>
-        <RouterProvider router={router} />
+        <BookTransitionProvider>
+          <RouterProvider router={router} />
+        </BookTransitionProvider>
       </AuthProvider>
     </ThemeProvider>
   </StrictMode>,
