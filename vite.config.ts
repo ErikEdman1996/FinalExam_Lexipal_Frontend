@@ -5,4 +5,16 @@ import tailwindcss from '@tailwindcss/vite'
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
+  server: {
+    proxy: {
+      '/lexipal': {
+        target: 'http://localhost:8585',
+        changeOrigin: true,
+      },
+      '/test': {
+        target: 'http://localhost:8585',
+        changeOrigin: true,
+      },
+    },
+  },
 })

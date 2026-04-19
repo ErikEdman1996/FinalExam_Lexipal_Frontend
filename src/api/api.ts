@@ -1,7 +1,7 @@
 import keycloak from '../features/auth/keycloak';
 
-const API_ROOT_URL = 'http://localhost:8585';
-const API_BASE_URL = 'http://localhost:8585/lexipal/api/v1';
+const API_ROOT_URL = (import.meta.env.VITE_API_ROOT_URL as string | undefined)?.replace(/\/$/, '') ?? '';
+const API_BASE_URL = `${API_ROOT_URL}/lexipal/api/v1`;
 
 export type ApiBookStatus = 'ACTIVE' | 'COMPLETED' | 'ARCHIVED';
 
@@ -77,6 +77,38 @@ export interface CompleteSessionPayload {
     durationSeconds: number;
     endPage: number;
     reflection: string;
+}
+
+export type NoteFieldName = 'quotedText' | 'pageNumber' | 'chapterLabel';
+
+export type NoteFieldErrors = Partial<Record<NoteFieldName, string>>;
+
+export interface ApiNote {
+    id: number;
+    bookId: number;
+    sourceSessionId: number | null;
+    pageNumber: number;
+    chapterLabel: string | null;
+    quotedText: string;
+    createdAt: string;
+}
+
+type ApiNoteResponse = unknown;
+
+type ApiNoteCollectionResponse = unknown;
+
+export interface CreateNotePayload {
+    bookId: number;
+    sessionId?: number;
+    quotedText: string;
+    pageNumber: number;
+    chapterLabel?: string;
+}
+
+export interface UpdateNotePayload {
+    quotedText?: string;
+    pageNumber?: number;
+    chapterLabel?: string | null;
 }
 
 export type ApiJsonValue =
@@ -299,6 +331,24 @@ export interface ChallengeAttempt {
     xpUpdate?: XpUpdateResponseDTO | null;
 }
 
+export class ApiValidationError<FieldName extends string = string> extends Error {
+    status: number;
+    fieldErrors: Partial<Record<FieldName, string>>;
+
+    constructor(
+        message: string,
+        options?: {
+            status?: number;
+            fieldErrors?: Partial<Record<FieldName, string>>;
+        },
+    ) {
+        super(message);
+        this.name = 'ApiValidationError';
+        this.status = options?.status ?? 400;
+        this.fieldErrors = options?.fieldErrors ?? {};
+    }
+}
+
 const isRecord = (value: unknown): value is Record<string, unknown> => {
     return value !== null && typeof value === 'object';
 };
@@ -380,6 +430,19 @@ const isChallengeAttemptLikeRecord = (value: unknown): value is Record<string, u
     );
 };
 
+const isNoteLikeRecord = (value: unknown): value is Record<string, unknown> => {
+    if (!isRecord(value)) {
+        return false;
+    }
+
+    return (
+        toFiniteNumber(value.id) !== null
+        && toFiniteNumber(value.bookId) !== null
+        && toFiniteNumber(value.pageNumber) !== null
+        && typeof value.quotedText === 'string'
+    );
+};
+
 const toApiBook = (value: Record<string, unknown>): ApiBook => {
     const id = toFiniteNumber(value.id) ?? 0;
     const readPages = toFiniteNumber(value.readPages) ?? 0;
@@ -403,6 +466,20 @@ const toApiBook = (value: Record<string, unknown>): ApiBook => {
         sessions,
         sessionCount,
         progressPercentage,
+    };
+};
+
+const toApiNote = (value: Record<string, unknown>): ApiNote => {
+    const rawChapterLabel = typeof value.chapterLabel === 'string' ? value.chapterLabel.trim() : '';
+
+    return {
+        id: toFiniteNumber(value.id) ?? 0,
+        bookId: toFiniteNumber(value.bookId) ?? 0,
+        sourceSessionId: value.sourceSessionId == null ? null : (toFiniteNumber(value.sourceSessionId) ?? null),
+        pageNumber: Math.max(1, toFiniteNumber(value.pageNumber) ?? 1),
+        chapterLabel: rawChapterLabel ? rawChapterLabel : null,
+        quotedText: typeof value.quotedText === 'string' ? value.quotedText : '',
+        createdAt: typeof value.createdAt === 'string' ? value.createdAt : '',
     };
 };
 
@@ -596,6 +673,51 @@ const toDailyActivity = (value: unknown): DailyActivityReadResponseDTO | null =>
         activityType: typeof value.activityType === 'string' ? value.activityType : '',
         xpEarned: toFiniteNumber(value.xpEarned) ?? 0,
     };
+};
+
+const findNoteLikeRecord = (value: unknown, depth = 0): Record<string, unknown> | null => {
+    if (depth > 6 || value == null) {
+        return null;
+    }
+
+    if (typeof value === 'string') {
+        try {
+            const parsed = JSON.parse(value) as unknown;
+            return findNoteLikeRecord(parsed, depth + 1);
+        } catch {
+            return null;
+        }
+    }
+
+    if (Array.isArray(value)) {
+        for (const item of value) {
+            const found = findNoteLikeRecord(item, depth + 1);
+
+            if (found) {
+                return found;
+            }
+        }
+
+        return null;
+    }
+
+    if (!isRecord(value)) {
+        return null;
+    }
+
+    if (isNoteLikeRecord(value)) {
+        return value;
+    }
+
+    for (const nested of Object.values(value)) {
+        const found = findNoteLikeRecord(nested, depth + 1);
+
+        if (found) {
+            return found;
+        }
+    }
+
+    return null;
 };
 
 const normalizeBooksResponse = (value: ApiBookCollectionResponse): ApiBook[] => {
@@ -950,33 +1072,234 @@ const normalizeSessionResponse = (value: ApiSessionResponse): ApiSession => {
     throw new Error('Unexpected session response shape.');
 };
 
+const normalizeNotesResponse = (value: ApiNoteCollectionResponse): ApiNote[] => {
+    if (Array.isArray(value)) {
+        return value
+            .filter(isNoteLikeRecord)
+            .map(toApiNote);
+    }
+
+    if (!isRecord(value)) {
+        return [];
+    }
+
+    const collections = [value.notes, value.content, value.data, value.items];
+
+    for (const collection of collections) {
+        if (Array.isArray(collection)) {
+            return collection
+                .filter(isNoteLikeRecord)
+                .map(toApiNote);
+        }
+    }
+
+    return isNoteLikeRecord(value) ? [toApiNote(value)] : [];
+};
+
+const normalizeNoteResponse = (value: ApiNoteResponse): ApiNote => {
+    const candidate = findNoteLikeRecord(value);
+
+    if (candidate) {
+        return toApiNote(candidate);
+    }
+
+    console.error('Unexpected note response shape. Raw payload:', value);
+    throw new Error('Unexpected note response shape.');
+};
+
+const getFirstErrorString = (value: unknown): string | null => {
+    if (typeof value === 'string') {
+        const trimmedValue = value.trim();
+        return trimmedValue ? trimmedValue : null;
+    }
+
+    if (Array.isArray(value)) {
+        for (const entry of value) {
+            const nextError = getFirstErrorString(entry);
+
+            if (nextError) {
+                return nextError;
+            }
+        }
+
+        return null;
+    }
+
+    if (!isRecord(value)) {
+        return null;
+    }
+
+    const preferredKeys = ['message', 'defaultMessage', 'error', 'reason', 'detail'];
+
+    for (const key of preferredKeys) {
+        const nextError = getFirstErrorString(value[key]);
+
+        if (nextError) {
+            return nextError;
+        }
+    }
+
+    for (const nestedValue of Object.values(value)) {
+        const nextError = getFirstErrorString(nestedValue);
+
+        if (nextError) {
+            return nextError;
+        }
+    }
+
+    return null;
+};
+
+const NOTE_FIELD_NAMES = ['quotedText', 'pageNumber', 'chapterLabel'] as const satisfies readonly NoteFieldName[];
+
+const extractFieldErrors = <FieldName extends string>(
+    payload: unknown,
+    allowedFields: readonly FieldName[],
+): Partial<Record<FieldName, string>> => {
+    const fieldErrors: Partial<Record<FieldName, string>> = {};
+    const allowedFieldSet = new Set<string>(allowedFields);
+
+    const setFieldError = (fieldName: FieldName, message: string | null) => {
+        if (!message || fieldErrors[fieldName]) {
+            return;
+        }
+
+        fieldErrors[fieldName] = message;
+    };
+
+    const visitRecord = (value: Record<string, unknown>) => {
+        for (const [key, nestedValue] of Object.entries(value)) {
+            if (allowedFieldSet.has(key)) {
+                setFieldError(key as FieldName, getFirstErrorString(nestedValue));
+            }
+        }
+    };
+
+    const visitArray = (value: unknown[]) => {
+        value.forEach((entry) => {
+            if (!isRecord(entry)) {
+                return;
+            }
+
+            const rawFieldName = typeof entry.field === 'string'
+                ? entry.field
+                : typeof entry.property === 'string'
+                    ? entry.property
+                    : typeof entry.path === 'string'
+                        ? entry.path
+                        : null;
+
+            if (!rawFieldName) {
+                return;
+            }
+
+            const normalizedFieldName = rawFieldName.split('.').at(-1) ?? rawFieldName;
+
+            if (!allowedFieldSet.has(normalizedFieldName)) {
+                return;
+            }
+
+            setFieldError(normalizedFieldName as FieldName, getFirstErrorString(entry));
+        });
+    };
+
+    if (!isRecord(payload)) {
+        return fieldErrors;
+    }
+
+    const errorContainers = [payload.errors, payload.fieldErrors, payload.violations];
+
+    errorContainers.forEach((container) => {
+        if (Array.isArray(container)) {
+            visitArray(container);
+            return;
+        }
+
+        if (isRecord(container)) {
+            visitRecord(container);
+        }
+    });
+
+    return fieldErrors;
+};
+
 const normalizeErrorMessage = (payload: unknown, fallbackMessage: string) => {
     if (!isRecord(payload)) {
         return fallbackMessage;
     }
 
-    if (typeof payload.message === 'string' && payload.message.trim()) {
-        return payload.message;
+    const message = getFirstErrorString(payload.message);
+
+    if (message) {
+        return message;
     }
 
-    if (isRecord(payload.errors)) {
-        const firstError = Object.values(payload.errors).find((value) => typeof value === 'string' && value.trim());
+    const error = getFirstErrorString(payload.error);
 
-        if (typeof firstError === 'string') {
-            return firstError;
-        }
+    if (error) {
+        return error;
+    }
+
+    const structuredErrors = getFirstErrorString(payload.errors);
+
+    if (structuredErrors) {
+        return structuredErrors;
     }
 
     return fallbackMessage;
 };
 
-const getErrorMessage = async (res: Response, fallbackMessage: string) => {
-    try {
-        const payload = await res.json();
-        return normalizeErrorMessage(payload, fallbackMessage);
-    } catch {
-        return fallbackMessage;
+const inferNoteFieldFromMessage = (message: string): NoteFieldName | null => {
+    const normalizedMessage = message.toLowerCase();
+
+    if (normalizedMessage.includes('page')) {
+        return 'pageNumber';
     }
+
+    if (normalizedMessage.includes('quote')) {
+        return 'quotedText';
+    }
+
+    if (normalizedMessage.includes('chapter')) {
+        return 'chapterLabel';
+    }
+
+    return null;
+};
+
+const toNoteValidationError = (
+    payload: unknown,
+    fallbackMessage: string,
+    status: number,
+) => {
+    const message = normalizeErrorMessage(payload, fallbackMessage);
+    const fieldErrors = extractFieldErrors(payload, NOTE_FIELD_NAMES);
+
+    if (Object.keys(fieldErrors).length === 0) {
+        const inferredField = inferNoteFieldFromMessage(message);
+
+        if (inferredField) {
+            fieldErrors[inferredField] = message;
+        }
+    }
+
+    return new ApiValidationError<NoteFieldName>(message, {
+        status,
+        fieldErrors,
+    });
+};
+
+const readErrorPayload = async (res: Response) => {
+    try {
+        return await res.json();
+    } catch {
+        return null;
+    }
+};
+
+const getErrorMessage = async (res: Response, fallbackMessage: string) => {
+    const payload = await readErrorPayload(res);
+    return normalizeErrorMessage(payload, fallbackMessage);
 };
 
 
@@ -1313,6 +1636,146 @@ export const completeSession = async (sessionId: number, payload: CompleteSessio
         return normalizeSessionResponse(data);
     } catch (error) {
         console.error('Error completing session:', error);
+        throw error;
+    }
+};
+
+export const getNotes = async () => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/notes`, {
+            headers: await buildAuthHeaders(),
+        });
+
+        if (res.status === 204) {
+            return [];
+        }
+
+        if (!res.ok) {
+            throw new Error(await getErrorMessage(res, 'Failed to fetch notes'));
+        }
+
+        const data = await res.json();
+        return normalizeNotesResponse(data);
+    } catch (error) {
+        console.error('Error fetching notes:', error);
+        throw error;
+    }
+};
+
+export const getNotesByBook = async (bookId: string | number) => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/notes/book/${bookId}`, {
+            headers: await buildAuthHeaders(),
+        });
+
+        if (res.status === 204) {
+            return [];
+        }
+
+        if (!res.ok) {
+            throw new Error(await getErrorMessage(res, 'Failed to fetch notes'));
+        }
+
+        const data = await res.json();
+        return normalizeNotesResponse(data);
+    } catch (error) {
+        console.error('Error fetching notes by book:', error);
+        throw error;
+    }
+};
+
+export const createNote = async (payload: CreateNotePayload) => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/notes`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(await buildAuthHeaders()),
+            },
+            body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) {
+            const errorPayload = await readErrorPayload(res);
+
+            if (res.status === 400) {
+                throw toNoteValidationError(errorPayload, 'Failed to create note', res.status);
+            }
+
+            throw new Error(normalizeErrorMessage(errorPayload, 'Failed to create note'));
+        }
+
+        const data = await res.json();
+        return normalizeNoteResponse(data);
+    } catch (error) {
+        console.error('Error creating note:', error);
+        throw error;
+    }
+};
+
+export const updateNote = async (noteId: number, payload: UpdateNotePayload) => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/notes/${noteId}`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(await buildAuthHeaders()),
+            },
+            body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) {
+            const errorPayload = await readErrorPayload(res);
+
+            if (res.status === 400) {
+                throw toNoteValidationError(errorPayload, 'Failed to update note', res.status);
+            }
+
+            if (res.status === 403) {
+                throw new Error(normalizeErrorMessage(
+                    errorPayload,
+                    'You do not have permission to update this note.',
+                ));
+            }
+
+            if (res.status === 404) {
+                throw new Error(normalizeErrorMessage(
+                    errorPayload,
+                    'This note could not be found.',
+                ));
+            }
+
+            throw new Error(normalizeErrorMessage(errorPayload, 'Failed to update note'));
+        }
+
+        const data = await res.json();
+        return normalizeNoteResponse(data);
+    } catch (error) {
+        console.error('Error updating note:', error);
+        throw error;
+    }
+};
+
+export const deleteNote = async (noteId: number) => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/notes/${noteId}`, {
+            method: 'DELETE',
+            headers: await buildAuthHeaders(),
+        });
+
+        if (!res.ok) {
+            if (res.status === 403) {
+                throw new Error(await getErrorMessage(res, 'You do not have permission to delete this note.'));
+            }
+
+            if (res.status === 404) {
+                throw new Error(await getErrorMessage(res, 'This note could not be found.'));
+            }
+
+            throw new Error(await getErrorMessage(res, 'Failed to delete note'));
+        }
+    } catch (error) {
+        console.error('Error deleting note:', error);
         throw error;
     }
 };

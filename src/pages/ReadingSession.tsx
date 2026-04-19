@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, BookOpen, Pause, Play, Search, Square } from 'lucide-react';
+import { ArrowLeft, BookOpen, Check, Pause, Play, Search, Square } from 'lucide-react';
 import { Button } from '../components/Button';
+import { NoteModal } from '../components/NoteModal';
 import { WordLookupModal } from '../components/WordLookupModal';
 import { useXpGain } from '../features/xp/XpGainProvider';
 import {
   completeSession,
+  createNote,
   createSession,
   getActiveSessionByBook,
   getBook,
@@ -50,18 +52,21 @@ export default function ReadingSession() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [showReflectionModal, setShowReflectionModal] = useState(false);
   const [showWordLookupModal, setShowWordLookupModal] = useState(false);
+  const [showNoteModal, setShowNoteModal] = useState(false);
+  const [noteToastMessage, setNoteToastMessage] = useState<string | null>(null);
   const [seconds, setSeconds] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const [codexEntries, setCodexEntries] = useState<SessionCodexEntry[]>([]);
   const [activeSession, setActiveSession] = useState<ApiSession | null>(null);
   const { showXpGain } = useXpGain();
   const intervalRef = useRef<number | null>(null);
-  const shouldResumeAfterLookupRef = useRef(false);
+  const shouldResumeAfterActionModalRef = useRef(false);
   const sessionInitializationRef = useRef<Promise<ApiSession> | null>(null);
   const activeSessionRef = useRef<ApiSession | null>(null);
   const secondsRef = useRef(0);
   const wasRunningRef = useRef(false);
   const lastAutosavedSecondRef = useRef(0);
+  const noteToastTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     activeSessionRef.current = activeSession;
@@ -205,17 +210,25 @@ export default function ReadingSession() {
   }, [isRunning]);
 
   useEffect(() => {
-    if (showWordLookupModal) {
-      shouldResumeAfterLookupRef.current = isRunning;
+    if (showWordLookupModal || showNoteModal) {
+      shouldResumeAfterActionModalRef.current = isRunning;
       setIsRunning(false);
       return;
     }
 
-    if (shouldResumeAfterLookupRef.current && !showReflectionModal) {
+    if (shouldResumeAfterActionModalRef.current && !showReflectionModal) {
       setIsRunning(true);
-      shouldResumeAfterLookupRef.current = false;
+      shouldResumeAfterActionModalRef.current = false;
     }
-  }, [isRunning, showReflectionModal, showWordLookupModal]);
+  }, [isRunning, showNoteModal, showReflectionModal, showWordLookupModal]);
+
+  useEffect(() => {
+    return () => {
+      if (noteToastTimeoutRef.current != null) {
+        window.clearTimeout(noteToastTimeoutRef.current);
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!activeSession || !isRunning || seconds <= 0) {
@@ -324,6 +337,43 @@ export default function ReadingSession() {
     }
   };
 
+  const showNoteSavedToast = useCallback(() => {
+    if (noteToastTimeoutRef.current != null) {
+      window.clearTimeout(noteToastTimeoutRef.current);
+    }
+
+    setNoteToastMessage('Note saved');
+    noteToastTimeoutRef.current = window.setTimeout(() => {
+      setNoteToastMessage(null);
+      noteToastTimeoutRef.current = null;
+    }, 2400);
+  }, []);
+
+  const handleSaveNote = async ({
+    quotedText,
+    pageNumber,
+    chapterLabel,
+  }: {
+    quotedText: string;
+    pageNumber: number;
+    chapterLabel?: string;
+  }) => {
+    if (!book || !activeSession) {
+      throw new Error('Reading session is not ready yet.');
+    }
+
+    await createNote({
+      bookId: book.id,
+      sessionId: activeSession.id,
+      quotedText,
+      pageNumber,
+      chapterLabel,
+    });
+
+    setShowNoteModal(false);
+    showNoteSavedToast();
+  };
+
   const handleToggleTimer = async () => {
     if (isRunning) {
       setIsRunning(false);
@@ -357,6 +407,10 @@ export default function ReadingSession() {
     ? Math.max(activeSession.endPage, activeSession.startPage)
     : Math.max(0, book?.readPages ?? 0);
   const draftReflection = activeSession?.reflection ?? '';
+  const noteDefaultPage = activeSession
+    ? Math.max(activeSession.endPage, activeSession.startPage)
+    : null;
+  const noteInitialPage = noteDefaultPage != null && noteDefaultPage > 0 ? noteDefaultPage : null;
 
   if (isLoadingBook) {
     return (
@@ -452,13 +506,23 @@ export default function ReadingSession() {
             )}
           </div>
 
-          <button
-            onClick={() => setShowWordLookupModal(true)}
-            className="mt-5 inline-flex h-11 items-center gap-2 rounded-full bg-accent-soft px-5 text-sm font-medium text-accent-strong transition-colors hover:bg-accent-soft/80"
-          >
-            <Search size={16} />
-            Look up Word
-          </button>
+          <div className="mt-5 flex flex-wrap justify-center gap-3">
+            <button
+              onClick={() => setShowWordLookupModal(true)}
+              className="inline-flex h-11 items-center gap-2 rounded-full bg-accent-soft px-5 text-sm font-medium text-accent-strong transition-colors hover:bg-accent-soft/80"
+            >
+              <Search size={16} />
+              Look up Word
+            </button>
+            {activeSession ? (
+              <button
+                onClick={() => setShowNoteModal(true)}
+                className="inline-flex h-11 items-center gap-2 rounded-full bg-brand-soft px-5 text-sm font-medium text-brand-strong transition-colors hover:bg-brand-soft/80"
+              >
+                + Note
+              </button>
+            ) : null}
+          </div>
 
           {actionError ? <p className="mt-4 text-sm text-danger">{actionError}</p> : null}
         </section>
@@ -498,6 +562,16 @@ export default function ReadingSession() {
         onCapture={handleCaptureWord}
       />
 
+      <NoteModal
+        isOpen={showNoteModal}
+        heading="Add Note"
+        submitLabel="Save note"
+        bookTotalPages={book.totalPages}
+        initialPageNumber={noteInitialPage}
+        onClose={() => setShowNoteModal(false)}
+        onSubmit={handleSaveNote}
+      />
+
       {showReflectionModal ? (
         <ReflectionModal
           durationSeconds={seconds}
@@ -509,6 +583,15 @@ export default function ReadingSession() {
           onClose={() => setShowReflectionModal(false)}
           onSubmit={handleSaveSession}
         />
+      ) : null}
+
+      {noteToastMessage ? (
+        <div className="pointer-events-none fixed inset-x-0 bottom-6 z-40 flex justify-center px-4">
+          <div className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-4 py-2 text-sm font-medium text-text shadow-[0_14px_28px_rgba(17,24,39,0.16)]">
+            <Check size={14} className="text-brand-strong" />
+            {noteToastMessage}
+          </div>
+        </div>
       ) : null}
     </div>
   );
