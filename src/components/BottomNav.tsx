@@ -1,9 +1,11 @@
 import { NavLink } from 'react-router-dom';
-import { BookOpen, Library, Sparkles, Trophy, User } from 'lucide-react';
+import { BookOpen, Library, Trophy, User, UsersRound } from 'lucide-react';
 import { ThemeToggle } from '../features/theme/ThemeToggle.tsx';
+import mothIcon from '../assets/moth_icon.png';
 
 const NAV_ITEMS = [
   { to: '/library', icon: Library, label: 'Library' },
+  { to: '/circles', icon: UsersRound, label: 'Circles' },
   { to: '/codex', icon: BookOpen, label: 'Codex' },
   { to: '/challenges', icon: Trophy, label: 'Challenges' },
   { to: '/profile', icon: User, label: 'Profile' },
@@ -41,8 +43,8 @@ export function BottomNav() {
 
       <aside className="fixed left-0 top-0 bottom-0 z-40 hidden w-60 flex-col border-r border-border bg-surface px-5 py-7 shadow-[0_20px_48px_rgba(15,23,42,0.04)] lg:flex">
         <div className="flex items-center gap-3 px-2">
-          <div className="flex h-11 w-11 items-center justify-center rounded-[16px] bg-brand text-text-on-brand shadow-[0_10px_22px_rgba(154,74,66,0.22)]">
-            <Sparkles size={20} />
+          <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-[16px] bg-brand text-text-on-brand shadow-[0_10px_22px_rgba(154,74,66,0.22)]">
+            <img src={mothIcon} alt="Lexipal" className="h-7 w-7 object-contain" />
           </div>
           <div className="min-w-0">
             <p className="text-[0.66rem] font-medium uppercase tracking-[0.28em] text-text-subtle">

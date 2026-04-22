@@ -1,6 +1,8 @@
 import { Navigate, Outlet } from 'react-router-dom';
 import { Button } from '../../components/Button';
+import { BooksProvider } from '../books/BooksProvider';
 import { XpGainProvider } from '../xp/XpGainProvider';
+import { NicknameOnboardingScreen } from '../onboarding/NicknameOnboardingScreen';
 import { useAuth } from './AuthProvider';
 
 function AuthLoadingScreen({ message }: { message: string }) {
@@ -24,6 +26,7 @@ export function ProtectedRoute() {
     isBootstrappingProfile,
     hasBootstrappedProfile,
     bootstrapError,
+    needsOnboarding,
     retryBootstrap,
     logout,
   } = useAuth();
@@ -58,9 +61,15 @@ export function ProtectedRoute() {
     return <AuthLoadingScreen message="Creating your Lexipal profile and syncing your app access..." />;
   }
 
+  if (needsOnboarding) {
+    return <NicknameOnboardingScreen />;
+  }
+
   return (
     <XpGainProvider>
-      <Outlet />
+      <BooksProvider>
+        <Outlet />
+      </BooksProvider>
     </XpGainProvider>
   );
 }

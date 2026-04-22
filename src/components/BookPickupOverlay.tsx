@@ -11,7 +11,7 @@ interface BookPickupOverlayProps {
 
 const EASE = [0.22, 1, 0.36, 1] as const;
 const DURATION = 1.1;
-const MOVE_TIMES = [0, 0.25, 0.6, 1] as const;
+const MOVE_TIMES = [0, 0.25, 0.6, 1];
 
 export function BookPickupOverlay({ book, originRect, onComplete }: BookPickupOverlayProps) {
   const reduceMotion = useReducedMotion();

@@ -59,6 +59,95 @@ export interface UpdateBookRequest {
     status?: ApiBookStatus;
 }
 
+export type BookCircleVisibility = 'ALL_MEMBERS' | 'OWNER_ONLY';
+
+export type BookCircleStatus = 'ACTIVE' | 'CLOSED';
+
+export type BookCircleMemberRole = 'OWNER' | 'MEMBER';
+
+export type CircleMemberBookStatus = 'ACTIVE' | 'COMPLETE' | 'ARCHIVED' | 'DELETED';
+
+export interface BookCircleCreateRequestDTO {
+    existingBookId: number | null;
+    bookTitle: string | null;
+    bookAuthor: string | null;
+    totalPages: number | null;
+    memberCap: number;
+    visibility: BookCircleVisibility;
+}
+
+export interface BookCircleCreateResponseDTO {
+    id: number;
+    inviteCode: string;
+    bookTitle: string;
+    bookAuthor: string;
+    totalPages: number;
+    memberCap: number;
+    visibility: BookCircleVisibility;
+    status: BookCircleStatus;
+    createdAt: string;
+}
+
+export interface BookCircleMemberSummaryDTO {
+    userId: number;
+    userNickname: string | null;
+    role: BookCircleMemberRole;
+    readPages: number | null;
+    totalPages: number | null;
+    progressPercentage: number | null;
+    joinedAt: string;
+}
+
+export interface BookCircleReadResponseDTO extends BookCircleCreateResponseDTO {
+    currentMemberCount: number;
+    ownerNickname: string | null;
+    callerIsOwner: boolean;
+    members: BookCircleMemberSummaryDTO[];
+}
+
+export interface JoinBookCircleRequestDTO {
+    inviteCode: string;
+}
+
+export interface CircleMemberSessionDTO {
+    sessionId: number;
+    sessionDate: string;
+    completedAt: string | null;
+    durationSeconds: number;
+    startPage: number;
+    endPage: number | null;
+    pagesRead: number;
+    status: 'IN_PROGRESS' | 'COMPLETED';
+    reflection: string | null;
+    capturedWordCount: number;
+}
+
+export interface CircleMemberNoteDTO {
+    noteId: number;
+    quotedText: string;
+    pageNumber: number;
+    chapterLabel: string | null;
+    createdAt: string;
+    sourceSessionId: number | null;
+}
+
+export interface CircleMemberDetailResponseDTO {
+    circleId: number;
+    userId: number;
+    userNickname: string | null;
+    role: BookCircleMemberRole;
+    joinedAt: string;
+    readPages: number;
+    totalPages: number;
+    progressPercentage: number;
+    bookId: number;
+    bookTitle: string;
+    bookAuthor: string;
+    bookStatus: CircleMemberBookStatus;
+    sessions: CircleMemberSessionDTO[];
+    notes: CircleMemberNoteDTO[];
+}
+
 export interface CreateSessionPayload {
     bookId: number;
     startPage: number;
@@ -260,8 +349,11 @@ export interface DailyActivityReadResponseDTO {
 }
 
 export interface ProfileReadResponseDTO {
+    id: number | null;
     status: string;
     createdAt: string;
+    nickname: string | null;
+    needsOnboarding: boolean;
     stats: ProfileStatsResponseDTO;
     streak: StreakMetaDataReadResponseDTO | null;
     recentDailyActivities: DailyActivityReadResponseDTO[];
@@ -346,6 +438,24 @@ export class ApiValidationError<FieldName extends string = string> extends Error
         this.name = 'ApiValidationError';
         this.status = options?.status ?? 400;
         this.fieldErrors = options?.fieldErrors ?? {};
+    }
+}
+
+export class ApiResponseError extends Error {
+    status: number;
+    payload: unknown;
+
+    constructor(
+        message: string,
+        options?: {
+            status?: number;
+            payload?: unknown;
+        },
+    ) {
+        super(message);
+        this.name = 'ApiResponseError';
+        this.status = options?.status ?? 500;
+        this.payload = options?.payload ?? null;
     }
 }
 
@@ -546,8 +656,10 @@ const toCodexBoardPage = (value: unknown, fallbackPageNumber = 0): CodexBoardPag
 };
 
 export const normalizeRarityTier = (rarityTier: unknown): RarityTier => {
-    if (rarityTier === 'MYTHIC' || rarityTier === 'RARE' || rarityTier === 'UNCOMMON') {
-        return rarityTier;
+    const upper = typeof rarityTier === 'string' ? rarityTier.toUpperCase() : '';
+
+    if (upper === 'MYTHIC' || upper === 'RARE' || upper === 'UNCOMMON') {
+        return upper;
     }
 
     return 'COMMON';
@@ -969,10 +1081,17 @@ const normalizeProfileResponse = (value: unknown): ProfileReadResponseDTO => {
             .map(toDailyActivity)
             .filter((activity): activity is DailyActivityReadResponseDTO => activity !== null)
         : [];
+    const nickname = typeof value.nickname === 'string' ? value.nickname : null;
+    const backendNeedsOnboarding = typeof value.needsOnboarding === 'boolean'
+        ? value.needsOnboarding
+        : null;
 
     return {
+        id: toFiniteNumber(value.id) ?? toFiniteNumber(value.userId) ?? null,
         status: typeof value.status === 'string' ? value.status : '',
         createdAt: typeof value.createdAt === 'string' ? value.createdAt : '',
+        nickname,
+        needsOnboarding: backendNeedsOnboarding ?? (nickname == null || nickname.trim() === ''),
         stats: toProfileStats(value.stats),
         streak: toStreakMetadata(value.streak),
         recentDailyActivities,
@@ -1105,6 +1224,203 @@ const normalizeNoteResponse = (value: ApiNoteResponse): ApiNote => {
 
     console.error('Unexpected note response shape. Raw payload:', value);
     throw new Error('Unexpected note response shape.');
+};
+
+const toBookCircleVisibility = (value: unknown): BookCircleVisibility => {
+    return value === 'OWNER_ONLY' ? 'OWNER_ONLY' : 'ALL_MEMBERS';
+};
+
+const toBookCircleStatus = (value: unknown): BookCircleStatus => {
+    return value === 'CLOSED' ? 'CLOSED' : 'ACTIVE';
+};
+
+const toBookCircleMemberRole = (value: unknown): BookCircleMemberRole => {
+    return value === 'OWNER' ? 'OWNER' : 'MEMBER';
+};
+
+const toCircleMemberBookStatus = (value: unknown): CircleMemberBookStatus => {
+    if (value === 'COMPLETE' || value === 'ARCHIVED' || value === 'DELETED') {
+        return value;
+    }
+
+    return 'ACTIVE';
+};
+
+const toBookCircleBase = (value: Record<string, unknown>): BookCircleCreateResponseDTO => {
+    return {
+        id: toFiniteNumber(value.id) ?? 0,
+        inviteCode: typeof value.inviteCode === 'string' ? value.inviteCode.toUpperCase() : '',
+        bookTitle: typeof value.bookTitle === 'string' ? value.bookTitle : '',
+        bookAuthor: typeof value.bookAuthor === 'string' ? value.bookAuthor : '',
+        totalPages: Math.max(0, toFiniteNumber(value.totalPages) ?? 0),
+        memberCap: Math.max(0, toFiniteNumber(value.memberCap) ?? 0),
+        visibility: toBookCircleVisibility(value.visibility),
+        status: toBookCircleStatus(value.status),
+        createdAt: typeof value.createdAt === 'string' ? value.createdAt : '',
+    };
+};
+
+const toBookCircleMemberSummary = (value: unknown): BookCircleMemberSummaryDTO | null => {
+    if (!isRecord(value)) {
+        return null;
+    }
+
+    const userId = toFiniteNumber(value.userId);
+
+    if (userId == null) {
+        return null;
+    }
+
+    return {
+        userId,
+        userNickname: typeof value.userNickname === 'string' ? value.userNickname : null,
+        role: toBookCircleMemberRole(value.role),
+        readPages: value.readPages == null ? null : (toFiniteNumber(value.readPages) ?? null),
+        totalPages: value.totalPages == null ? null : (toFiniteNumber(value.totalPages) ?? null),
+        progressPercentage: value.progressPercentage == null ? null : (toFiniteNumber(value.progressPercentage) ?? null),
+        joinedAt: typeof value.joinedAt === 'string' ? value.joinedAt : '',
+    };
+};
+
+const toCircleMemberSession = (value: unknown): CircleMemberSessionDTO | null => {
+    if (!isRecord(value)) {
+        return null;
+    }
+
+    const sessionId = toFiniteNumber(value.sessionId);
+
+    if (sessionId == null) {
+        return null;
+    }
+
+    return {
+        sessionId,
+        sessionDate: typeof value.sessionDate === 'string' ? value.sessionDate : '',
+        completedAt: typeof value.completedAt === 'string' && value.completedAt.trim()
+            ? value.completedAt
+            : null,
+        durationSeconds: Math.max(0, toFiniteNumber(value.durationSeconds) ?? 0),
+        startPage: Math.max(0, toFiniteNumber(value.startPage) ?? 0),
+        endPage: value.endPage == null ? null : (toFiniteNumber(value.endPage) ?? null),
+        pagesRead: Math.max(0, toFiniteNumber(value.pagesRead) ?? 0),
+        status: value.status === 'COMPLETED' ? 'COMPLETED' : 'IN_PROGRESS',
+        reflection: typeof value.reflection === 'string' && value.reflection.trim()
+            ? value.reflection
+            : null,
+        capturedWordCount: Math.max(0, toFiniteNumber(value.capturedWordCount) ?? 0),
+    };
+};
+
+const toCircleMemberNote = (value: unknown): CircleMemberNoteDTO | null => {
+    if (!isRecord(value)) {
+        return null;
+    }
+
+    const noteId = toFiniteNumber(value.noteId);
+
+    if (noteId == null) {
+        return null;
+    }
+
+    return {
+        noteId,
+        quotedText: typeof value.quotedText === 'string' ? value.quotedText : '',
+        pageNumber: Math.max(1, toFiniteNumber(value.pageNumber) ?? 1),
+        chapterLabel: typeof value.chapterLabel === 'string' && value.chapterLabel.trim()
+            ? value.chapterLabel
+            : null,
+        createdAt: typeof value.createdAt === 'string' ? value.createdAt : '',
+        sourceSessionId: value.sourceSessionId == null ? null : (toFiniteNumber(value.sourceSessionId) ?? null),
+    };
+};
+
+const normalizeBookCircleCreateResponse = (value: unknown): BookCircleCreateResponseDTO => {
+    if (!isRecord(value)) {
+        console.error('Unexpected book circle create response shape. Raw payload:', value);
+        throw new Error('Unexpected book circle create response shape.');
+    }
+
+    return toBookCircleBase(value);
+};
+
+const normalizeBookCircleReadResponse = (value: unknown): BookCircleReadResponseDTO => {
+    if (!isRecord(value)) {
+        console.error('Unexpected book circle response shape. Raw payload:', value);
+        throw new Error('Unexpected book circle response shape.');
+    }
+
+    const members = Array.isArray(value.members)
+        ? value.members
+            .map(toBookCircleMemberSummary)
+            .filter((member): member is BookCircleMemberSummaryDTO => member !== null)
+        : [];
+
+    return {
+        ...toBookCircleBase(value),
+        currentMemberCount: Math.max(0, toFiniteNumber(value.currentMemberCount) ?? members.length),
+        ownerNickname: typeof value.ownerNickname === 'string' ? value.ownerNickname : null,
+        callerIsOwner: value.callerIsOwner === true,
+        members,
+    };
+};
+
+const normalizeBookCirclesResponse = (value: unknown): BookCircleReadResponseDTO[] => {
+    if (Array.isArray(value)) {
+        return value
+            .filter(isRecord)
+            .map(normalizeBookCircleReadResponse);
+    }
+
+    if (!isRecord(value)) {
+        return [];
+    }
+
+    const collections = [value.bookCircles, value.circles, value.content, value.data, value.items];
+
+    for (const collection of collections) {
+        if (Array.isArray(collection)) {
+            return collection
+                .filter(isRecord)
+                .map(normalizeBookCircleReadResponse);
+        }
+    }
+
+    return [];
+};
+
+const normalizeCircleMemberDetailResponse = (value: unknown): CircleMemberDetailResponseDTO => {
+    if (!isRecord(value)) {
+        console.error('Unexpected circle member detail response shape. Raw payload:', value);
+        throw new Error('Unexpected circle member detail response shape.');
+    }
+
+    const sessions = Array.isArray(value.sessions)
+        ? value.sessions
+            .map(toCircleMemberSession)
+            .filter((session): session is CircleMemberSessionDTO => session !== null)
+        : [];
+    const notes = Array.isArray(value.notes)
+        ? value.notes
+            .map(toCircleMemberNote)
+            .filter((note): note is CircleMemberNoteDTO => note !== null)
+        : [];
+
+    return {
+        circleId: toFiniteNumber(value.circleId) ?? 0,
+        userId: toFiniteNumber(value.userId) ?? 0,
+        userNickname: typeof value.userNickname === 'string' ? value.userNickname : null,
+        role: toBookCircleMemberRole(value.role),
+        joinedAt: typeof value.joinedAt === 'string' ? value.joinedAt : '',
+        readPages: Math.max(0, toFiniteNumber(value.readPages) ?? 0),
+        totalPages: Math.max(0, toFiniteNumber(value.totalPages) ?? 0),
+        progressPercentage: Math.max(0, toFiniteNumber(value.progressPercentage) ?? 0),
+        bookId: toFiniteNumber(value.bookId) ?? 0,
+        bookTitle: typeof value.bookTitle === 'string' ? value.bookTitle : '',
+        bookAuthor: typeof value.bookAuthor === 'string' ? value.bookAuthor : '',
+        bookStatus: toCircleMemberBookStatus(value.bookStatus),
+        sessions,
+        notes,
+    };
 };
 
 const getFirstErrorString = (value: unknown): string | null => {
@@ -1289,6 +1605,34 @@ const toNoteValidationError = (
     });
 };
 
+const toApiResponseError = (
+    payload: unknown,
+    fallbackMessage: string,
+    status: number,
+) => {
+    return new ApiResponseError(normalizeErrorMessage(payload, fallbackMessage), {
+        status,
+        payload,
+    });
+};
+
+type BookCircleCreateFieldName =
+    | 'existingBookId'
+    | 'bookTitle'
+    | 'bookAuthor'
+    | 'totalPages'
+    | 'memberCap'
+    | 'visibility';
+
+const BOOK_CIRCLE_CREATE_FIELD_NAMES = [
+    'existingBookId',
+    'bookTitle',
+    'bookAuthor',
+    'totalPages',
+    'memberCap',
+    'visibility',
+] as const satisfies readonly BookCircleCreateFieldName[];
+
 const readErrorPayload = async (res: Response) => {
     try {
         return await res.json();
@@ -1449,6 +1793,209 @@ export const getProfile = async () => {
         return normalizeProfileResponse(data);
     } catch (error) {
         console.error('Error fetching profile:', error);
+        throw error;
+    }
+};
+
+type NicknameFieldName = 'nickname';
+const NICKNAME_FIELD_NAMES = ['nickname'] as const satisfies readonly NicknameFieldName[];
+
+export const updateNickname = async (nickname: string) => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/profile/nickname`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(await buildAuthHeaders()),
+            },
+            body: JSON.stringify({ nickname }),
+        });
+
+        if (!res.ok) {
+            const errorPayload = await readErrorPayload(res);
+
+            if (res.status === 409) {
+                const message = 'That nickname is taken — pick another.';
+                throw new ApiValidationError<NicknameFieldName>(message, {
+                    status: 409,
+                    fieldErrors: { nickname: message },
+                });
+            }
+
+            if (res.status === 400) {
+                const fieldErrors = extractFieldErrors(errorPayload, NICKNAME_FIELD_NAMES);
+                const message = normalizeErrorMessage(errorPayload, 'Invalid nickname.');
+                if (!fieldErrors.nickname) {
+                    fieldErrors.nickname = message;
+                }
+                throw new ApiValidationError<NicknameFieldName>(message, {
+                    status: 400,
+                    fieldErrors,
+                });
+            }
+
+            throw new Error(normalizeErrorMessage(errorPayload, 'Could not update nickname.'));
+        }
+
+        const data = await res.json();
+        return normalizeProfileResponse(data);
+    } catch (error) {
+        console.error('Error updating nickname:', error);
+        throw error;
+    }
+};
+
+export const createBookCircle = async (payload: BookCircleCreateRequestDTO) => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/book-circles`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(await buildAuthHeaders()),
+            },
+            body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) {
+            const errorPayload = await readErrorPayload(res);
+
+            if (res.status === 400) {
+                const fieldErrors = extractFieldErrors(errorPayload, BOOK_CIRCLE_CREATE_FIELD_NAMES);
+                const message = normalizeErrorMessage(errorPayload, 'Could not create the circle.');
+
+                if (Object.keys(fieldErrors).length > 0) {
+                    throw new ApiValidationError<BookCircleCreateFieldName>(message, {
+                        status: 400,
+                        fieldErrors,
+                    });
+                }
+            }
+
+            throw toApiResponseError(errorPayload, 'Could not create the circle.', res.status);
+        }
+
+        const data = await res.json();
+        return normalizeBookCircleCreateResponse(data);
+    } catch (error) {
+        console.error('Error creating book circle:', error);
+        throw error;
+    }
+};
+
+export const joinBookCircle = async (payload: JoinBookCircleRequestDTO) => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/book-circles/join`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(await buildAuthHeaders()),
+            },
+            body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) {
+            const errorPayload = await readErrorPayload(res);
+            throw toApiResponseError(errorPayload, 'Could not join the circle.', res.status);
+        }
+
+        const data = await res.json();
+        return normalizeBookCircleReadResponse(data);
+    } catch (error) {
+        console.error('Error joining book circle:', error);
+        throw error;
+    }
+};
+
+export const getMyBookCircles = async () => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/book-circles/mine`, {
+            headers: await buildAuthHeaders(),
+        });
+
+        if (!res.ok) {
+            const errorPayload = await readErrorPayload(res);
+            throw toApiResponseError(errorPayload, 'Could not fetch your circles.', res.status);
+        }
+
+        const data = await res.json();
+        return normalizeBookCirclesResponse(data);
+    } catch (error) {
+        console.error('Error fetching my book circles:', error);
+        throw error;
+    }
+};
+
+export const getBookCircle = async (circleId: string | number) => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/book-circles/${circleId}`, {
+            headers: await buildAuthHeaders(),
+        });
+
+        if (!res.ok) {
+            const errorPayload = await readErrorPayload(res);
+            throw toApiResponseError(errorPayload, 'Could not fetch the circle.', res.status);
+        }
+
+        const data = await res.json();
+        return normalizeBookCircleReadResponse(data);
+    } catch (error) {
+        console.error('Error fetching book circle:', error);
+        throw error;
+    }
+};
+
+export const getCircleMemberDetails = async (
+    circleId: string | number,
+    userId: string | number,
+) => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/book-circles/${circleId}/members/${userId}/details`, {
+            headers: await buildAuthHeaders(),
+        });
+
+        if (!res.ok) {
+            const errorPayload = await readErrorPayload(res);
+            throw toApiResponseError(errorPayload, 'Could not fetch member details.', res.status);
+        }
+
+        const data = await res.json();
+        return normalizeCircleMemberDetailResponse(data);
+    } catch (error) {
+        console.error('Error fetching circle member details:', error);
+        throw error;
+    }
+};
+
+export const leaveBookCircle = async (circleId: string | number) => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/book-circles/${circleId}/members/me`, {
+            method: 'DELETE',
+            headers: await buildAuthHeaders(),
+        });
+
+        if (!res.ok) {
+            const errorPayload = await readErrorPayload(res);
+            throw toApiResponseError(errorPayload, 'Could not leave the circle.', res.status);
+        }
+    } catch (error) {
+        console.error('Error leaving book circle:', error);
+        throw error;
+    }
+};
+
+export const closeBookCircle = async (circleId: string | number) => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/book-circles/${circleId}`, {
+            method: 'DELETE',
+            headers: await buildAuthHeaders(),
+        });
+
+        if (!res.ok) {
+            const errorPayload = await readErrorPayload(res);
+            throw toApiResponseError(errorPayload, 'Could not close the circle.', res.status);
+        }
+    } catch (error) {
+        console.error('Error closing book circle:', error);
         throw error;
     }
 };

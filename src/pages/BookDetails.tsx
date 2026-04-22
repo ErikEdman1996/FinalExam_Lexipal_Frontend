@@ -6,6 +6,7 @@ import { BottomNav } from '../components/BottomNav';
 import { Button } from '../components/Button';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { NoteModal } from '../components/NoteModal';
+import { useBooks } from '../features/books/BooksProvider';
 import {
   deleteBook,
   deleteNote,
@@ -140,6 +141,7 @@ function BookDetailsTabs({
 export default function BookDetails() {
   const { bookId } = useParams();
   const navigate = useNavigate();
+  const { refreshBooks, removeBook } = useBooks();
   const [book, setBook] = useState<ApiBook | null>(null);
   const [activeDraft, setActiveDraft] = useState<ApiSession | null>(null);
   const [sessions, setSessions] = useState<SessionData[]>([]);
@@ -247,6 +249,10 @@ export default function BookDetails() {
     try {
       setIsDeleting(true);
       await deleteBook(bookId);
+      removeBook(bookId);
+      void refreshBooks({ silent: true }).catch((error) => {
+        console.error('Error refreshing books after delete:', error);
+      });
       navigate('/library');
     } catch (error) {
       console.error('Error deleting book:', error);

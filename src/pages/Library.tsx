@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ComponentType } from 'react';
+import { useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import {
   Archive,
   BookMarked,
@@ -10,11 +10,12 @@ import {
   X,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { createBook, getBooks, type ApiBook, type CreateBookRequest } from '../api/api';
+import { createBook, type ApiBook, type CreateBookRequest } from '../api/api';
 import { AddBookModal } from '../components/AddBookModal.tsx';
 import { BookCard, type BookData } from '../components/BookCard.tsx';
 import { BottomNav } from '../components/BottomNav.tsx';
 import { useBookTransition } from '../features/bookTransition/BookTransitionContext.tsx';
+import { useBooks } from '../features/books/BooksProvider.tsx';
 
 type BookStatus = 'active' | 'completed' | 'archived';
 type TabKey = 'all' | 'active' | 'completed' | 'archived';
@@ -168,48 +169,38 @@ function LibraryEmptyFiltered({ query, activeTab, onClear }: FilteredEmptyProps)
 export default function Library() {
   const navigate = useNavigate();
   const { start: startBookTransition, activeBook } = useBookTransition();
+  const {
+    books: apiBooks,
+    errorMessage,
+    isLoading,
+    refreshBooks,
+    upsertBook,
+  } = useBooks();
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [books, setBooks] = useState<LibraryBook[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<TabKey>('all');
+  const hadCachedBooksOnMountRef = useRef(apiBooks.length > 0);
+
+  const books = useMemo(() => {
+    return apiBooks.map(mapBackendBookToLibraryBook);
+  }, [apiBooks]);
 
   useEffect(() => {
-    let isMounted = true;
+    if (!hadCachedBooksOnMountRef.current) {
+      return;
+    }
 
-    const loadBooks = async () => {
-      try {
-        setIsLoading(true);
-        setErrorMessage(null);
-        const apiBooks = await getBooks();
-
-        if (isMounted) {
-          setBooks(apiBooks.map(mapBackendBookToLibraryBook));
-        }
-      } catch (error) {
-        console.error('Error loading books:', error);
-
-        if (isMounted) {
-          setErrorMessage('Could not load books from backend.');
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoading(false);
-        }
-      }
-    };
-
-    void loadBooks();
-
-    return () => {
-      isMounted = false;
-    };
-  }, []);
+    void refreshBooks({ silent: true }).catch((error) => {
+      console.error('Error refreshing books when opening library:', error);
+    });
+  }, [refreshBooks]);
 
   const handleAddBook = async (newBook: CreateBookRequest) => {
     const createdBook = await createBook(newBook);
-    setBooks((previousBooks) => [...previousBooks, mapBackendBookToLibraryBook(createdBook)]);
+    upsertBook(createdBook);
+    void refreshBooks({ silent: true }).catch((error) => {
+      console.error('Error refreshing books after create:', error);
+    });
   };
 
   const counts = useMemo<Record<TabKey, number>>(

@@ -1,16 +1,21 @@
 import { useEffect, useState, type ComponentType } from 'react';
 import { BookOpen, Brain, Clock3, Flame, LogOut, Target, Trophy, Zap } from 'lucide-react';
+import { toast } from 'sonner';
 import { BottomNav } from '../components/BottomNav';
 import { Button } from '../components/Button';
 import { ThemeToggle } from '../features/theme/ThemeToggle.tsx';
 import { useAuth } from '../features/auth/AuthProvider';
 import { getXpProgressMeta, XP_PER_LEVEL } from '../features/xp/xp';
 import {
+  ApiValidationError,
   getProfile,
+  updateNickname,
   type DailyActivityReadResponseDTO,
   type ProfileReadResponseDTO,
   type ProfileStatsResponseDTO,
 } from '../api/api';
+
+const NICKNAME_PATTERN = /^[a-zA-Z0-9_]{3,20}$/;
 
 const formatMemberSince = (value: string) => {
   const parsed = new Date(value);
@@ -160,10 +165,13 @@ function RecentActivitySection({ activities }: RecentActivitySectionProps) {
 }
 
 export default function Profile() {
-  const { logout, username } = useAuth();
+  const { logout, setProfile: setAuthProfile, username } = useAuth();
   const [profile, setProfile] = useState<ProfileReadResponseDTO | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [nicknameDraft, setNicknameDraft] = useState('');
+  const [nicknameError, setNicknameError] = useState<string | null>(null);
+  const [isSavingNickname, setIsSavingNickname] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -176,6 +184,7 @@ export default function Profile() {
 
         if (isMounted) {
           setProfile(data);
+          setNicknameDraft(data.nickname ?? '');
         }
       } catch (error) {
         console.error('Error loading profile:', error);
@@ -226,6 +235,33 @@ export default function Profile() {
   const currentStreak = streak?.currentStreak ?? 0;
   const longestStreak = streak?.longestStreak ?? 0;
   const lastActive = streak?.lastActivityDate ? formatActivityDate(streak.lastActivityDate) : 'No activity yet';
+  const trimmedNickname = nicknameDraft.trim();
+  const isNicknameUnchanged = trimmedNickname === (profile.nickname ?? '').trim();
+  const canSaveNickname = NICKNAME_PATTERN.test(trimmedNickname) && !isNicknameUnchanged;
+
+  const handleNicknameSave = async () => {
+    if (!canSaveNickname || isSavingNickname) {
+      return;
+    }
+
+    try {
+      setIsSavingNickname(true);
+      setNicknameError(null);
+      const updatedProfile = await updateNickname(trimmedNickname);
+      setProfile(updatedProfile);
+      setAuthProfile(updatedProfile);
+      setNicknameDraft(updatedProfile.nickname ?? '');
+      toast.success('Nickname updated.');
+    } catch (error) {
+      if (error instanceof ApiValidationError) {
+        setNicknameError(error.fieldErrors.nickname ?? error.message);
+      } else {
+        setNicknameError('Could not update your nickname right now.');
+      }
+    } finally {
+      setIsSavingNickname(false);
+    }
+  };
 
   const statCards = [
     {
@@ -327,6 +363,58 @@ export default function Profile() {
             </p>
           </section>
         ) : null}
+
+        <section className="mt-6 rounded-[28px] border border-border bg-surface p-5 shadow-[0_14px_30px_rgba(31,41,55,0.05)]">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+            <div>
+              <p className="text-xs uppercase tracking-[0.22em] text-text-subtle">Nickname</p>
+              <h2 className="mt-2 text-2xl font-semibold text-text">How circles see you</h2>
+              <p className="mt-2 max-w-xl text-sm leading-relaxed text-text-muted">
+                This name appears in BookCircles. Use 3-20 letters, numbers, or underscores.
+              </p>
+            </div>
+            <span className="rounded-full bg-surface-muted px-3 py-1.5 text-sm font-medium text-text">
+              {(profile.nickname ?? '').trim() || 'No nickname'}
+            </span>
+          </div>
+
+          <div className="mt-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
+            <div>
+              <label htmlFor="profile-nickname" className="mb-2 block text-sm text-text">
+                Nickname
+              </label>
+              <input
+                id="profile-nickname"
+                type="text"
+                value={nicknameDraft}
+                onChange={(event) => {
+                  setNicknameDraft(event.target.value);
+                  setNicknameError(null);
+                }}
+                className="w-full rounded-[16px] border border-border bg-surface-muted px-4 py-3 text-text outline-none transition-all focus:border-brand focus:bg-surface focus:ring-2 focus:ring-brand"
+                maxLength={20}
+                autoComplete="off"
+                spellCheck={false}
+              />
+              {nicknameError ? (
+                <p className="mt-2 text-sm text-danger">{nicknameError}</p>
+              ) : nicknameDraft.length > 0 && !NICKNAME_PATTERN.test(trimmedNickname) ? (
+                <p className="mt-2 text-sm text-text-subtle">
+                  3-20 characters, letters, digits, or underscore.
+                </p>
+              ) : null}
+            </div>
+
+            <Button
+              type="button"
+              className="rounded-full px-5 sm:self-end"
+              disabled={!canSaveNickname || isSavingNickname}
+              onClick={() => void handleNicknameSave()}
+            >
+              {isSavingNickname ? 'Saving...' : 'Save nickname'}
+            </Button>
+          </div>
+        </section>
 
         <section className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
           {statCards.map((card, index) => (

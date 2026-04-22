@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Sparkles, X } from 'lucide-react';
-import { motion, useMotionValue, useSpring, useTransform } from 'motion/react';
+import { motion } from 'motion/react';
 import { Button } from './Button';
+import mothIcon from '../assets/moth_icon.png';
 import {
   type CodexOverallProgressDTO,
   type CodexPageProgressDTO,
@@ -40,6 +41,12 @@ interface WordLookupModalProps {
   sessionId?: number | null;
 }
 
+type CapturePayload = Parameters<WordLookupModalProps['onCapture']>[0];
+type MysteryRevealPhase = 'idle' | 'drawing' | 'flipping';
+
+const MYSTERY_TRACE_PATH = 'M 14 18 L 86 18 L 24 82 L 86 82';
+const MYSTERY_TRACE_GRADIENT_ID = 'word-lookup-mystery-trace-gradient';
+
 interface LookupResult {
   lemma: string;
   definition: string;
@@ -76,15 +83,15 @@ const getRarityTierFromScore = (score: number | null | undefined): RarityTier =>
 
 const getRarityBorderClass = (tier: LookupResult['rarityTier']) => {
   if (tier === 'MYTHIC') {
-    return 'border-[#B084F5] shadow-[0_0_0_1px_rgba(176,132,245,0.35),0_8px_24px_rgba(176,132,245,0.2)]';
+    return 'border-[#B084F5] shadow-[0_0_0_1px_rgba(176,132,245,0.55),0_0_24px_rgba(176,132,245,0.55),0_0_48px_rgba(139,232,255,0.35),0_0_72px_rgba(255,221,122,0.25)]';
   }
 
   if (tier === 'RARE') {
-    return 'border-[#D6A332] shadow-[0_0_0_1px_rgba(214,163,50,0.35),0_8px_24px_rgba(214,163,50,0.18)]';
+    return 'border-[#D6A332] shadow-[0_0_0_1px_rgba(214,163,50,0.55),0_0_22px_rgba(214,163,50,0.6),0_0_48px_rgba(214,163,50,0.35)]';
   }
 
   if (tier === 'UNCOMMON') {
-    return 'border-[#7FB7FF] shadow-[0_0_0_1px_rgba(127,183,255,0.35),0_8px_24px_rgba(127,183,255,0.18)]';
+    return 'border-[#7FB7FF] shadow-[0_0_0_1px_rgba(127,183,255,0.55),0_0_22px_rgba(127,183,255,0.6),0_0_48px_rgba(127,183,255,0.35)]';
   }
 
   return 'border-border';
@@ -126,19 +133,55 @@ const getRevealDelayMs = (tier: LookupResult['rarityTier'], isNewCapture: boolea
   return 0;
 };
 
-const getRaritySurfaceClass = (tier: LookupResult['rarityTier']) => {
+const getMysteryTraceDurationMs = (tier: LookupResult['rarityTier']) => {
   if (tier === 'MYTHIC') {
-    return 'bg-[radial-gradient(circle_at_top,#fef7ff_0%,#f7f1ff_34%,#eef6ff_68%,#fdfdfd_100%)]';
+    return 560;
   }
 
   if (tier === 'RARE') {
-    return 'bg-[radial-gradient(circle_at_top,#fffaf0_0%,#fff2d6_44%,#fffdf8_100%)]';
+    return 420;
   }
 
   if (tier === 'UNCOMMON') {
-    return 'bg-[radial-gradient(circle_at_top,#f8fbff_0%,#eef5ff_46%,#fcfdff_100%)]';
+    return 320;
   }
 
+  return 260;
+};
+
+const getMysteryTraceStroke = (tier: LookupResult['rarityTier']) => {
+  if (tier === 'MYTHIC') {
+    return `url(#${MYSTERY_TRACE_GRADIENT_ID})`;
+  }
+
+  if (tier === 'RARE') {
+    return '#D6A332';
+  }
+
+  if (tier === 'UNCOMMON') {
+    return '#7FB7FF';
+  }
+
+  return '#FFFFFF';
+};
+
+const getMysteryTraceFilter = (tier: LookupResult['rarityTier']) => {
+  if (tier === 'MYTHIC') {
+    return 'drop-shadow(0 0 8px rgba(255,216,102,0.4)) drop-shadow(0 0 18px rgba(176,132,245,0.45))';
+  }
+
+  if (tier === 'RARE') {
+    return 'drop-shadow(0 0 6px rgba(214,163,50,0.55)) drop-shadow(0 0 14px rgba(214,163,50,0.28))';
+  }
+
+  if (tier === 'UNCOMMON') {
+    return 'drop-shadow(0 0 6px rgba(127,183,255,0.55)) drop-shadow(0 0 14px rgba(127,183,255,0.28))';
+  }
+
+  return 'drop-shadow(0 0 4px rgba(255,255,255,0.32)) drop-shadow(0 0 10px rgba(255,255,255,0.16))';
+};
+
+const getRaritySurfaceClass = () => {
   return 'bg-surface';
 };
 
@@ -156,22 +199,6 @@ const getRarityAuraClass = (tier: LookupResult['rarityTier']) => {
   }
 
   return 'from-transparent via-transparent to-transparent';
-};
-
-const getInnerPanelClass = (tier: LookupResult['rarityTier']) => {
-  if (tier === 'MYTHIC') {
-    return 'bg-[linear-gradient(180deg,rgba(255,255,255,0.96),rgba(248,250,255,0.93))]';
-  }
-
-  if (tier === 'RARE') {
-    return 'bg-[linear-gradient(180deg,rgba(255,255,255,0.97),rgba(255,249,240,0.94))]';
-  }
-
-  if (tier === 'UNCOMMON') {
-    return 'bg-[linear-gradient(180deg,rgba(255,255,255,0.97),rgba(247,251,255,0.94))]';
-  }
-
-  return 'bg-surface';
 };
 
 const getLookupCardHeight = (result: LookupResult | null) => {
@@ -222,17 +249,14 @@ export function WordLookupModal({
   const [result, setResult] = useState<LookupResult | null>(null);
   const [showParticles, setShowParticles] = useState(false);
   const [isRevealing, setIsRevealing] = useState(false);
+  const [mysteryRevealPhase, setMysteryRevealPhase] = useState<MysteryRevealPhase>('idle');
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   const searchInFlightRef = useRef(false);
   const revealTimeoutRef = useRef<number | null>(null);
-  const rotateX = useMotionValue(0);
-  const rotateY = useMotionValue(0);
-  const springRotateX = useSpring(rotateX, { stiffness: 180, damping: 18, mass: 0.8 });
-  const springRotateY = useSpring(rotateY, { stiffness: 180, damping: 18, mass: 0.8 });
-  const flareX = useTransform(springRotateY, [-10, 10], ['35%', '65%']);
-  const flareY = useTransform(springRotateX, [-10, 10], ['45%', '58%']);
-
+  const pendingCapturePayloadRef = useRef<CapturePayload | null>(null);
+  const captureCommittedRef = useRef(false);
   const codexEntryLemmaSet = useMemo(() => new Set(codexEntryLemmas.map((lemma) => lemma.toLowerCase())), [codexEntryLemmas]);
+  const shouldShowCaptureParticles = !!result?.isNewCapture && !!result?.isCollectible && result.rarityTier !== 'COMMON';
 
   useEffect(() => {
     if (!isOpen || typeof window === 'undefined') {
@@ -251,7 +275,7 @@ export function WordLookupModal({
   }, [isOpen]);
 
   useEffect(() => {
-    if (!isFlipped || !result?.isNewCapture || !result.isCollectible || prefersReducedMotion) {
+    if (!isFlipped || !shouldShowCaptureParticles || prefersReducedMotion) {
       return;
     }
 
@@ -263,7 +287,7 @@ export function WordLookupModal({
     return () => {
       window.clearTimeout(timeoutId);
     };
-  }, [isFlipped, prefersReducedMotion, result?.isCollectible, result?.isNewCapture]);
+  }, [isFlipped, prefersReducedMotion, shouldShowCaptureParticles]);
 
   useEffect(() => {
     if (!isOpen) {
@@ -272,6 +296,8 @@ export function WordLookupModal({
         revealTimeoutRef.current = null;
       }
 
+      pendingCapturePayloadRef.current = null;
+      captureCommittedRef.current = false;
       setWord('');
       setLookupError(null);
       setIsSearching(false);
@@ -279,10 +305,9 @@ export function WordLookupModal({
       setResult(null);
       setShowParticles(false);
       setIsRevealing(false);
-      rotateX.set(0);
-      rotateY.set(0);
+      setMysteryRevealPhase('idle');
     }
-  }, [isOpen, rotateX, rotateY]);
+  }, [isOpen]);
   
   if (!isOpen) return null;
 
@@ -365,6 +390,33 @@ export function WordLookupModal({
 
       if (revealTimeoutRef.current != null) {
         window.clearTimeout(revealTimeoutRef.current);
+        revealTimeoutRef.current = null;
+      }
+
+      pendingCapturePayloadRef.current = null;
+      captureCommittedRef.current = false;
+      setMysteryRevealPhase('idle');
+
+      const capturePayload: CapturePayload = {
+        lemma: nextResult.lemma,
+        definition: nextResult.definition,
+        synonyms: nextResult.synonyms,
+        isCollectible: nextResult.isCollectible,
+        isNewCapture: nextResult.isNewCapture,
+        alreadyCaptured: nextResult.alreadyCaptured,
+        xpValue: nextResult.xpValue,
+        xpUpdate: nextXpUpdate,
+        rarityTier: nextResult.rarityTier,
+        pageNumber: nextResult.pageNumber,
+        slotNumber: nextResult.slotNumber,
+        pageProgress: nextResult.pageProgress,
+        overallProgress: nextResult.overallProgress,
+      };
+
+      if (nextResult.isCollectible && nextResult.isNewCapture) {
+        pendingCapturePayloadRef.current = capturePayload;
+        setIsRevealing(false);
+        return;
       }
 
       const revealDelayMs = getRevealDelayMs(nextResult.rarityTier, nextResult.isNewCapture, nextResult.isCollectible, prefersReducedMotion);
@@ -381,21 +433,7 @@ export function WordLookupModal({
         setIsFlipped(true);
       }
 
-      onCapture({
-        lemma: nextResult.lemma,
-        definition: nextResult.definition,
-        synonyms: nextResult.synonyms,
-        isCollectible: nextResult.isCollectible,
-        isNewCapture: nextResult.isNewCapture,
-        alreadyCaptured: nextResult.alreadyCaptured,
-        xpValue: nextResult.xpValue,
-        xpUpdate: nextXpUpdate,
-        rarityTier: nextResult.rarityTier,
-        pageNumber: nextResult.pageNumber,
-        slotNumber: nextResult.slotNumber,
-        pageProgress: nextResult.pageProgress,
-        overallProgress: nextResult.overallProgress,
-      });
+      onCapture(capturePayload);
     } catch (error) {
       console.error('Error creating codex entry:', error);
       setLookupError('Could not look up this word right now. Please try again.');
@@ -405,50 +443,73 @@ export function WordLookupModal({
     }
   };
 
+  const finalizeMysteryReveal = (payload: CapturePayload) => {
+    if (captureCommittedRef.current) {
+      return;
+    }
+
+    captureCommittedRef.current = true;
+    pendingCapturePayloadRef.current = null;
+    setIsRevealing(false);
+    setMysteryRevealPhase('flipping');
+    onCapture(payload);
+    setIsFlipped(true);
+  };
+
+  const handleMysteryReveal = () => {
+    const payload = pendingCapturePayloadRef.current;
+    if (!payload || mysteryRevealPhase !== 'idle') {
+      return;
+    }
+
+    if (revealTimeoutRef.current != null) {
+      window.clearTimeout(revealTimeoutRef.current);
+      revealTimeoutRef.current = null;
+    }
+
+    if (prefersReducedMotion) {
+      finalizeMysteryReveal(payload);
+      return;
+    }
+
+    setMysteryRevealPhase('drawing');
+    revealTimeoutRef.current = window.setTimeout(() => {
+      revealTimeoutRef.current = null;
+      finalizeMysteryReveal(payload);
+    }, getMysteryTraceDurationMs(payload.rarityTier));
+  };
+
   const handleSearchAnother = () => {
     if (revealTimeoutRef.current != null) {
       window.clearTimeout(revealTimeoutRef.current);
       revealTimeoutRef.current = null;
     }
 
+    pendingCapturePayloadRef.current = null;
+    captureCommittedRef.current = false;
+    setMysteryRevealPhase('idle');
     setWord('');
     setLookupError(null);
     setIsFlipped(false);
     setResult(null);
     setShowParticles(false);
     setIsRevealing(false);
-    rotateX.set(0);
-    rotateY.set(0);
   };
 
   const canSearch = !!word.trim() && !isSearching;
   const rarityBorderClass = getRarityBorderClass(result?.rarityTier ?? 'COMMON');
   const rarityPillClass = getRarityPillClass(result?.rarityTier ?? 'COMMON');
-  const raritySurfaceClass = getRaritySurfaceClass(result?.rarityTier ?? 'COMMON');
+  const raritySurfaceClass = getRaritySurfaceClass();
   const rarityAuraClass = getRarityAuraClass(result?.rarityTier ?? 'COMMON');
-  const innerPanelClass = getInnerPanelClass(result?.rarityTier ?? 'COMMON');
-  const hasHighRarityReveal = !!result?.isCollectible && !!result?.isNewCapture && (result.rarityTier === 'UNCOMMON' || result.rarityTier === 'RARE' || result.rarityTier === 'MYTHIC');
   const hasMythicReveal = !!result?.isCollectible && !!result?.isNewCapture && result.rarityTier === 'MYTHIC';
-  const canTiltCard = !prefersReducedMotion && !!result?.isCollectible && !!result?.isNewCapture && (result?.rarityTier === 'UNCOMMON' || result?.rarityTier === 'RARE' || result?.rarityTier === 'MYTHIC');
   const lookupCardHeight = getLookupCardHeight(result);
-
-  const handleCardPointerMove = (event: ReactPointerEvent<HTMLDivElement>) => {
-    if (!canTiltCard) {
-      return;
-    }
-
-    const bounds = event.currentTarget.getBoundingClientRect();
-    const offsetX = (event.clientX - bounds.left) / bounds.width;
-    const offsetY = (event.clientY - bounds.top) / bounds.height;
-
-    rotateY.set((offsetX - 0.5) * 12);
-    rotateX.set((0.5 - offsetY) * 10);
-  };
-
-  const resetCardTilt = () => {
-    rotateX.set(0);
-    rotateY.set(0);
-  };
+  const shouldRenderMysteryCard =
+    !!result?.isCollectible &&
+    !!result?.isNewCapture &&
+    (pendingCapturePayloadRef.current !== null || mysteryRevealPhase !== 'idle');
+  const mysteryTraceDurationSeconds = getMysteryTraceDurationMs(result?.rarityTier ?? 'COMMON') / 1000;
+  const mysteryTraceStroke = getMysteryTraceStroke(result?.rarityTier ?? 'COMMON');
+  const mysteryTraceFilter = getMysteryTraceFilter(result?.rarityTier ?? 'COMMON');
   
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4">
@@ -481,44 +542,110 @@ export function WordLookupModal({
               }}
             >
               <div
-                className="absolute inset-0 rounded-[24px] border border-border bg-surface p-5"
+                className="absolute inset-0 rounded-[24px] border border-border bg-surface p-5 overflow-hidden"
                 style={{ backfaceVisibility: 'hidden' }}
               >
-                <input
-                  id="lookup-word"
-                  type="text"
-                  value={word}
-                  onChange={(event) => setWord(event.target.value)}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' && canSearch) {
-                      event.preventDefault();
-                      void handleSearch();
+                {shouldRenderMysteryCard ? (
+                  <motion.button
+                    type="button"
+                    onClick={handleMysteryReveal}
+                    aria-label="Reveal captured word"
+                    disabled={mysteryRevealPhase !== 'idle'}
+                    className="group relative flex h-full w-full flex-col items-center justify-center overflow-hidden rounded-[20px] border border-border bg-gradient-to-br from-slate-900 via-slate-950 to-black"
+                    animate={
+                      mysteryRevealPhase === 'idle' && !prefersReducedMotion
+                        ? { rotate: [0, -1.6, 1.6, -1, 1, 0] }
+                        : { rotate: 0 }
                     }
-                  }}
-                  className={searchInputClassName}
-                  placeholder="Enter word"
-                  autoFocus
-                  aria-label="Enter word"
-                />
+                    transition={
+                      mysteryRevealPhase === 'idle' && !prefersReducedMotion
+                        ? { duration: 1.8, repeat: Infinity, ease: 'easeInOut' }
+                        : { duration: 0.18, ease: 'easeOut' }
+                    }
+                  >
+                    <motion.img
+                      src={mothIcon}
+                      alt=""
+                      className="h-20 w-20 opacity-80"
+                      animate={
+                        mysteryRevealPhase === 'idle' && !prefersReducedMotion
+                          ? { scale: [1, 1.06, 1], opacity: [0.75, 1, 0.75] }
+                          : { scale: 1, opacity: 0.8 }
+                      }
+                      transition={
+                        mysteryRevealPhase === 'idle' && !prefersReducedMotion
+                          ? { duration: 2.4, repeat: Infinity, ease: 'easeInOut' }
+                          : { duration: 0.18, ease: 'easeOut' }
+                      }
+                    />
+                    <p className="mt-6 text-xs uppercase tracking-[0.32em] text-white/70">Tap to reveal</p>
+                    {mysteryRevealPhase === 'drawing' ? (
+                      <div className="pointer-events-none absolute inset-0" aria-hidden="true">
+                        <svg viewBox="0 0 100 100" className="h-full w-full">
+                          <defs>
+                            <linearGradient id={MYSTERY_TRACE_GRADIENT_ID} x1="12%" y1="18%" x2="88%" y2="82%">
+                              <stop offset="0%" stopColor="#FF7A59" />
+                              <stop offset="28%" stopColor="#FFD866" />
+                              <stop offset="58%" stopColor="#8BE8FF" />
+                              <stop offset="100%" stopColor="#B084F5" />
+                            </linearGradient>
+                          </defs>
+                          <motion.path
+                            d={MYSTERY_TRACE_PATH}
+                            fill="none"
+                            stroke={mysteryTraceStroke}
+                            strokeWidth="4.5"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            vectorEffect="non-scaling-stroke"
+                            style={{ filter: mysteryTraceFilter }}
+                            initial={{ pathLength: 0, opacity: 0.28 }}
+                            animate={{ pathLength: 1, opacity: 1 }}
+                            transition={{ duration: mysteryTraceDurationSeconds, ease: [0.22, 1, 0.36, 1] }}
+                          />
+                        </svg>
+                      </div>
+                    ) : null}
+                  </motion.button>
+                ) : (
+                  <>
+                    <input
+                      id="lookup-word"
+                      type="text"
+                      value={word}
+                      onChange={(event) => setWord(event.target.value)}
+                      onKeyDown={(event) => {
+                        if (event.key === 'Enter' && canSearch) {
+                          event.preventDefault();
+                          void handleSearch();
+                        }
+                      }}
+                      className={searchInputClassName}
+                      placeholder="Enter word"
+                      autoFocus
+                      aria-label="Enter word"
+                    />
 
-                {lookupError ? (
-                  <p className="mt-2 text-sm text-danger">{lookupError}</p>
-                ) : null}
+                    {lookupError ? (
+                      <p className="mt-2 text-sm text-danger">{lookupError}</p>
+                    ) : null}
 
-                {!sessionId ? (
-                  <p className="mt-3 text-xs leading-relaxed text-text-muted">
-                    Running in fallback mode: this capture is tracked in-session only until session context is available.
-                  </p>
-                ) : null}
+                    {!sessionId ? (
+                      <p className="mt-3 text-xs leading-relaxed text-text-muted">
+                        Running in fallback mode: this capture is tracked in-session only until session context is available.
+                      </p>
+                    ) : null}
 
-                <div className="mt-6 flex gap-3">
-                  <Button variant="outline" onClick={onClose} className="flex-1">
-                    Exit
-                  </Button>
-                  <Button onClick={() => void handleSearch()} className="flex-1" disabled={!canSearch}>
-                    {isSearching ? 'Searching...' : 'Search'}
-                  </Button>
-                </div>
+                    <div className="mt-6 flex gap-3">
+                      <Button variant="outline" onClick={onClose} className="flex-1">
+                        Exit
+                      </Button>
+                      <Button onClick={() => void handleSearch()} className="flex-1" disabled={!canSearch}>
+                        {isSearching ? 'Searching...' : 'Search'}
+                      </Button>
+                    </div>
+                  </>
+                )}
 
                 {isRevealing && result ? (
                   <motion.div
@@ -551,105 +678,18 @@ export function WordLookupModal({
               </div>
 
               <motion.div
-                className={`absolute inset-0 rounded-[24px] border p-5 overflow-hidden ${rarityBorderClass} ${raritySurfaceClass}`}
-                style={{ backfaceVisibility: 'hidden', transform: 'rotateY(180deg)' }}
-                onPointerMove={handleCardPointerMove}
-                onPointerLeave={resetCardTilt}
-                animate={
-                  canTiltCard
-                    ? {
-                        boxShadow: hasMythicReveal
-                          ? [
-                              '0 0 0 1px rgba(176,132,245,0.30), 0 16px 32px rgba(122,89,214,0.24)',
-                              '0 0 0 1px rgba(255,219,122,0.48), 0 22px 48px rgba(122,89,214,0.30)',
-                              '0 0 0 1px rgba(176,132,245,0.30), 0 16px 32px rgba(122,89,214,0.24)',
-                            ]
-                          : [
-                              result.rarityTier === 'RARE'
-                                ? '0 0 0 1px rgba(214,163,50,0.30), 0 14px 28px rgba(214,163,50,0.18)'
-                                : '0 0 0 1px rgba(127,183,255,0.30), 0 14px 28px rgba(80,125,216,0.18)',
-                              result.rarityTier === 'RARE'
-                                ? '0 0 0 1px rgba(214,163,50,0.45), 0 18px 36px rgba(214,163,50,0.24)'
-                                : '0 0 0 1px rgba(127,183,255,0.45), 0 18px 36px rgba(80,125,216,0.24)',
-                              result.rarityTier === 'RARE'
-                                ? '0 0 0 1px rgba(214,163,50,0.30), 0 14px 28px rgba(214,163,50,0.18)'
-                                : '0 0 0 1px rgba(127,183,255,0.30), 0 14px 28px rgba(80,125,216,0.18)',
-                            ],
-                      }
-                    : undefined
-                }
-                transition={canTiltCard ? { duration: hasMythicReveal ? 2.2 : 1.8, repeat: Infinity, ease: 'easeInOut' } : undefined}
+                className={`absolute inset-0 rounded-[24px] border overflow-hidden ${rarityBorderClass} ${raritySurfaceClass}`}
+                style={{
+                  backfaceVisibility: 'hidden',
+                  transformStyle: 'preserve-3d',
+                  rotateY: 180,
+                }}
+                initial={result && !prefersReducedMotion ? { opacity: 0, scale: 0.94, y: 16 } : false}
+                animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, scale: 1, y: 0 }}
+                transition={{ duration: hasMythicReveal ? 0.65 : 0.4, ease: 'easeOut' }}
               >
                 {result ? (
-                  <motion.div
-                    className={`relative z-10 h-full overflow-hidden rounded-[20px] border border-white/70 shadow-[inset_0_1px_0_rgba(255,255,255,0.7)] ${innerPanelClass}`}
-                    style={
-                      canTiltCard
-                        ? {
-                            rotateX: springRotateX,
-                            rotateY: springRotateY,
-                            transformStyle: 'preserve-3d',
-                          }
-                        : undefined
-                    }
-                    initial={prefersReducedMotion ? false : { opacity: 0, scale: 0.94, y: 16 }}
-                    animate={prefersReducedMotion ? { opacity: 1 } : { opacity: 1, scale: 1, y: 0 }}
-                    transition={{ duration: hasMythicReveal ? 0.65 : 0.4, ease: 'easeOut' }}
-                  >
-                    {hasHighRarityReveal ? (
-                      <>
-                        <motion.div
-                          className={`pointer-events-none absolute inset-[-12%] z-0 rounded-[30px] bg-gradient-to-br ${rarityAuraClass} blur-2xl`}
-                          animate={
-                            prefersReducedMotion
-                              ? { opacity: 0.5 }
-                              : { opacity: [0.32, 0.72, 0.4], scale: [0.96, 1.06, 1] }
-                          }
-                          transition={{ duration: hasMythicReveal ? 2.8 : 2, repeat: Infinity, ease: 'easeInOut' }}
-                        />
-                        <motion.div
-                          className="pointer-events-none absolute inset-0 z-0 rounded-[22px] opacity-80"
-                          style={{
-                            background: hasMythicReveal
-                              ? 'linear-gradient(115deg, rgba(255,0,128,0.07), rgba(255,208,0,0.1), rgba(0,214,255,0.08), rgba(160,100,255,0.08))'
-                              : result.rarityTier === 'RARE'
-                                ? 'linear-gradient(115deg, rgba(255,221,120,0.06), rgba(255,236,186,0.14), rgba(255,221,120,0.06))'
-                                : 'linear-gradient(115deg, rgba(124,177,255,0.05), rgba(210,235,255,0.12), rgba(124,177,255,0.05))',
-                            backgroundSize: '220% 220%',
-                          }}
-                          animate={prefersReducedMotion ? { opacity: 0.65 } : { backgroundPosition: ['0% 50%', '100% 50%', '0% 50%'] }}
-                          transition={{ duration: hasMythicReveal ? 5 : 3.6, repeat: Infinity, ease: 'linear' }}
-                        />
-                      </>
-                    ) : null}
-
-                    {hasMythicReveal ? (
-                      <motion.div
-                        className="pointer-events-none absolute inset-[-1px] z-0 rounded-[24px] p-[1.5px]"
-                        style={{
-                          background: 'linear-gradient(120deg, rgba(255,95,109,0.9), rgba(255,221,89,0.9), rgba(77,208,225,0.9), rgba(176,132,245,0.95), rgba(255,95,109,0.9))',
-                          backgroundSize: '300% 300%',
-                        }}
-                        animate={prefersReducedMotion ? { opacity: 0.9 } : { backgroundPosition: ['0% 50%', '100% 50%', '0% 50%'] }}
-                        transition={{ duration: 4.2, repeat: Infinity, ease: 'linear' }}
-                      >
-                        <div className="h-full w-full rounded-[22px] bg-transparent" />
-                      </motion.div>
-                    ) : null}
-
-                    {hasHighRarityReveal ? (
-                      <motion.div
-                        className="pointer-events-none absolute inset-0 z-0 rounded-[24px]"
-                        style={{
-                          background: 'radial-gradient(circle at var(--flare-x, 50%) var(--flare-y, 50%), rgba(255,255,255,0.22), rgba(255,255,255,0.08) 16%, transparent 32%)',
-                          ['--flare-x' as string]: flareX,
-                          ['--flare-y' as string]: flareY,
-                        }}
-                        animate={prefersReducedMotion ? { opacity: 0.35 } : { opacity: [0.12, 0.3, 0.18] }}
-                        transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
-                      />
-                    ) : null}
-
+                  <>
                     <div className="relative z-10 flex h-full flex-col overflow-y-auto px-5 py-4">
                       <div className="flex items-start justify-between gap-4 border-b border-border pb-4">
                         <div>
@@ -721,7 +761,7 @@ export function WordLookupModal({
                       <div className="mt-5">
                         <p className="text-[0.72rem] uppercase tracking-[0.24em] text-text-subtle">Definitions</p>
                         <div className="mt-3 space-y-4">
-                          {(result.senses.length > 0 ? result.senses : [{ definition: result.definition, examples: [] }]).map((sense, index) => (
+                          {(result.senses.length > 0 ? result.senses : [{ definition: result.definition, examples: [] }]).slice(0, 3).map((sense, index) => (
                             <div key={`${sense.definition}-${index}`} className="flex gap-3">
                               <span className="pt-0.5 text-sm font-semibold text-accent-strong">{index + 1}.</span>
                               <div className="min-w-0 flex-1">
@@ -744,7 +784,7 @@ export function WordLookupModal({
                       <div className="mt-5 border-t border-border pt-4">
                         <p className="text-[0.72rem] uppercase tracking-[0.24em] text-text-subtle">Synonyms</p>
                         <p className="mt-2 text-sm leading-relaxed text-text">
-                          {result.synonyms.length > 0 ? result.synonyms.join(', ') : 'No synonyms available.'}
+                          {result.synonyms.length > 0 ? result.synonyms.slice(0, 6).join(', ') : 'No synonyms available.'}
                         </p>
                       </div>
 
@@ -764,15 +804,14 @@ export function WordLookupModal({
                         </Button>
                       </div>
                     </div>
-                    <div className="pointer-events-none absolute inset-[10px] z-0 rounded-[18px] border border-white/55 dark:border-border" />
-                  </motion.div>
+                  </>
                 ) : (
                   <div className="flex h-full items-center justify-center text-sm text-text-muted">
                     No result available.
                   </div>
                 )}
 
-                {showParticles ? (
+                {showParticles && shouldShowCaptureParticles ? (
                   <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-[24px]" aria-hidden="true">
                     {[8, 18, 30, 42, 56, 68, 80, 92].map((topOffset, index) => (
                       <motion.span

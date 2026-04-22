@@ -16,10 +16,12 @@ interface AuthContextValue {
   hasBootstrappedProfile: boolean;
   bootstrapError: string | null;
   profile: ProfileReadResponseDTO | null;
+  needsOnboarding: boolean;
   username: string;
   login: () => Promise<void>;
   logout: () => Promise<void>;
   retryBootstrap: () => Promise<void>;
+  setProfile: (profile: ProfileReadResponseDTO) => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -139,6 +141,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
     hasBootstrappedProfile,
     bootstrapError,
     profile,
+    needsOnboarding:
+      profile != null && (profile.needsOnboarding || profile.nickname == null || profile.nickname.trim() === ''),
     username: String(keycloak.tokenParsed?.preferred_username ?? ''),
     login: async () => {
       await keycloak.login({
@@ -165,11 +169,13 @@ export function AuthProvider({ children }: PropsWithChildren) {
         setIsBootstrappingProfile(false);
       }
     },
+    setProfile,
   }), [authenticated, bootstrapError, hasBootstrappedProfile, initialized, isBootstrappingProfile, profile]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
 
+// eslint-disable-next-line react-refresh/only-export-components
 export function useAuth() {
   const context = useContext(AuthContext);
 

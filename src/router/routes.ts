@@ -7,6 +7,8 @@ import Challenge from '../pages/Challenge.tsx';
 import Flashcard from '../pages/Flashcard.tsx';
 import Profile from '../pages/Profile.tsx';
 import Landing from '../pages/Landing.tsx';
+import Circles from '../pages/Circles.tsx';
+import CircleDetails from '../pages/CircleDetails.tsx';
 import { ProtectedRoute } from '../features/auth/ProtectedRoute.tsx';
 
 export const router = createBrowserRouter([
@@ -22,6 +24,8 @@ export const router = createBrowserRouter([
       { path: '/book/:bookId/session/new', Component: ReadingSession },
       { path: '/codex', Component: Codex },
       { path: '/codex/page/:pageNumber', Component: Codex },
+      { path: '/circles', Component: Circles },
+      { path: '/circles/:circleId', Component: CircleDetails },
       { path: '/challenges', Component: Challenge },
       { path: '/challenges/flashcard', Component: Flashcard },
       { path: '/profile', Component: Profile },

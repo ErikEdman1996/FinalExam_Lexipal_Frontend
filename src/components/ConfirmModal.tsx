@@ -7,6 +7,7 @@ interface ConfirmModalProps {
   title: string;
   description: string;
   confirmLabel: string;
+  confirmingLabel?: string;
   cancelLabel?: string;
   isConfirming?: boolean;
   onClose: () => void;
@@ -18,6 +19,7 @@ export function ConfirmModal({
   title,
   description,
   confirmLabel,
+  confirmingLabel = 'Deleting...',
   cancelLabel = 'Cancel',
   isConfirming = false,
   onClose,
@@ -81,7 +83,7 @@ export function ConfirmModal({
               onClick={() => void onConfirm()}
               disabled={isConfirming}
             >
-              {isConfirming ? 'Deleting...' : confirmLabel}
+              {isConfirming ? confirmingLabel : confirmLabel}
             </Button>
           </div>
         </div>
