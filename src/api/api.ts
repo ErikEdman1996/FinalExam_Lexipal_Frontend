@@ -1983,6 +1983,26 @@ export const leaveBookCircle = async (circleId: string | number) => {
     }
 };
 
+export const removeBookCircleMember = async (
+    circleId: string | number,
+    userId: string | number,
+) => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/book-circles/${circleId}/members/${userId}`, {
+            method: 'DELETE',
+            headers: await buildAuthHeaders(),
+        });
+
+        if (!res.ok) {
+            const errorPayload = await readErrorPayload(res);
+            throw toApiResponseError(errorPayload, 'Could not remove that member.', res.status);
+        }
+    } catch (error) {
+        console.error('Error removing circle member:', error);
+        throw error;
+    }
+};
+
 export const closeBookCircle = async (circleId: string | number) => {
     try {
         const res = await fetch(`${API_BASE_URL}/book-circles/${circleId}`, {

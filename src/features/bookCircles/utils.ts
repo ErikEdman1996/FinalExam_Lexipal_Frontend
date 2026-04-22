@@ -4,7 +4,7 @@ import type {
   ProfileReadResponseDTO,
 } from '../../api/api';
 
-const SERVER_LOCAL_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?)?$/;
+const SERVER_LOCAL_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,9}))?)?)?$/;
 
 export const circleInputClassName =
   'w-full rounded-[16px] border border-border bg-surface-muted px-4 py-3 text-text outline-none transition-all focus:border-brand focus:bg-surface focus:ring-2 focus:ring-brand';
@@ -34,7 +34,7 @@ const toServerLocalDate = (value: string) => {
     Number(hour),
     Number(minute),
     Number(second),
-    Number(millisecond.padEnd(3, '0')),
+    Number(millisecond.slice(0, 3).padEnd(3, '0')),
   ));
 };
 

@@ -61,7 +61,7 @@ export function JoinCircleModal({
       if (error instanceof ApiResponseError) {
         if (error.status === 404) {
           setErrorMessage('No active circle found for that code.');
-        } else if (error.status === 400) {
+        } else if (error.status === 400 || error.status === 403) {
           setErrorMessage(error.message);
         } else {
           setErrorMessage('Could not join the circle right now.');

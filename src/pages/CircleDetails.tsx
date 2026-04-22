@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Copy, Lock, UsersRound } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
@@ -7,6 +7,7 @@ import {
   closeBookCircle,
   getBookCircle,
   leaveBookCircle,
+  removeBookCircleMember,
   type BookCircleMemberSummaryDTO,
   type BookCircleReadResponseDTO,
 } from '../api/api';
@@ -18,16 +19,41 @@ import { MemberDetailsPanel } from '../features/bookCircles/MemberDetailsPanel';
 import {
   canDrillIntoMember,
   copyTextToClipboard,
-  formatCircleDate,
+  formatCircleDateTime,
   formatProgressLabel,
   getCurrentCircleUserId,
   getMemberDisplayName,
   getVisibilityDescription,
-  getVisibilityLabel,
 } from '../features/bookCircles/utils';
 import { useAuth } from '../features/auth/AuthProvider';
 
-type PendingAction = 'close' | 'leave' | null;
+const POLL_INTERVAL_MS = 30_000;
+
+const AVATAR_PALETTE = [
+  'bg-indigo-500',
+  'bg-emerald-500',
+  'bg-rose-500',
+  'bg-amber-500',
+  'bg-sky-500',
+  'bg-violet-500',
+  'bg-teal-500',
+  'bg-pink-500',
+];
+
+const getMemberInitial = (nickname: string | null): string => {
+  const trimmed = nickname?.trim() ?? '';
+  return trimmed ? trimmed.charAt(0).toUpperCase() : '?';
+};
+
+const getMemberAvatarClass = (userId: number): string => {
+  return AVATAR_PALETTE[Math.abs(userId) % AVATAR_PALETTE.length];
+};
+
+type CirclePendingAction =
+  | { type: 'close' }
+  | { type: 'leave' }
+  | { type: 'remove-member'; member: BookCircleMemberSummaryDTO }
+  | null;
 
 function CircleChip({
   label,
@@ -57,54 +83,143 @@ export default function CircleDetails() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isActionSubmitting, setIsActionSubmitting] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  const [pendingAction, setPendingAction] = useState<PendingAction>(null);
+  const [pendingAction, setPendingAction] = useState<CirclePendingAction>(null);
   const [selectedMember, setSelectedMember] = useState<BookCircleMemberSummaryDTO | null>(null);
+  const intervalRef = useRef<number | null>(null);
+  const isRefreshingRef = useRef(false);
+  const isActionSubmittingRef = useRef(false);
+  const isMountedRef = useRef(false);
 
   useEffect(() => {
-    let isMounted = true;
+    isActionSubmittingRef.current = isActionSubmitting;
+  }, [isActionSubmitting]);
 
-    const loadCircle = async () => {
-      if (!circleId) {
-        if (isMounted) {
-          setErrorMessage('Missing circle id.');
-          setIsLoading(false);
-        }
-        return;
+  useEffect(() => {
+    isMountedRef.current = true;
+
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  const loadCircle = useCallback(async (
+    mode: 'initial' | 'refresh',
+    options?: { force?: boolean },
+  ) => {
+    const force = options?.force === true;
+
+    if (!circleId) {
+      if (isMountedRef.current && mode === 'initial') {
+        setErrorMessage('Missing circle id.');
+        setIsLoading(false);
       }
+      return false;
+    }
 
-      try {
+    if (mode === 'refresh') {
+      if (isRefreshingRef.current || (isActionSubmittingRef.current && !force)) {
+        return false;
+      }
+      isRefreshingRef.current = true;
+    }
+
+    try {
+      if (mode === 'initial') {
         setIsLoading(true);
         setErrorMessage(null);
-        const response = await getBookCircle(circleId);
+      }
 
-        if (isMounted) {
-          setCircle(response);
-        }
-      } catch (error) {
-        console.error('Error loading circle:', error);
+      const response = await getBookCircle(circleId);
 
-        if (!isMounted) {
-          return;
-        }
+      if (isMountedRef.current) {
+        setCircle(response);
+      }
 
+      return true;
+    } catch (error) {
+      console.error('Error loading circle:', error);
+
+      if (!isMountedRef.current) {
+        return false;
+      }
+
+      if (
+        mode === 'refresh'
+        && error instanceof ApiResponseError
+        && (error.status === 403 || error.status === 404)
+      ) {
+        toast.error(error.message);
+        navigate('/circles', { replace: true });
+        return false;
+      }
+
+      if (mode === 'initial') {
         if (error instanceof ApiResponseError) {
           setErrorMessage(error.message);
         } else {
           setErrorMessage('Could not load this circle right now.');
         }
-      } finally {
-        if (isMounted) {
+      }
+
+      return false;
+    } finally {
+      if (mode === 'initial') {
+        if (isMountedRef.current) {
           setIsLoading(false);
         }
+      } else {
+        isRefreshingRef.current = false;
+      }
+    }
+  }, [circleId, navigate]);
+
+  useEffect(() => {
+    const clearPollInterval = () => {
+      if (intervalRef.current != null) {
+        window.clearInterval(intervalRef.current);
+        intervalRef.current = null;
       }
     };
 
-    void loadCircle();
+    const startPollInterval = () => {
+      clearPollInterval();
+      intervalRef.current = window.setInterval(() => {
+        void loadCircle('refresh');
+      }, POLL_INTERVAL_MS);
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void loadCircle('refresh');
+        startPollInterval();
+      } else {
+        clearPollInterval();
+      }
+    };
+
+    void loadCircle('initial');
+
+    if (document.visibilityState === 'visible') {
+      startPollInterval();
+    }
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
-      isMounted = false;
+      clearPollInterval();
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [circleId]);
+  }, [loadCircle]);
+
+  useEffect(() => {
+    if (!circle || !selectedMember) {
+      return;
+    }
+
+    const stillPresent = circle.members.some((member) => member.userId === selectedMember.userId);
+    if (!stillPresent) {
+      setSelectedMember(null);
+    }
+  }, [circle, selectedMember]);
 
   const currentUserId = useMemo(() => {
     return circle ? getCurrentCircleUserId(circle, profile) : null;
@@ -150,15 +265,28 @@ export default function CircleDetails() {
     try {
       setIsActionSubmitting(true);
 
-      if (pendingAction === 'close') {
+      if (pendingAction.type === 'close') {
         await closeBookCircle(circle.id);
         toast.success('Circle closed.');
-      } else {
-        await leaveBookCircle(circle.id);
-        toast.success('You left the circle.');
+        navigate('/circles', { replace: true });
+        return;
       }
 
-      navigate('/circles', { replace: true });
+      if (pendingAction.type === 'leave') {
+        await leaveBookCircle(circle.id);
+        toast.success('You left the circle.');
+        navigate('/circles', { replace: true });
+        return;
+      }
+
+      await removeBookCircleMember(circle.id, pendingAction.member.userId);
+      const refreshed = await loadCircle('refresh', { force: true });
+
+      if (refreshed) {
+        toast.success('Member removed from the circle.');
+      } else {
+        toast.success('Member removed. Refresh the page if the roster still looks outdated.');
+      }
     } catch (error) {
       console.error('Error completing circle action:', error);
 
@@ -172,6 +300,38 @@ export default function CircleDetails() {
       setPendingAction(null);
     }
   };
+
+  const pendingActionTitle = pendingAction?.type === 'close'
+    ? 'Close circle'
+    : pendingAction?.type === 'leave'
+      ? 'Leave circle'
+      : pendingAction?.type === 'remove-member'
+        ? 'Remove member'
+        : '';
+
+  const pendingActionDescription = pendingAction?.type === 'close'
+    ? 'Closing the circle stops new joins and removes it from your active circles list. Existing reading data stays preserved.'
+    : pendingAction?.type === 'leave'
+      ? 'You will be removed from this circle, but your personal copy of the book will stay in your library.'
+      : pendingAction?.type === 'remove-member'
+        ? `Removing ${pendingAction.member.userNickname?.trim() || 'this member'} deletes their active membership and permanently blocks them from rejoining this circle.`
+        : '';
+
+  const pendingActionConfirmLabel = pendingAction?.type === 'close'
+    ? 'Close circle'
+    : pendingAction?.type === 'leave'
+      ? 'Leave circle'
+      : pendingAction?.type === 'remove-member'
+        ? 'Remove member'
+        : '';
+
+  const pendingActionConfirmingLabel = pendingAction?.type === 'close'
+    ? 'Closing...'
+    : pendingAction?.type === 'leave'
+      ? 'Leaving...'
+      : pendingAction?.type === 'remove-member'
+        ? 'Removing...'
+        : '';
 
   if (isLoading) {
     return (
@@ -203,8 +363,8 @@ export default function CircleDetails() {
   }
 
   return (
-    <div className="page-bg min-h-screen pb-24 lg:pl-60 lg:pb-0">
-      <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8 lg:py-10">
+    <div className="page-bg min-h-screen pb-28 lg:pl-60 lg:pb-0">
+      <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-10">
         <button
           type="button"
           onClick={() => navigate('/circles')}
@@ -214,179 +374,221 @@ export default function CircleDetails() {
           Back to circles
         </button>
 
-        <section className="mt-5 rounded-[32px] border border-border bg-surface p-6 shadow-[0_18px_36px_rgba(31,41,55,0.07)] sm:p-7">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-            <div className="min-w-0">
-              <p className="text-[0.72rem] uppercase tracking-[0.32em] text-text-subtle">BookCircle</p>
-              <h1 className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-text sm:text-4xl">
+        <div className="mt-5 grid gap-4 sm:gap-5 xl:grid-cols-[minmax(0,320px)_minmax(0,1fr)] xl:items-start">
+          <aside className="space-y-4 xl:sticky xl:top-6">
+            <section className="rounded-[28px] border border-border bg-surface p-5 shadow-[0_16px_34px_rgba(31,41,55,0.06)] sm:p-6">
+              <p className="text-[0.68rem] uppercase tracking-[0.32em] text-text-subtle">BookCircle</p>
+              <h1 className="mt-2 break-words text-2xl font-semibold leading-tight tracking-[-0.04em] text-text sm:text-[1.75rem]">
                 {circle.bookTitle}
               </h1>
-              <p className="mt-2 text-base text-text-muted">{circle.bookAuthor}</p>
+              <p className="mt-1 text-sm text-text-muted">{circle.bookAuthor}</p>
 
-              <div className="mt-5 flex flex-wrap gap-2">
-                <CircleChip label={getVisibilityLabel(circle.visibility)} tone="muted" />
-                <CircleChip label={circle.status.toLowerCase()} tone={circle.status === 'ACTIVE' ? 'accent' : 'muted'} />
-                {circle.callerIsOwner ? <CircleChip label="Owner" tone="brand" /> : null}
-              </div>
+              <dl className="mt-5 space-y-3 text-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-text-subtle">Members</dt>
+                  <dd className="font-semibold text-text">
+                    {circle.currentMemberCount} / {circle.memberCap}
+                  </dd>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-text-subtle">Owner</dt>
+                  <dd className="min-w-0 truncate font-semibold text-text">
+                    {circle.ownerNickname?.trim() || 'Anonymous'}
+                  </dd>
+                </div>
+                <div className="flex items-center justify-between gap-3">
+                  <dt className="text-text-subtle">Created</dt>
+                  <dd className="font-semibold text-text">{formatCircleDateTime(circle.createdAt)}</dd>
+                </div>
+              </dl>
 
-              <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                <div className="rounded-[22px] bg-surface-muted p-4">
-                  <p className="text-xs uppercase tracking-[0.18em] text-text-subtle">Members</p>
-                  <p className="mt-2 text-2xl font-semibold text-text">{circle.currentMemberCount} / {circle.memberCap}</p>
-                </div>
-                <div className="rounded-[22px] bg-surface-muted p-4">
-                  <p className="text-xs uppercase tracking-[0.18em] text-text-subtle">Owner</p>
-                  <p className="mt-2 text-lg font-semibold text-text">{circle.ownerNickname?.trim() || 'Anonymous'}</p>
-                </div>
-                <div className="rounded-[22px] bg-surface-muted p-4">
-                  <p className="text-xs uppercase tracking-[0.18em] text-text-subtle">Created</p>
-                  <p className="mt-2 text-lg font-semibold text-text">{formatCircleDate(circle.createdAt)}</p>
-                </div>
-              </div>
+              <p className="mt-4 rounded-[18px] bg-surface-muted p-3 text-xs leading-relaxed text-text-muted">
+                {getVisibilityDescription(circle.visibility)}
+              </p>
+            </section>
 
-              <div className="mt-5 rounded-[24px] border border-border bg-surface-alt p-4">
-                <p className="text-sm font-medium text-text">Visibility</p>
+            {circle.callerIsOwner ? (
+              <section className="rounded-[28px] border border-border bg-surface p-5 shadow-[0_16px_34px_rgba(31,41,55,0.06)] sm:p-6">
+                <p className="text-xs uppercase tracking-[0.2em] text-text-subtle">Invite code</p>
+                <p className="mt-3 text-2xl font-semibold tracking-[0.24em] text-text sm:text-3xl">
+                  {circle.inviteCode}
+                </p>
+                <Button
+                  type="button"
+                  className="mt-4 w-full rounded-full"
+                  onClick={() => void handleCopyCode()}
+                >
+                  <span className="inline-flex items-center gap-2">
+                    <Copy size={16} />
+                    Copy code
+                  </span>
+                </Button>
+              </section>
+            ) : (
+              <section className="rounded-[28px] border border-border bg-surface p-5 shadow-[0_16px_34px_rgba(31,41,55,0.06)] sm:p-6">
+                <p className="text-sm font-medium text-text">Circle membership</p>
                 <p className="mt-2 text-sm leading-relaxed text-text-muted">
-                  {getVisibilityDescription(circle.visibility)}
+                  Your library copy stays with you even if you leave this circle.
+                </p>
+              </section>
+            )}
+
+            {circle.callerIsOwner ? (
+              <Button
+                type="button"
+                className="w-full rounded-full border-danger/10 bg-danger text-white shadow-[0_12px_24px_rgba(218,87,87,0.2)] hover:bg-danger/90"
+                onClick={() => setPendingAction({ type: 'close' })}
+              >
+                Close circle
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full rounded-full border-danger/35 text-danger hover:bg-danger-soft"
+                onClick={() => setPendingAction({ type: 'leave' })}
+              >
+                Leave circle
+              </Button>
+            )}
+          </aside>
+
+          <section className="rounded-[28px] border border-border bg-surface p-4 shadow-[0_16px_34px_rgba(31,41,55,0.06)] sm:p-6">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-xs uppercase tracking-[0.24em] text-text-subtle">Members</p>
+                <h2 className="mt-1 text-xl font-semibold text-text sm:text-2xl">Circle roster</h2>
+                <p className="mt-1 text-xs text-text-muted sm:text-sm">
+                  {circle.currentMemberCount} of {circle.memberCap} seats filled
                 </p>
               </div>
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[16px] bg-accent-soft">
+                <UsersRound size={18} className="text-accent-strong" />
+              </div>
             </div>
 
-            <div className="w-full max-w-sm space-y-4">
-              {circle.callerIsOwner ? (
-                <div className="rounded-[26px] border border-border bg-surface-alt p-5">
-                  <p className="text-xs uppercase tracking-[0.2em] text-text-subtle">Invite code</p>
-                  <p className="mt-3 text-3xl font-semibold tracking-[0.28em] text-text">{circle.inviteCode}</p>
-                  <Button type="button" className="mt-4 w-full rounded-full" onClick={() => void handleCopyCode()}>
-                    <span className="inline-flex items-center gap-2">
-                      <Copy size={16} />
-                      Copy code
-                    </span>
-                  </Button>
-                </div>
-              ) : (
-                <div className="rounded-[26px] border border-border bg-surface-alt p-5">
-                  <p className="text-sm font-medium text-text">Circle membership</p>
-                  <p className="mt-2 text-sm leading-relaxed text-text-muted">
-                    Your library copy stays with you even if you leave this circle.
-                  </p>
-                </div>
-              )}
+            <ul className="mt-4 flex flex-col gap-1">
+              {sortedMembers.map((member) => {
+                const isCurrentUser = currentUserId != null && currentUserId === member.userId;
+                const canRemoveMember = circle.callerIsOwner && member.role !== 'OWNER';
+                const canOpenDetails = canDrillIntoMember({
+                  callerIsOwner: circle.callerIsOwner,
+                  currentUserId,
+                  targetUserId: member.userId,
+                  visibility: circle.visibility,
+                });
 
-              {circle.callerIsOwner ? (
-                <Button
-                  type="button"
-                  className="w-full rounded-full border-danger/10 bg-danger text-white shadow-[0_12px_24px_rgba(218,87,87,0.2)] hover:bg-danger/90"
-                  onClick={() => setPendingAction('close')}
-                >
-                  Close circle
-                </Button>
-              ) : (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full rounded-full border-danger/35 text-danger hover:bg-danger-soft"
-                  onClick={() => setPendingAction('leave')}
-                >
-                  Leave circle
-                </Button>
-              )}
-            </div>
-          </div>
-        </section>
+                const memberName = getMemberDisplayName({
+                  currentUserId,
+                  fallbackNickname: member.userNickname,
+                  targetUserId: member.userId,
+                });
 
-        <section className="mt-6 rounded-[30px] border border-border bg-surface p-6 shadow-[0_16px_34px_rgba(31,41,55,0.06)]">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <p className="text-xs uppercase tracking-[0.24em] text-text-subtle">Members</p>
-              <h2 className="mt-2 text-2xl font-semibold text-text">Circle roster</h2>
-              <p className="mt-2 text-sm leading-relaxed text-text-muted">
-                Click a member to inspect sessions and notes when visibility rules allow it.
-              </p>
-            </div>
-            <div className="flex h-12 w-12 items-center justify-center rounded-[18px] bg-accent-soft">
-              <UsersRound size={20} className="text-accent-strong" />
-            </div>
-          </div>
+                const initial = getMemberInitial(member.userNickname);
+                const avatarClass = getMemberAvatarClass(member.userId);
+                const isHidden = member.progressPercentage == null;
 
-          <div className="mt-5 space-y-3">
-            {sortedMembers.map((member) => {
-              const isCurrentUser = currentUserId != null && currentUserId === member.userId;
-              const canOpenDetails = canDrillIntoMember({
-                callerIsOwner: circle.callerIsOwner,
-                currentUserId,
-                targetUserId: member.userId,
-                visibility: circle.visibility,
-              });
-
-              const memberName = getMemberDisplayName({
-                currentUserId,
-                fallbackNickname: member.userNickname,
-                targetUserId: member.userId,
-              });
-
-              const content = (
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <p className="truncate text-lg font-semibold text-text">{memberName}</p>
-                      <CircleChip label={member.role === 'OWNER' ? 'Owner' : 'Member'} tone={member.role === 'OWNER' ? 'brand' : 'muted'} />
-                      {isCurrentUser ? <CircleChip label="You" tone="accent" /> : null}
+                const progressContent = isHidden ? (
+                  <div className="inline-flex items-center gap-1.5 rounded-full bg-surface-muted px-2.5 py-1 text-[0.7rem] font-medium uppercase tracking-[0.14em] text-text-subtle">
+                    <Lock size={12} />
+                    Hidden
+                  </div>
+                ) : (
+                  <div>
+                    <div className="flex items-center justify-between gap-3 text-xs text-text-muted">
+                      <span>
+                        {member.readPages ?? 0} / {member.totalPages ?? 0} pages
+                      </span>
+                      <span className="text-sm font-semibold text-text">
+                        {formatProgressLabel(member.progressPercentage)}
+                      </span>
                     </div>
-                    <p className="mt-2 text-sm text-text-muted">Joined {formatCircleDate(member.joinedAt)}</p>
-                  </div>
-
-                  <div className="w-full max-w-md">
-                    {member.progressPercentage == null ? (
-                      <div className="rounded-[20px] border border-border bg-surface-alt px-4 py-4">
-                        <div className="flex items-center gap-2 text-sm font-medium text-text">
-                          <Lock size={16} className="text-text-subtle" />
-                          Hidden by owner
-                        </div>
-                        <p className="mt-2 text-sm text-text-muted">
-                          Roster details stay visible, but peer progress is private in this circle.
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="rounded-[20px] border border-border bg-surface-alt px-4 py-4">
-                        <div className="flex items-center justify-between gap-3 text-sm text-text-muted">
-                          <span>{member.readPages} / {member.totalPages} pages</span>
-                          <span className="font-medium text-text">{formatProgressLabel(member.progressPercentage)}</span>
-                        </div>
-                        <div className="mt-3">
-                          <ProgressBar current={member.readPages ?? 0} total={member.totalPages ?? 1} height="lg" />
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-
-              if (!canOpenDetails) {
-                return (
-                  <div
-                    key={member.userId}
-                    title="Progress hidden by circle owner."
-                    className="rounded-[26px] border border-border bg-surface-alt p-5"
-                  >
-                    {content}
+                    <div className="mt-1.5">
+                      <ProgressBar
+                        current={member.readPages ?? 0}
+                        total={member.totalPages ?? 1}
+                        height="sm"
+                      />
+                    </div>
                   </div>
                 );
-              }
 
-              return (
-                <button
-                  key={member.userId}
-                  type="button"
-                  onClick={() => setSelectedMember(member)}
-                  className="w-full rounded-[26px] border border-border bg-surface-alt p-5 text-left transition-all duration-200 hover:-translate-y-0.5 hover:bg-surface"
-                >
-                  {content}
-                </button>
-              );
-            })}
-          </div>
-        </section>
+                const rowContent = (
+                  <div className="flex items-start gap-3 sm:items-center sm:gap-4">
+                    <div
+                      className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white shadow-sm sm:h-11 sm:w-11 ${avatarClass}`}
+                      aria-hidden="true"
+                    >
+                      {initial}
+                    </div>
+
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <p className="truncate text-sm font-semibold text-text sm:text-base">
+                          {memberName}
+                        </p>
+                        {member.role === 'OWNER' ? <CircleChip label="Owner" tone="brand" /> : null}
+                        {isCurrentUser ? <CircleChip label="You" tone="accent" /> : null}
+                      </div>
+                      <p className="mt-1 text-[0.72rem] text-text-subtle sm:text-xs">
+                        Joined {formatCircleDateTime(member.joinedAt)}
+                      </p>
+
+                      <div className="mt-3 sm:hidden">{progressContent}</div>
+                    </div>
+
+                    <div className="ml-auto hidden w-[200px] shrink-0 sm:block lg:w-[220px]">
+                      {progressContent}
+                    </div>
+                  </div>
+                );
+
+                if (!canOpenDetails) {
+                  return (
+                    <li key={member.userId}>
+                      <div
+                        title="Progress hidden by circle owner."
+                        className="rounded-[20px] px-3 py-3 sm:px-4 sm:py-3.5"
+                      >
+                        {rowContent}
+                      </div>
+                    </li>
+                  );
+                }
+
+                return (
+                  <li key={member.userId}>
+                    <div className="sm:flex sm:items-center sm:gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setSelectedMember(member)}
+                        className="w-full flex-1 rounded-[20px] px-3 py-3 text-left transition-colors hover:bg-surface-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand sm:px-4 sm:py-3.5"
+                      >
+                        {rowContent}
+                      </button>
+
+                      {canRemoveMember ? (
+                        <div className="px-3 pb-3 sm:px-0 sm:pb-0 sm:pr-4">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="w-full rounded-full border-danger/35 text-danger hover:bg-danger-soft sm:w-auto sm:min-w-[112px]"
+                            onClick={() => setPendingAction({
+                              type: 'remove-member',
+                              member,
+                            })}
+                          >
+                            Remove
+                          </Button>
+                        </div>
+                      ) : null}
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        </div>
       </div>
 
       <BottomNav />
@@ -407,12 +609,10 @@ export default function CircleDetails() {
 
       <ConfirmModal
         isOpen={pendingAction != null}
-        title={pendingAction === 'close' ? 'Close circle' : 'Leave circle'}
-        description={pendingAction === 'close'
-          ? 'Closing the circle stops new joins and removes it from your active circles list. Existing reading data stays preserved.'
-          : 'You will be removed from this circle, but your personal copy of the book will stay in your library.'}
-        confirmLabel={pendingAction === 'close' ? 'Close circle' : 'Leave circle'}
-        confirmingLabel={pendingAction === 'close' ? 'Closing...' : 'Leaving...'}
+        title={pendingActionTitle}
+        description={pendingActionDescription}
+        confirmLabel={pendingActionConfirmLabel}
+        confirmingLabel={pendingActionConfirmingLabel}
         isConfirming={isActionSubmitting}
         onClose={() => {
           if (!isActionSubmitting) {
