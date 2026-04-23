@@ -137,6 +137,7 @@ function XpGainBarItem({
   const displayedProgressPercent = isAnimationComplete
     ? (Math.max(0, safeXpIntoLevel) / Math.max(1, safeXpPerLevel)) * 100
     : progressMeta.progressPercent;
+  const displayedProgressWidth = `${Math.min(100, Math.max(displayedProgressPercent, 4))}%`;
 
   return (
     <div className="pointer-events-none fixed inset-x-0 top-0 z-[60] flex justify-center px-4 pt-4 sm:px-6 sm:pt-6">
@@ -179,8 +180,11 @@ function XpGainBarItem({
 
         <div className="mt-4 h-3 overflow-hidden rounded-full bg-surface-muted">
           <div
-            className="h-full rounded-full bg-[linear-gradient(90deg,var(--t-brand)_0%,var(--t-accent)_58%,var(--t-warm)_100%)]"
-            style={{ width: `${Math.max(displayedProgressPercent, 4)}%` }}
+            className="h-full rounded-full transition-[width] duration-150 ease-out"
+            style={{
+              width: displayedProgressWidth,
+              background: 'linear-gradient(90deg, var(--t-brand) 0%, var(--t-accent) 100%)',
+            }}
           />
         </div>
 
