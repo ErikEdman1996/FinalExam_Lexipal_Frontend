@@ -10,6 +10,7 @@ import { JoinCircleModal } from '../features/bookCircles/JoinCircleModal';
 import {
   copyTextToClipboard,
   formatCircleDate,
+  formatCircleMeetingRelativeDate,
   getVisibilityLabel,
 } from '../features/bookCircles/utils';
 
@@ -166,6 +167,12 @@ export default function Circles() {
                       {circle.callerIsOwner ? <CircleChip label="Owner" tone="brand" /> : null}
                       <CircleChip label={`${circle.currentMemberCount} / ${circle.memberCap}`} tone="accent" />
                     </div>
+
+                    {circle.nextMeetingDate ? (
+                      <div className="mt-4 inline-flex rounded-full bg-brand-soft px-3 py-1.5 text-xs font-medium text-brand-strong">
+                        Next: {formatCircleMeetingRelativeDate(circle.nextMeetingDate)}
+                      </div>
+                    ) : null}
 
                     <div className="mt-5 grid gap-3 sm:grid-cols-2">
                       <div className="rounded-[20px] bg-surface-muted p-4">

@@ -10,6 +10,7 @@ export default defineConfig({
       '/lexipal': {
         target: 'http://localhost:8585',
         changeOrigin: true,
+        ws: true,
       },
       '/test': {
         target: 'http://localhost:8585',

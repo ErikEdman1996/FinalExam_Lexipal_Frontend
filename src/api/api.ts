@@ -2,6 +2,7 @@ import keycloak from '../features/auth/keycloak';
 
 const API_ROOT_URL = (import.meta.env.VITE_API_ROOT_URL as string | undefined)?.replace(/\/$/, '') ?? '';
 const API_BASE_URL = `${API_ROOT_URL}/lexipal/api/v1`;
+const BOOK_CIRCLE_CHAT_WEBSOCKET_PATH = '/lexipal/ws';
 
 export type ApiBookStatus = 'ACTIVE' | 'COMPLETED' | 'ARCHIVED';
 
@@ -102,7 +103,65 @@ export interface BookCircleReadResponseDTO extends BookCircleCreateResponseDTO {
     currentMemberCount: number;
     ownerNickname: string | null;
     callerIsOwner: boolean;
+    nextMeetingDate: string | null;
+    meetingChapterLabel: string | null;
+    meetingPageStart: number | null;
+    meetingPageEnd: number | null;
     members: BookCircleMemberSummaryDTO[];
+}
+
+export interface BookCircleNextMeetingRequestDTO {
+    meetingDate: string;
+    chapterLabel: string | null;
+    pageStart: number | null;
+    pageEnd: number | null;
+}
+
+export interface CircleChatMessageDTO {
+    id: number;
+    circleId: number;
+    senderUserId: number;
+    senderNickname: string | null;
+    content: string | null;
+    deleted: boolean;
+    createdAt: string;
+    deletedAt: string | null;
+}
+
+export interface CircleChatHistoryResponseDTO {
+    messages: CircleChatMessageDTO[];
+    hasMore: boolean;
+    nextBeforeMessageId: number | null;
+}
+
+export interface CircleChatPresenceMemberDTO {
+    userId: number;
+    userNickname: string | null;
+}
+
+export type CircleChatEventType =
+    | 'MESSAGE_CREATED'
+    | 'MESSAGE_DELETED'
+    | 'PRESENCE_UPDATED'
+    | 'CHAT_CLOSED'
+    | 'CHAT_ACCESS_REVOKED';
+
+export interface CircleChatEventDTO {
+    circleId: number;
+    type: CircleChatEventType;
+    message: CircleChatMessageDTO | null;
+    onlineMembers: CircleChatPresenceMemberDTO[] | null;
+    reason: string | null;
+}
+
+export interface CircleChatSocketErrorDTO {
+    message: string;
+    status: number;
+}
+
+export interface GetBookCircleChatMessagesOptions {
+    beforeMessageId?: number | null;
+    limit?: number;
 }
 
 export interface JoinBookCircleRequestDTO {
@@ -1360,8 +1419,81 @@ const normalizeBookCircleReadResponse = (value: unknown): BookCircleReadResponse
         currentMemberCount: Math.max(0, toFiniteNumber(value.currentMemberCount) ?? members.length),
         ownerNickname: typeof value.ownerNickname === 'string' ? value.ownerNickname : null,
         callerIsOwner: value.callerIsOwner === true,
+        nextMeetingDate: typeof value.nextMeetingDate === 'string' && value.nextMeetingDate.trim()
+            ? value.nextMeetingDate
+            : null,
+        meetingChapterLabel: typeof value.meetingChapterLabel === 'string' && value.meetingChapterLabel.trim()
+            ? value.meetingChapterLabel
+            : null,
+        meetingPageStart: value.meetingPageStart == null ? null : (toFiniteNumber(value.meetingPageStart) ?? null),
+        meetingPageEnd: value.meetingPageEnd == null ? null : (toFiniteNumber(value.meetingPageEnd) ?? null),
         members,
     };
+};
+
+const toCircleChatMessage = (value: unknown): CircleChatMessageDTO | null => {
+    if (!isRecord(value)) {
+        return null;
+    }
+
+    const id = toFiniteNumber(value.id);
+
+    if (id == null) {
+        return null;
+    }
+
+    return {
+        id,
+        circleId: toFiniteNumber(value.circleId) ?? 0,
+        senderUserId: toFiniteNumber(value.senderUserId) ?? 0,
+        senderNickname: typeof value.senderNickname === 'string' ? value.senderNickname : null,
+        content: typeof value.content === 'string' ? value.content : null,
+        deleted: value.deleted === true,
+        createdAt: typeof value.createdAt === 'string' ? value.createdAt : '',
+        deletedAt: typeof value.deletedAt === 'string' && value.deletedAt.trim()
+            ? value.deletedAt
+            : null,
+    };
+};
+
+const toCircleChatPresenceMember = (value: unknown): CircleChatPresenceMemberDTO | null => {
+    if (!isRecord(value)) {
+        return null;
+    }
+
+    const userId = toFiniteNumber(value.userId);
+
+    if (userId == null) {
+        return null;
+    }
+
+    return {
+        userId,
+        userNickname: typeof value.userNickname === 'string' ? value.userNickname : null,
+    };
+};
+
+const toCircleChatEventType = (value: unknown): CircleChatEventType => {
+    switch (value) {
+        case 'MESSAGE_CREATED':
+        case 'MESSAGE_DELETED':
+        case 'PRESENCE_UPDATED':
+        case 'CHAT_CLOSED':
+        case 'CHAT_ACCESS_REVOKED':
+            return value;
+        default:
+            return 'MESSAGE_CREATED';
+    }
+};
+
+const compareCircleChatMessages = (left: CircleChatMessageDTO, right: CircleChatMessageDTO) => {
+    const createdAtComparison = left.createdAt.localeCompare(right.createdAt);
+
+    if (createdAtComparison !== 0) {
+        return createdAtComparison;
+    }
+
+    return left.id - right.id;
 };
 
 const normalizeBookCirclesResponse = (value: unknown): BookCircleReadResponseDTO[] => {
@@ -1420,6 +1552,63 @@ const normalizeCircleMemberDetailResponse = (value: unknown): CircleMemberDetail
         bookStatus: toCircleMemberBookStatus(value.bookStatus),
         sessions,
         notes,
+    };
+};
+
+const normalizeCircleChatHistoryResponse = (value: unknown): CircleChatHistoryResponseDTO => {
+    if (!isRecord(value)) {
+        console.error('Unexpected circle chat history response shape. Raw payload:', value);
+        throw new Error('Unexpected circle chat history response shape.');
+    }
+
+    const messages = Array.isArray(value.messages)
+        ? value.messages
+            .map(toCircleChatMessage)
+            .filter((message): message is CircleChatMessageDTO => message !== null)
+            .sort(compareCircleChatMessages)
+        : [];
+
+    return {
+        messages,
+        hasMore: value.hasMore === true,
+        nextBeforeMessageId: value.nextBeforeMessageId == null
+            ? null
+            : (toFiniteNumber(value.nextBeforeMessageId) ?? null),
+    };
+};
+
+const normalizeCircleChatEvent = (value: unknown): CircleChatEventDTO => {
+    if (!isRecord(value)) {
+        console.error('Unexpected circle chat event payload. Raw payload:', value);
+        throw new Error('Unexpected circle chat event payload.');
+    }
+
+    const onlineMembers = Array.isArray(value.onlineMembers)
+        ? value.onlineMembers
+            .map(toCircleChatPresenceMember)
+            .filter((member): member is CircleChatPresenceMemberDTO => member !== null)
+        : null;
+
+    return {
+        circleId: toFiniteNumber(value.circleId) ?? 0,
+        type: toCircleChatEventType(value.type),
+        message: toCircleChatMessage(value.message),
+        onlineMembers,
+        reason: typeof value.reason === 'string' && value.reason.trim()
+            ? value.reason
+            : null,
+    };
+};
+
+const normalizeCircleChatSocketError = (value: unknown): CircleChatSocketErrorDTO => {
+    if (!isRecord(value)) {
+        console.error('Unexpected circle chat socket error payload. Raw payload:', value);
+        throw new Error('Unexpected circle chat socket error payload.');
+    }
+
+    return {
+        message: normalizeErrorMessage(value, 'Something went wrong in circle chat.'),
+        status: toFiniteNumber(value.status) ?? 500,
     };
 };
 
@@ -1632,6 +1821,79 @@ const BOOK_CIRCLE_CREATE_FIELD_NAMES = [
     'memberCap',
     'visibility',
 ] as const satisfies readonly BookCircleCreateFieldName[];
+
+type BookCircleNextMeetingFieldName =
+    | 'meetingDate'
+    | 'chapterLabel'
+    | 'pageStart'
+    | 'pageEnd';
+
+const BOOK_CIRCLE_NEXT_MEETING_FIELD_NAMES = [
+    'meetingDate',
+    'chapterLabel',
+    'pageStart',
+    'pageEnd',
+] as const satisfies readonly BookCircleNextMeetingFieldName[];
+
+const inferBookCircleNextMeetingFieldFromMessage = (
+    message: string,
+): BookCircleNextMeetingFieldName | null => {
+    const normalizedMessage = message.toLowerCase();
+
+    if (
+        normalizedMessage.includes('meeting date')
+        || normalizedMessage.includes('date/time')
+        || normalizedMessage.includes('future')
+    ) {
+        return 'meetingDate';
+    }
+
+    if (normalizedMessage.includes('chapter')) {
+        return 'chapterLabel';
+    }
+
+    if (
+        normalizedMessage.includes('page start')
+        || normalizedMessage.includes('start page')
+        || normalizedMessage.includes('pagestart')
+    ) {
+        return 'pageStart';
+    }
+
+    if (
+        normalizedMessage.includes('page end')
+        || normalizedMessage.includes('end page')
+        || normalizedMessage.includes('page range')
+        || normalizedMessage.includes('pageend')
+        || normalizedMessage.includes('totalpages')
+    ) {
+        return 'pageEnd';
+    }
+
+    return null;
+};
+
+const toBookCircleNextMeetingValidationError = (
+    payload: unknown,
+    fallbackMessage: string,
+    status: number,
+) => {
+    const message = normalizeErrorMessage(payload, fallbackMessage);
+    const fieldErrors = extractFieldErrors(payload, BOOK_CIRCLE_NEXT_MEETING_FIELD_NAMES);
+
+    if (Object.keys(fieldErrors).length === 0) {
+        const inferredField = inferBookCircleNextMeetingFieldFromMessage(message);
+
+        if (inferredField) {
+            fieldErrors[inferredField] = message;
+        }
+    }
+
+    return new ApiValidationError<BookCircleNextMeetingFieldName>(message, {
+        status,
+        fieldErrors,
+    });
+};
 
 const readErrorPayload = async (res: Response) => {
     try {
@@ -1944,6 +2206,62 @@ export const getBookCircle = async (circleId: string | number) => {
     }
 };
 
+export const setBookCircleNextMeeting = async (
+    circleId: string | number,
+    payload: BookCircleNextMeetingRequestDTO,
+) => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/book-circles/${circleId}/next-meeting`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(await buildAuthHeaders()),
+            },
+            body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) {
+            const errorPayload = await readErrorPayload(res);
+
+            if (res.status === 400) {
+                throw toBookCircleNextMeetingValidationError(
+                    errorPayload,
+                    'Could not save the next meeting.',
+                    res.status,
+                );
+            }
+
+            throw toApiResponseError(errorPayload, 'Could not save the next meeting.', res.status);
+        }
+
+        const data = await res.json();
+        return normalizeBookCircleReadResponse(data);
+    } catch (error) {
+        console.error('Error saving next meeting:', error);
+        throw error;
+    }
+};
+
+export const clearBookCircleNextMeeting = async (circleId: string | number) => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/book-circles/${circleId}/next-meeting`, {
+            method: 'DELETE',
+            headers: await buildAuthHeaders(),
+        });
+
+        if (!res.ok) {
+            const errorPayload = await readErrorPayload(res);
+            throw toApiResponseError(errorPayload, 'Could not clear the next meeting.', res.status);
+        }
+
+        const data = await res.json();
+        return normalizeBookCircleReadResponse(data);
+    } catch (error) {
+        console.error('Error clearing next meeting:', error);
+        throw error;
+    }
+};
+
 export const getCircleMemberDetails = async (
     circleId: string | number,
     userId: string | number,
@@ -2018,6 +2336,70 @@ export const closeBookCircle = async (circleId: string | number) => {
         console.error('Error closing book circle:', error);
         throw error;
     }
+};
+
+export const getBookCircleChatMessages = async (
+    circleId: string | number,
+    options: GetBookCircleChatMessagesOptions = {},
+) => {
+    try {
+        const params = new URLSearchParams();
+
+        if (options.beforeMessageId != null) {
+            params.set('beforeMessageId', String(options.beforeMessageId));
+        }
+
+        if (typeof options.limit === 'number' && Number.isFinite(options.limit)) {
+            params.set('limit', String(Math.max(1, Math.min(100, Math.floor(options.limit)))));
+        }
+
+        const query = params.toString();
+        const res = await fetch(
+            `${API_BASE_URL}/book-circles/${circleId}/chat/messages${query ? `?${query}` : ''}`,
+            {
+                headers: await buildAuthHeaders(),
+            },
+        );
+
+        if (!res.ok) {
+            const errorPayload = await readErrorPayload(res);
+            throw toApiResponseError(errorPayload, 'Could not load circle chat.', res.status);
+        }
+
+        const data = await res.json();
+        return normalizeCircleChatHistoryResponse(data);
+    } catch (error) {
+        console.error('Error loading circle chat messages:', error);
+        throw error;
+    }
+};
+
+export const deleteBookCircleChatMessage = async (
+    circleId: string | number,
+    messageId: string | number,
+) => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/book-circles/${circleId}/chat/messages/${messageId}`, {
+            method: 'DELETE',
+            headers: await buildAuthHeaders(),
+        });
+
+        if (!res.ok) {
+            const errorPayload = await readErrorPayload(res);
+            throw toApiResponseError(errorPayload, 'Could not delete the chat message.', res.status);
+        }
+    } catch (error) {
+        console.error('Error deleting circle chat message:', error);
+        throw error;
+    }
+};
+
+export const parseCircleChatEventPayload = (payload: unknown): CircleChatEventDTO => {
+    return normalizeCircleChatEvent(payload);
+};
+
+export const parseCircleChatSocketErrorPayload = (payload: unknown): CircleChatSocketErrorDTO => {
+    return normalizeCircleChatSocketError(payload);
 };
 
 export const getChallenges = async () => {
@@ -3292,18 +3674,33 @@ export const unstarReadingList = async (listId: string | number) => {
 };
 
 
-// Helper to build Authorization headers, refreshing token if needed
-async function buildAuthHeaders(): Promise<Record<string, string>> {
-    const headers: Record<string, string> = {};
+export const getBookCircleChatWebSocketUrl = () => {
+    const browserOrigin = typeof window === 'undefined' ? 'http://localhost' : window.location.origin;
+    const url = new URL(BOOK_CIRCLE_CHAT_WEBSOCKET_PATH, API_ROOT_URL || browserOrigin);
+    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+    return url.toString();
+};
+
+export async function getAuthToken(): Promise<string | null> {
     try {
         if (keycloak.authenticated && keycloak.updateToken) {
             await keycloak.updateToken(30);
         }
-        if (keycloak.token) {
-            headers['Authorization'] = `Bearer ${keycloak.token}`;
-        }
     } catch (err) {
         console.error('Failed to refresh auth token before API request:', err);
     }
+
+    return keycloak.token ?? null;
+}
+
+// Helper to build Authorization headers, refreshing token if needed
+async function buildAuthHeaders(): Promise<Record<string, string>> {
+    const headers: Record<string, string> = {};
+    const token = await getAuthToken();
+
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
+
     return headers;
 }
