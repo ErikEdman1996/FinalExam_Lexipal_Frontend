@@ -3,9 +3,16 @@ import { BookOpen, Brain, Clock3, Flame, LogOut, Target, Trophy, Zap } from 'luc
 import { toast } from 'sonner';
 import { BottomNav } from '../components/BottomNav';
 import { Button } from '../components/Button';
+import {
+  fieldErrorClassName,
+  fieldHintClassName,
+  fieldLabelClassName,
+  inputClassName,
+} from '../components/form/inputStyles';
 import { ThemeToggle } from '../features/theme/ThemeToggle.tsx';
-import { useAuth } from '../features/auth/AuthProvider';
+import { useAuth } from '../features/auth/useAuth';
 import { getXpProgressMeta, XP_PER_LEVEL } from '../features/xp/xp';
+import { formatLongDate, formatMonthDay } from '../utils/formatting';
 import {
   ApiValidationError,
   getProfile,
@@ -18,30 +25,11 @@ import {
 const NICKNAME_PATTERN = /^[a-zA-Z0-9_]{3,20}$/;
 
 const formatMemberSince = (value: string) => {
-  const parsed = new Date(value);
-
-  if (Number.isNaN(parsed.getTime())) {
-    return 'Unknown date';
-  }
-
-  return parsed.toLocaleDateString('en-US', {
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-  });
+  return formatLongDate(value);
 };
 
 const formatActivityDate = (value: string) => {
-  const parsed = new Date(`${value}T00:00:00`);
-
-  if (Number.isNaN(parsed.getTime())) {
-    return value || 'Unknown date';
-  }
-
-  return parsed.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-  });
+  return formatMonthDay(value);
 };
 
 const toReadableActivityLabel = (activityType: string) => {
@@ -238,6 +226,14 @@ export default function Profile() {
   const trimmedNickname = nicknameDraft.trim();
   const isNicknameUnchanged = trimmedNickname === (profile.nickname ?? '').trim();
   const canSaveNickname = NICKNAME_PATTERN.test(trimmedNickname) && !isNicknameUnchanged;
+  const nicknameHintId = 'profile-nickname-hint';
+  const nicknameErrorId = 'profile-nickname-error';
+  const hasNicknameFormatError = nicknameDraft.length > 0 && !NICKNAME_PATTERN.test(trimmedNickname);
+  const nicknameDescriptionId = nicknameError
+    ? nicknameErrorId
+    : hasNicknameFormatError
+      ? nicknameHintId
+      : undefined;
 
   const handleNicknameSave = async () => {
     if (!canSaveNickname || isSavingNickname) {
@@ -380,26 +376,30 @@ export default function Profile() {
 
           <div className="mt-5 grid gap-3 sm:grid-cols-[minmax(0,1fr)_auto]">
             <div>
-              <label htmlFor="profile-nickname" className="mb-2 block text-sm text-text">
+              <label htmlFor="profile-nickname" className={fieldLabelClassName}>
                 Nickname
               </label>
               <input
                 id="profile-nickname"
+                name="nickname"
                 type="text"
                 value={nicknameDraft}
                 onChange={(event) => {
                   setNicknameDraft(event.target.value);
                   setNicknameError(null);
                 }}
-                className="w-full rounded-[16px] border border-border bg-surface-muted px-4 py-3 text-text outline-none transition-all focus:border-brand focus:bg-surface focus:ring-2 focus:ring-brand"
+                className={inputClassName}
                 maxLength={20}
-                autoComplete="off"
+                autoComplete="nickname"
                 spellCheck={false}
+                inputMode="text"
+                aria-invalid={nicknameError ? 'true' : 'false'}
+                aria-describedby={nicknameDescriptionId}
               />
               {nicknameError ? (
-                <p className="mt-2 text-sm text-danger">{nicknameError}</p>
-              ) : nicknameDraft.length > 0 && !NICKNAME_PATTERN.test(trimmedNickname) ? (
-                <p className="mt-2 text-sm text-text-subtle">
+                <p id={nicknameErrorId} className={fieldErrorClassName}>{nicknameError}</p>
+              ) : hasNicknameFormatError ? (
+                <p id={nicknameHintId} className={fieldHintClassName}>
                   3-20 characters, letters, digits, or underscore.
                 </p>
               ) : null}

@@ -14,8 +14,9 @@ import { createBook, type ApiBook, type CreateBookRequest } from '../api/api';
 import { AddBookModal } from '../components/AddBookModal.tsx';
 import { BookCard, type BookData } from '../components/BookCard.tsx';
 import { BottomNav } from '../components/BottomNav.tsx';
-import { useBookTransition } from '../features/bookTransition/BookTransitionContext.tsx';
-import { useBooks } from '../features/books/BooksProvider.tsx';
+import { inputClassName } from '../components/form/inputStyles';
+import { useBookTransition } from '../features/bookTransition/useBookTransition.ts';
+import { useBooks } from '../features/books/useBooks.ts';
 
 type BookStatus = 'active' | 'completed' | 'archived';
 type TabKey = 'all' | 'active' | 'completed' | 'archived';
@@ -273,16 +274,22 @@ export default function Library() {
 
         <div className="mt-6 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
           <div className="relative w-full lg:max-w-sm">
+            <label htmlFor="library-search" className="sr-only">
+              Search books by title or author
+            </label>
             <Search
               size={16}
               className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-text-subtle"
             />
             <input
+              id="library-search"
+              name="search"
               type="search"
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
               placeholder="Search title or author"
-              className="h-11 w-full rounded-full border border-border bg-surface pl-10 pr-4 text-sm text-text placeholder:text-text-subtle shadow-[0_8px_18px_rgba(31,41,55,0.04)] focus:border-transparent focus:outline-none focus:ring-2 focus:ring-brand"
+              className={`${inputClassName} h-11 rounded-full bg-surface pl-10 shadow-[0_8px_18px_rgba(31,41,55,0.04)]`}
+              autoComplete="off"
             />
           </div>
           <LibraryTabs active={activeTab} onChange={setActiveTab} counts={counts} />
@@ -340,10 +347,13 @@ export default function Library() {
                 <BookCard
                   key={book.id}
                   book={book}
+                  to={`/book/${book.id}`}
                   onSelect={(rect) => {
                     if (activeBook) return;
                     startBookTransition(book, rect);
-                    window.setTimeout(() => navigate(`/book/${book.id}`), 600);
+                    window.setTimeout(() => {
+                      void navigate(`/book/${book.id}`);
+                    }, 600);
                   }}
                 />
               ))}

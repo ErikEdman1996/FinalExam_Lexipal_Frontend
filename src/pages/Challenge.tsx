@@ -1,4 +1,4 @@
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Brain, ChevronRight, LockKeyhole, Swords, type LucideIcon } from 'lucide-react';
 import { BottomNav } from '../components/BottomNav';
 
@@ -48,10 +48,9 @@ const MINIGAMES: MinigameTile[] = [
 
 interface MinigameTileCardProps {
   tile: MinigameTile;
-  onLaunch: () => void;
 }
 
-function MinigameTileCard({ tile, onLaunch }: MinigameTileCardProps) {
+function MinigameTileCard({ tile }: MinigameTileCardProps) {
   const { title, description, icon: Icon, locked } = tile;
 
   if (locked) {
@@ -77,9 +76,8 @@ function MinigameTileCard({ tile, onLaunch }: MinigameTileCardProps) {
   }
 
   return (
-    <button
-      type="button"
-      onClick={onLaunch}
+    <Link
+      to={tile.route ?? '/challenges'}
       className="group flex flex-col items-start rounded-[26px] border border-border bg-surface p-6 text-left shadow-[0_14px_28px_rgba(31,41,55,0.06)] transition-all duration-300 hover:-translate-y-0.5 hover:bg-surface-alt focus:outline-none focus:ring-2 focus:ring-brand"
     >
       <div className="flex h-14 w-14 items-center justify-center rounded-[20px] bg-accent-soft shadow-[0_10px_24px_rgba(212,146,79,0.16)]">
@@ -91,13 +89,11 @@ function MinigameTileCard({ tile, onLaunch }: MinigameTileCardProps) {
         Play
         <ChevronRight size={16} />
       </div>
-    </button>
+    </Link>
   );
 }
 
 export default function Challenge() {
-  const navigate = useNavigate();
-
   return (
     <div className="page-bg min-h-screen pb-24 lg:pl-60 lg:pb-0">
       <div className="mx-auto max-w-3xl px-5 py-8 sm:px-6 sm:py-10">
@@ -115,15 +111,7 @@ export default function Challenge() {
 
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
           {MINIGAMES.map((tile) => (
-            <MinigameTileCard
-              key={tile.id}
-              tile={tile}
-              onLaunch={() => {
-                if (tile.route) {
-                  navigate(tile.route);
-                }
-              }}
-            />
+            <MinigameTileCard key={tile.id} tile={tile} />
           ))}
         </div>
       </div>

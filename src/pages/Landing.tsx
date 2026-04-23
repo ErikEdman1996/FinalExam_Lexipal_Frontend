@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { ArrowRight, BookOpen, Brain, Sparkles, Trophy } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '../components/Button';
-import { useAuth } from '../features/auth/AuthProvider';
+import { useAuth } from '../features/auth/useAuth';
 
 export default function Landing() {
   const navigate = useNavigate();
@@ -19,7 +19,7 @@ export default function Landing() {
 
   useEffect(() => {
     if (initialized && authenticated && hasBootstrappedProfile && !isBootstrappingProfile && !bootstrapError) {
-      navigate('/library', { replace: true });
+      void navigate('/library', { replace: true });
     }
   }, [authenticated, bootstrapError, hasBootstrappedProfile, initialized, isBootstrappingProfile, navigate]);
 

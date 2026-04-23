@@ -4,6 +4,8 @@ import { AnimatePresence, motion } from 'motion/react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { BottomNav } from '../components/BottomNav';
 import { Button } from '../components/Button';
+import { AppDialog, AppDialogClose, AppDialogTitle } from '../components/dialog/AppDialog';
+import { formatShortDate } from '../utils/formatting';
 import {
   extractDefinitionFromDefinitions,
   extractDictionarySenses,
@@ -58,17 +60,7 @@ const formatCapturedDate = (value?: string) => {
     return 'Recently captured';
   }
 
-  const parsed = new Date(value);
-
-  if (Number.isNaN(parsed.getTime())) {
-    return 'Recently captured';
-  }
-
-  return parsed.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
+  return formatShortDate(value);
 };
 
 const buildBoardPages = (board: CodexBoardResponseDTO | null) => {
@@ -210,17 +202,22 @@ function CapturedSlotModal({ details, onClose }: { details: CapturedSlotDetails 
   const rarity = normalizeRarityTier(details.slot.rarityTier);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-5">
-      <div className="w-full max-w-xl rounded-t-[32px] border border-white/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,255,0.96))] shadow-[0_26px_60px_rgba(15,23,42,0.22)] sm:max-w-2xl sm:rounded-[32px]">
+    <AppDialog
+      isOpen={details != null}
+      onClose={onClose}
+      contentClassName="w-full max-w-xl rounded-t-[32px] border border-white/60 bg-[linear-gradient(180deg,rgba(255,255,255,0.98),rgba(248,250,255,0.96))] shadow-[0_26px_60px_rgba(15,23,42,0.22)] sm:max-w-2xl sm:rounded-[32px]"
+    >
         <div className="flex items-center justify-end px-5 pt-5">
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-9 w-9 items-center justify-center rounded-full text-[#7B8794] transition-colors hover:bg-[rgba(36,52,71,0.06)]"
-            aria-label="Close dictionary details"
-          >
-            <X size={18} />
-          </button>
+          <AppDialogClose asChild>
+            <button
+              type="button"
+              onClick={onClose}
+              className="flex h-9 w-9 items-center justify-center rounded-full text-[#7B8794] transition-colors hover:bg-[rgba(36,52,71,0.06)]"
+              aria-label="Close dictionary details"
+            >
+              <X size={18} />
+            </button>
+          </AppDialogClose>
         </div>
 
         <div className="px-5 pb-5 sm:px-6 sm:pb-6">
@@ -237,9 +234,9 @@ function CapturedSlotModal({ details, onClose }: { details: CapturedSlotDetails 
                 <div className="flex items-start justify-between gap-4 border-b border-[rgba(36,52,71,0.08)] pb-4">
                   <div>
                     <p className="text-[0.72rem] uppercase tracking-[0.22em] text-[#6C757D]">Dictionary entry</p>
-                    <h2 className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-[#23324A]">
+                    <AppDialogTitle className="mt-2 text-3xl font-semibold tracking-[-0.04em] text-[#23324A]">
                       {entry?.lemma ?? details.slot.lemma ?? 'Captured word'}
-                    </h2>
+                    </AppDialogTitle>
                     {isLoadingEntry ? (
                       <div className="mt-3 h-5 w-32 rounded-full bg-[#EEF3F7]" />
                     ) : (
@@ -329,8 +326,7 @@ function CapturedSlotModal({ details, onClose }: { details: CapturedSlotDetails 
             </Button>
           </div>
         </div>
-      </div>
-    </div>
+    </AppDialog>
   );
 }
 
@@ -460,7 +456,7 @@ export default function Codex() {
 
   useEffect(() => {
     if (pageNumberParam && !isValidRoutePage) {
-      navigate('/codex/page/1', { replace: true });
+      void navigate('/codex/page/1', { replace: true });
     }
   }, [isValidRoutePage, navigate, pageNumberParam]);
 
@@ -479,7 +475,7 @@ export default function Codex() {
 
   const handlePageChange = (pageNumber: number) => {
     setNavigationDirection(pageNumber > currentPageNumber ? 1 : -1);
-    navigate(`/codex/page/${pageNumber}`);
+    void navigate(`/codex/page/${pageNumber}`);
   };
 
   const pageEnterState = {

@@ -2354,7 +2354,20 @@ export const getDictionaryWord = async (lemma: string) => {
             headers: await buildAuthHeaders(),
         });
         if (!res.ok) throw new Error('Failed to fetch dictionary word');
-        return await res.json();
+        const data: unknown = await res.json();
+
+        if (!isRecord(data)) {
+            throw new Error('Dictionary response was malformed.');
+        }
+
+        return {
+            id: toFiniteNumber(data.id) ?? 0,
+            lemma: typeof data.lemma === 'string' ? data.lemma : lemma,
+            rarityScore: toFiniteNumber(data.rarityScore),
+            source: typeof data.source === 'string' ? data.source : null,
+            definitions: isApiJsonValue(data.definitions) ? data.definitions : null,
+            phonetics: isApiJsonValue(data.phonetics) ? data.phonetics : null,
+        } satisfies ApiWord;
     } catch (error) {
         console.error('Error fetching dictionary word:', error);
         throw error;
@@ -2792,6 +2805,488 @@ export const createCodexEntry = async (sessionId: number, payload: CodexEntryCre
         } satisfies CodexEntryCreateResponseDTO;
     } catch (error) {
         console.error('Error creating codex entry:', error);
+        throw error;
+    }
+};
+
+
+export type ReadingListStatus = 'DRAFT' | 'PUBLISHED' | 'ARCHIVED';
+
+export interface ReadingListBookSlotRequestDTO {
+    title: string;
+    author: string;
+    note?: string | null;
+    position: number;
+}
+
+export interface ReadingListCreateRequestDTO {
+    title: string;
+    description?: string | null;
+    status?: ReadingListStatus;
+    books: ReadingListBookSlotRequestDTO[];
+}
+
+export interface ReadingListUpdateRequestDTO {
+    title?: string;
+    description?: string | null;
+    status?: ReadingListStatus;
+}
+
+export interface ReadingListSummaryResponseDTO {
+    id: number;
+    title: string;
+    description: string | null;
+    ownerNickname: string | null;
+    ownerUserId: number;
+    status: ReadingListStatus;
+    starCount: number;
+    bookCount: number;
+    callerIsOwner: boolean;
+    hasStarred: boolean;
+    isSubscribed: boolean;
+    createdAt: string;
+    updatedAt: string;
+}
+
+export interface ReadingListSlotResponseDTO {
+    catalogBookId: number;
+    position: number;
+    title: string;
+    author: string;
+    note: string | null;
+    inMyLibrary: boolean | null;
+    completedByMe: boolean | null;
+}
+
+export interface ReadingListDetailResponseDTO {
+    id: number;
+    title: string;
+    description: string | null;
+    ownerNickname: string | null;
+    ownerUserId: number;
+    status: ReadingListStatus;
+    starCount: number;
+    callerIsOwner: boolean;
+    hasStarred: boolean;
+    isSubscribed: boolean;
+    createdAt: string;
+    updatedAt: string;
+    slots: ReadingListSlotResponseDTO[];
+}
+
+export interface ReadingListSubscriptionResponseDTO {
+    listId: number;
+    listTitle: string;
+    ownerNickname: string | null;
+    subscribedAt: string;
+    completedAt: string | null;
+    slotsTotal: number;
+    slotsCompleted: number;
+}
+
+export interface BrowseReadingListsOptions {
+    q?: string;
+    minStars?: number;
+    page?: number;
+    size?: number;
+}
+
+const toReadingListStatus = (value: unknown): ReadingListStatus => {
+    if (value === 'DRAFT' || value === 'ARCHIVED') {
+        return value;
+    }
+    return 'PUBLISHED';
+};
+
+const toReadingListSummary = (value: unknown): ReadingListSummaryResponseDTO | null => {
+    if (!isRecord(value)) {
+        return null;
+    }
+
+    const id = toFiniteNumber(value.id);
+
+    if (id == null) {
+        return null;
+    }
+
+    return {
+        id,
+        title: typeof value.title === 'string' ? value.title : '',
+        description: typeof value.description === 'string' ? value.description : null,
+        ownerNickname: typeof value.ownerNickname === 'string' ? value.ownerNickname : null,
+        ownerUserId: toFiniteNumber(value.ownerUserId) ?? 0,
+        status: toReadingListStatus(value.status),
+        starCount: Math.max(0, toFiniteNumber(value.starCount) ?? 0),
+        bookCount: Math.max(0, toFiniteNumber(value.bookCount) ?? 0),
+        callerIsOwner: value.callerIsOwner === true,
+        hasStarred: value.hasStarred === true,
+        isSubscribed: value.isSubscribed === true,
+        createdAt: typeof value.createdAt === 'string' ? value.createdAt : '',
+        updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : '',
+    };
+};
+
+const toReadingListSlot = (value: unknown): ReadingListSlotResponseDTO | null => {
+    if (!isRecord(value)) {
+        return null;
+    }
+
+    const catalogBookId = toFiniteNumber(value.catalogBookId);
+    const position = toFiniteNumber(value.position);
+
+    if (catalogBookId == null || position == null) {
+        return null;
+    }
+
+    const inMyLibrary = typeof value.inMyLibrary === 'boolean' ? value.inMyLibrary : null;
+    const completedByMe = typeof value.completedByMe === 'boolean' ? value.completedByMe : null;
+
+    return {
+        catalogBookId,
+        position,
+        title: typeof value.title === 'string' ? value.title : '',
+        author: typeof value.author === 'string' ? value.author : '',
+        note: typeof value.note === 'string' && value.note.trim() ? value.note : null,
+        inMyLibrary,
+        completedByMe,
+    };
+};
+
+const toReadingListDetail = (value: unknown): ReadingListDetailResponseDTO => {
+    if (!isRecord(value)) {
+        throw new Error('Unexpected reading list detail response shape.');
+    }
+
+    const slots = Array.isArray(value.slots)
+        ? value.slots
+            .map(toReadingListSlot)
+            .filter((slot): slot is ReadingListSlotResponseDTO => slot !== null)
+            .sort((a, b) => a.position - b.position)
+        : [];
+
+    return {
+        id: toFiniteNumber(value.id) ?? 0,
+        title: typeof value.title === 'string' ? value.title : '',
+        description: typeof value.description === 'string' ? value.description : null,
+        ownerNickname: typeof value.ownerNickname === 'string' ? value.ownerNickname : null,
+        ownerUserId: toFiniteNumber(value.ownerUserId) ?? 0,
+        status: toReadingListStatus(value.status),
+        starCount: Math.max(0, toFiniteNumber(value.starCount) ?? 0),
+        callerIsOwner: value.callerIsOwner === true,
+        hasStarred: value.hasStarred === true,
+        isSubscribed: value.isSubscribed === true,
+        createdAt: typeof value.createdAt === 'string' ? value.createdAt : '',
+        updatedAt: typeof value.updatedAt === 'string' ? value.updatedAt : '',
+        slots,
+    };
+};
+
+const toReadingListSubscription = (value: unknown): ReadingListSubscriptionResponseDTO | null => {
+    if (!isRecord(value)) {
+        return null;
+    }
+
+    const listId = toFiniteNumber(value.listId);
+
+    if (listId == null) {
+        return null;
+    }
+
+    return {
+        listId,
+        listTitle: typeof value.listTitle === 'string' ? value.listTitle : '',
+        ownerNickname: typeof value.ownerNickname === 'string' ? value.ownerNickname : null,
+        subscribedAt: typeof value.subscribedAt === 'string' ? value.subscribedAt : '',
+        completedAt: typeof value.completedAt === 'string' && value.completedAt.trim()
+            ? value.completedAt
+            : null,
+        slotsTotal: Math.max(0, toFiniteNumber(value.slotsTotal) ?? 0),
+        slotsCompleted: Math.max(0, toFiniteNumber(value.slotsCompleted) ?? 0),
+    };
+};
+
+const normalizeReadingListSummaries = (value: unknown): ReadingListSummaryResponseDTO[] => {
+    const array = Array.isArray(value)
+        ? value
+        : (isRecord(value)
+            ? [value.content, value.data, value.items, value.readingLists]
+                .find((candidate) => Array.isArray(candidate)) as unknown[] | undefined
+            : undefined);
+
+    if (!Array.isArray(array)) {
+        return [];
+    }
+
+    return array
+        .map(toReadingListSummary)
+        .filter((summary): summary is ReadingListSummaryResponseDTO => summary !== null);
+};
+
+const normalizeReadingListSubscriptions = (value: unknown): ReadingListSubscriptionResponseDTO[] => {
+    const array = Array.isArray(value)
+        ? value
+        : (isRecord(value)
+            ? [value.content, value.data, value.items, value.subscriptions]
+                .find((candidate) => Array.isArray(candidate)) as unknown[] | undefined
+            : undefined);
+
+    if (!Array.isArray(array)) {
+        return [];
+    }
+
+    return array
+        .map(toReadingListSubscription)
+        .filter((sub): sub is ReadingListSubscriptionResponseDTO => sub !== null);
+};
+
+type ReadingListCreateFieldName = 'title' | 'description' | 'status' | 'books';
+const READING_LIST_CREATE_FIELD_NAMES = [
+    'title',
+    'description',
+    'status',
+    'books',
+] as const satisfies readonly ReadingListCreateFieldName[];
+
+export const createReadingList = async (payload: ReadingListCreateRequestDTO) => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/reading-lists`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(await buildAuthHeaders()),
+            },
+            body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) {
+            const errorPayload = await readErrorPayload(res);
+
+            if (res.status === 400) {
+                const fieldErrors = extractFieldErrors(errorPayload, READING_LIST_CREATE_FIELD_NAMES);
+                const message = normalizeErrorMessage(errorPayload, 'Could not create the reading list.');
+
+                throw new ApiValidationError<ReadingListCreateFieldName>(message, {
+                    status: 400,
+                    fieldErrors,
+                });
+            }
+
+            throw toApiResponseError(errorPayload, 'Could not create the reading list.', res.status);
+        }
+
+        const data = await res.json();
+        return toReadingListDetail(data);
+    } catch (error) {
+        console.error('Error creating reading list:', error);
+        throw error;
+    }
+};
+
+export const browseReadingLists = async (options: BrowseReadingListsOptions = {}) => {
+    try {
+        const params = new URLSearchParams();
+
+        if (options.q && options.q.trim()) {
+            params.set('q', options.q.trim());
+        }
+
+        if (typeof options.minStars === 'number' && options.minStars > 0) {
+            params.set('minStars', String(Math.floor(options.minStars)));
+        }
+
+        if (typeof options.page === 'number' && options.page > 0) {
+            params.set('page', String(Math.floor(options.page)));
+        }
+
+        if (typeof options.size === 'number' && options.size > 0) {
+            params.set('size', String(Math.min(100, Math.floor(options.size))));
+        }
+
+        const query = params.toString();
+        const res = await fetch(`${API_BASE_URL}/reading-lists${query ? `?${query}` : ''}`, {
+            headers: await buildAuthHeaders(),
+        });
+
+        if (!res.ok) {
+            throw toApiResponseError(await readErrorPayload(res), 'Could not load reading lists.', res.status);
+        }
+
+        const data = await res.json();
+        return normalizeReadingListSummaries(data);
+    } catch (error) {
+        console.error('Error browsing reading lists:', error);
+        throw error;
+    }
+};
+
+export const getMyReadingLists = async () => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/reading-lists/mine`, {
+            headers: await buildAuthHeaders(),
+        });
+
+        if (!res.ok) {
+            throw toApiResponseError(await readErrorPayload(res), 'Could not load your reading lists.', res.status);
+        }
+
+        const data = await res.json();
+        return normalizeReadingListSummaries(data);
+    } catch (error) {
+        console.error('Error fetching my reading lists:', error);
+        throw error;
+    }
+};
+
+export const getMyReadingListSubscriptions = async () => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/reading-lists/subscriptions`, {
+            headers: await buildAuthHeaders(),
+        });
+
+        if (!res.ok) {
+            throw toApiResponseError(await readErrorPayload(res), 'Could not load your subscriptions.', res.status);
+        }
+
+        const data = await res.json();
+        return normalizeReadingListSubscriptions(data);
+    } catch (error) {
+        console.error('Error fetching reading list subscriptions:', error);
+        throw error;
+    }
+};
+
+export const getReadingList = async (listId: string | number) => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/reading-lists/${listId}`, {
+            headers: await buildAuthHeaders(),
+        });
+
+        if (!res.ok) {
+            throw toApiResponseError(await readErrorPayload(res), 'Could not load the reading list.', res.status);
+        }
+
+        const data = await res.json();
+        return toReadingListDetail(data);
+    } catch (error) {
+        console.error('Error fetching reading list:', error);
+        throw error;
+    }
+};
+
+export const updateReadingList = async (
+    listId: string | number,
+    payload: ReadingListUpdateRequestDTO,
+) => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/reading-lists/${listId}`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(await buildAuthHeaders()),
+            },
+            body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) {
+            const errorPayload = await readErrorPayload(res);
+
+            if (res.status === 400) {
+                const fieldErrors = extractFieldErrors(errorPayload, ['title', 'description', 'status'] as const);
+                const message = normalizeErrorMessage(errorPayload, 'Could not update the reading list.');
+
+                throw new ApiValidationError<'title' | 'description' | 'status'>(message, {
+                    status: 400,
+                    fieldErrors,
+                });
+            }
+
+            throw toApiResponseError(errorPayload, 'Could not update the reading list.', res.status);
+        }
+
+        const data = await res.json();
+        return toReadingListDetail(data);
+    } catch (error) {
+        console.error('Error updating reading list:', error);
+        throw error;
+    }
+};
+
+export const deleteReadingList = async (listId: string | number) => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/reading-lists/${listId}`, {
+            method: 'DELETE',
+            headers: await buildAuthHeaders(),
+        });
+
+        if (!res.ok) {
+            throw toApiResponseError(await readErrorPayload(res), 'Could not delete the reading list.', res.status);
+        }
+    } catch (error) {
+        console.error('Error deleting reading list:', error);
+        throw error;
+    }
+};
+
+export const subscribeToReadingList = async (listId: string | number) => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/reading-lists/${listId}/subscribe`, {
+            method: 'POST',
+            headers: await buildAuthHeaders(),
+        });
+
+        if (!res.ok) {
+            throw toApiResponseError(await readErrorPayload(res), 'Could not subscribe to the list.', res.status);
+        }
+    } catch (error) {
+        console.error('Error subscribing to reading list:', error);
+        throw error;
+    }
+};
+
+export const unsubscribeFromReadingList = async (listId: string | number) => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/reading-lists/${listId}/subscribe`, {
+            method: 'DELETE',
+            headers: await buildAuthHeaders(),
+        });
+
+        if (!res.ok) {
+            throw toApiResponseError(await readErrorPayload(res), 'Could not unsubscribe.', res.status);
+        }
+    } catch (error) {
+        console.error('Error unsubscribing from reading list:', error);
+        throw error;
+    }
+};
+
+export const starReadingList = async (listId: string | number) => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/reading-lists/${listId}/star`, {
+            method: 'POST',
+            headers: await buildAuthHeaders(),
+        });
+
+        if (!res.ok) {
+            throw toApiResponseError(await readErrorPayload(res), 'Could not star the list.', res.status);
+        }
+    } catch (error) {
+        console.error('Error starring reading list:', error);
+        throw error;
+    }
+};
+
+export const unstarReadingList = async (listId: string | number) => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/reading-lists/${listId}/star`, {
+            method: 'DELETE',
+            headers: await buildAuthHeaders(),
+        });
+
+        if (!res.ok) {
+            throw toApiResponseError(await readErrorPayload(res), 'Could not remove the star.', res.status);
+        }
+    } catch (error) {
+        console.error('Error unstarring reading list:', error);
         throw error;
     }
 };

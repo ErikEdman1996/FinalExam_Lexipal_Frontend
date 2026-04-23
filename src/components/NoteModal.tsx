@@ -2,6 +2,14 @@ import { useEffect, useId, useState, type FormEvent } from 'react';
 import { FileText, X } from 'lucide-react';
 import { ApiValidationError, type NoteFieldErrors } from '../api/api';
 import { Button } from './Button';
+import { AppDialog, AppDialogClose, AppDialogTitle } from './dialog/AppDialog';
+import {
+  fieldErrorClassName,
+  fieldHintClassName,
+  fieldLabelClassName,
+  inputClassName,
+  textareaClassName,
+} from './form/inputStyles';
 
 interface NoteSubmitValues {
   quotedText: string;
@@ -62,9 +70,6 @@ export function NoteModal({
   if (!isOpen) {
     return null;
   }
-
-  const inputClassName = 'w-full rounded-[16px] border border-border bg-surface-muted px-4 py-3 text-text outline-none transition-all focus:border-brand focus:bg-surface focus:ring-2 focus:ring-brand';
-  const errorClassName = 'mt-2 text-sm text-danger';
 
   const clearFieldError = (fieldName: keyof NoteFieldErrors) => {
     setFieldErrors((previousErrors) => {
@@ -135,26 +140,26 @@ export function NoteModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        className="w-full max-w-lg max-h-[94vh] overflow-y-auto rounded-t-[32px] border border-border bg-surface shadow-[0_8px_32px_rgba(0,0,0,0.12)] animate-in slide-in-from-bottom duration-300 sm:rounded-[32px] sm:slide-in-from-bottom-0"
-      >
-        <div className="p-6">
-          <div className="flex items-start justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand-soft">
-                <FileText size={20} className="text-brand-strong" />
-              </div>
-              <div>
-                <p className="text-[0.72rem] uppercase tracking-[0.24em] text-text-subtle">Reading note</p>
-                <h2 id={titleId} className="mt-1 text-2xl font-semibold text-text">
-                  {heading}
-                </h2>
-              </div>
+    <AppDialog
+      isOpen={isOpen}
+      onClose={onClose}
+      canClose={!isSubmitting}
+      contentClassName="w-full max-w-lg max-h-[94vh] overflow-y-auto rounded-t-[32px] border border-border bg-surface shadow-[0_8px_32px_rgba(0,0,0,0.12)] animate-in slide-in-from-bottom duration-300 sm:rounded-[32px] sm:slide-in-from-bottom-0"
+    >
+      <div className="p-6">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-brand-soft">
+              <FileText size={20} className="text-brand-strong" />
             </div>
+            <div>
+              <p className="text-[0.72rem] uppercase tracking-[0.24em] text-text-subtle">Reading note</p>
+              <AppDialogTitle id={titleId} className="mt-1 text-2xl font-semibold text-text">
+                {heading}
+              </AppDialogTitle>
+            </div>
+          </div>
+          <AppDialogClose asChild>
             <button
               type="button"
               onClick={onClose}
@@ -164,95 +169,125 @@ export function NoteModal({
             >
               <X size={20} className="text-text-muted" />
             </button>
+          </AppDialogClose>
+        </div>
+
+        <form
+          onSubmit={(event) => {
+            void handleSubmit(event);
+          }}
+          noValidate
+          className="mt-6 space-y-4"
+        >
+          <div>
+            <label htmlFor={`${titleId}-quoted-text`} className={fieldLabelClassName}>
+              Quoted text
+            </label>
+            <textarea
+              id={`${titleId}-quoted-text`}
+              name="quotedText"
+              value={quotedText}
+              onChange={(event) => {
+                setQuotedText(event.target.value);
+                clearFieldError('quotedText');
+                setSubmitError(null);
+              }}
+              placeholder="Paste or type the passage you want to remember..."
+              className={`${textareaClassName} min-h-[180px]`}
+              required
+              aria-invalid={fieldErrors.quotedText ? 'true' : 'false'}
+              aria-describedby={fieldErrors.quotedText ? `${titleId}-quoted-text-error` : undefined}
+            />
+            {fieldErrors.quotedText ? (
+              <p id={`${titleId}-quoted-text-error`} className={fieldErrorClassName}>
+                {fieldErrors.quotedText}
+              </p>
+            ) : null}
           </div>
 
-          <form onSubmit={handleSubmit} noValidate className="mt-6 space-y-4">
-            <div>
-              <label htmlFor={`${titleId}-quoted-text`} className="mb-2 block text-sm font-medium text-text">
-                Quoted text
-              </label>
-              <textarea
-                id={`${titleId}-quoted-text`}
-                value={quotedText}
-                onChange={(event) => {
-                  setQuotedText(event.target.value);
-                  clearFieldError('quotedText');
-                  setSubmitError(null);
-                }}
-                placeholder="Paste or type the passage you want to remember..."
-                className={`${inputClassName} min-h-[180px] resize-none rounded-[18px]`}
-                autoFocus
-                required
-              />
-              {fieldErrors.quotedText ? <p className={errorClassName}>{fieldErrors.quotedText}</p> : null}
-            </div>
+          <div>
+            <label htmlFor={`${titleId}-page-number`} className={fieldLabelClassName}>
+              Page number
+            </label>
+            <input
+              id={`${titleId}-page-number`}
+              name="pageNumber"
+              type="number"
+              value={pageNumber}
+              onChange={(event) => {
+                setPageNumber(event.target.value);
+                clearFieldError('pageNumber');
+                setSubmitError(null);
+              }}
+              min="1"
+              max={String(bookTotalPages)}
+              placeholder="Enter page number"
+              className={inputClassName}
+              inputMode="numeric"
+              required
+              aria-invalid={fieldErrors.pageNumber ? 'true' : 'false'}
+              aria-describedby={`${titleId}-page-number-hint${fieldErrors.pageNumber ? ` ${titleId}-page-number-error` : ''}`}
+            />
+            <p id={`${titleId}-page-number-hint`} className={fieldHintClassName}>
+              Use a page between 1 and {bookTotalPages}.
+            </p>
+            {fieldErrors.pageNumber ? (
+              <p id={`${titleId}-page-number-error`} className={fieldErrorClassName}>
+                {fieldErrors.pageNumber}
+              </p>
+            ) : null}
+          </div>
 
-            <div>
-              <label htmlFor={`${titleId}-page-number`} className="mb-2 block text-sm font-medium text-text">
-                Page number
-              </label>
-              <input
-                id={`${titleId}-page-number`}
-                type="number"
-                value={pageNumber}
-                onChange={(event) => {
-                  setPageNumber(event.target.value);
-                  clearFieldError('pageNumber');
-                  setSubmitError(null);
-                }}
-                min="1"
-                max={String(bookTotalPages)}
-                placeholder="Enter page number"
-                className={inputClassName}
-                required
-              />
-              <p className="mt-2 text-xs text-text-muted">Use a page between 1 and {bookTotalPages}.</p>
-              {fieldErrors.pageNumber ? <p className={errorClassName}>{fieldErrors.pageNumber}</p> : null}
-            </div>
+          <div>
+            <label htmlFor={`${titleId}-chapter-label`} className={fieldLabelClassName}>
+              Chapter label
+            </label>
+            <input
+              id={`${titleId}-chapter-label`}
+              name="chapterLabel"
+              type="text"
+              value={chapterLabel}
+              onChange={(event) => {
+                setChapterLabel(event.target.value);
+                clearFieldError('chapterLabel');
+                setSubmitError(null);
+              }}
+              placeholder="e.g. Chapter 3"
+              maxLength={100}
+              className={inputClassName}
+              autoComplete="off"
+              aria-invalid={fieldErrors.chapterLabel ? 'true' : 'false'}
+              aria-describedby={fieldErrors.chapterLabel ? `${titleId}-chapter-label-error` : undefined}
+            />
+            {fieldErrors.chapterLabel ? (
+              <p id={`${titleId}-chapter-label-error`} className={fieldErrorClassName}>
+                {fieldErrors.chapterLabel}
+              </p>
+            ) : null}
+          </div>
 
-            <div>
-              <label htmlFor={`${titleId}-chapter-label`} className="mb-2 block text-sm font-medium text-text">
-                Chapter label
-              </label>
-              <input
-                id={`${titleId}-chapter-label`}
-                type="text"
-                value={chapterLabel}
-                onChange={(event) => {
-                  setChapterLabel(event.target.value);
-                  clearFieldError('chapterLabel');
-                  setSubmitError(null);
-                }}
-                placeholder="e.g. Chapter 3"
-                maxLength={100}
-                className={inputClassName}
-              />
-              {fieldErrors.chapterLabel ? <p className={errorClassName}>{fieldErrors.chapterLabel}</p> : null}
-            </div>
+          {submitError ? <p className={fieldErrorClassName}>{submitError}</p> : null}
 
-            {submitError ? <p className="text-sm text-danger">{submitError}</p> : null}
-
-            <div className="flex gap-3 pt-2">
-              <Button
-                type="button"
-                variant="outline"
-                className="flex-1 rounded-full"
-                onClick={onClose}
-                disabled={isSubmitting}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                className="flex-1 rounded-full shadow-[0_12px_24px_rgba(76,167,132,0.18)]"
-                disabled={isSubmitting}
-              >
-                {isSubmitting ? 'Saving...' : submitLabel}
-              </Button>
-            </div>
-          </form>
-        </div>
+          <div className="flex gap-3 pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="flex-1 rounded-full"
+              onClick={onClose}
+              disabled={isSubmitting}
+            >
+              Cancel
+            </Button>
+            <Button
+              type="submit"
+              className="flex-1 rounded-full shadow-[0_12px_24px_rgba(76,167,132,0.18)]"
+              disabled={isSubmitting}
+            >
+              {isSubmitting ? 'Saving...' : submitLabel}
+            </Button>
+          </div>
+        </form>
       </div>
-    </div>
+    </AppDialog>
   );
 }

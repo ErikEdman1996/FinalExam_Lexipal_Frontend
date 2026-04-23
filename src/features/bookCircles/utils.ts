@@ -3,11 +3,12 @@ import type {
   BookCircleVisibility,
   ProfileReadResponseDTO,
 } from '../../api/api';
+import { inputClassName } from '../../components/form/inputStyles';
+import { formatDateFromDate } from '../../utils/formatting';
 
 const SERVER_LOCAL_DATE_PATTERN = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,9}))?)?)?$/;
 
-export const circleInputClassName =
-  'w-full rounded-[16px] border border-border bg-surface-muted px-4 py-3 text-text outline-none transition-all focus:border-brand focus:bg-surface focus:ring-2 focus:ring-brand';
+export const circleInputClassName = inputClassName;
 
 const toServerLocalDate = (value: string) => {
   const match = SERVER_LOCAL_DATE_PATTERN.exec(value.trim());
@@ -49,10 +50,10 @@ const formatServerLocal = (
     return value || fallback;
   }
 
-  return new Intl.DateTimeFormat('en-US', {
-    timeZone: 'UTC',
+  return formatDateFromDate(parsed, {
     ...options,
-  }).format(parsed);
+    timeZone: 'UTC',
+  });
 };
 
 export const formatCircleDate = (value: string) => {

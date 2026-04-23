@@ -1,29 +1,14 @@
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useRef,
   useState,
   type PropsWithChildren,
 } from 'react';
-import { getProfile, type RarityTier, type XpUpdateResponseDTO } from '../../api/api';
+import { getProfile } from '../../api/api';
 import { XpGainBar, type XpGainPresentation } from '../../components/XpGainBar';
 import { launchCelebration } from './confetti';
-
-export interface XpGainTrigger {
-  xpUpdate: XpUpdateResponseDTO;
-  source?: 'capture' | 'challenge' | string;
-  rarityTier?: RarityTier;
-}
-
-interface XpGainContextValue {
-  showXpGain: (input: XpGainTrigger) => void;
-  currentTotalXp: number | null;
-  refreshProfileXp: () => Promise<number>;
-}
-
-const XpGainContext = createContext<XpGainContextValue | null>(null);
+import { XpGainContext, type XpGainTrigger } from './XpGainContext';
 
 export function XpGainProvider({ children }: PropsWithChildren) {
   const [currentTotalXp, setCurrentTotalXp] = useState<number | null>(null);
@@ -100,7 +85,7 @@ export function XpGainProvider({ children }: PropsWithChildren) {
     }
 
     isProcessingRef.current = false;
-  }, [refreshProfileXp]);
+  }, []);
 
   const showXpGain = useCallback((input: XpGainTrigger) => {
     queueRef.current.push({
@@ -113,10 +98,26 @@ export function XpGainProvider({ children }: PropsWithChildren) {
   }, [processQueue]);
 
   useEffect(() => {
-    void refreshProfileXp().catch((error) => {
-      console.error('Failed to load initial XP state:', error);
-    });
-  }, [refreshProfileXp]);
+    let isMounted = true;
+
+    getProfile()
+      .then((profile) => {
+        if (!isMounted) {
+          return;
+        }
+
+        const nextTotalXp = Math.max(0, profile.stats.totalXpEarned);
+        totalXpRef.current = nextTotalXp;
+        setCurrentTotalXp(nextTotalXp);
+      })
+      .catch((error) => {
+        console.error('Failed to load initial XP state:', error);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   return (
     <XpGainContext.Provider
@@ -131,13 +132,3 @@ export function XpGainProvider({ children }: PropsWithChildren) {
     </XpGainContext.Provider>
   );
 }
-
-export const useXpGain = () => {
-  const context = useContext(XpGainContext);
-
-  if (!context) {
-    throw new Error('useXpGain must be used within an XpGainProvider.');
-  }
-
-  return context;
-};

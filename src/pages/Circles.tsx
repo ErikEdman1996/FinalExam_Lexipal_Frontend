@@ -1,6 +1,6 @@
-import { useEffect, useState, type MouseEvent } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowRight, Copy, Plus, UsersRound } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import { getMyBookCircles, type BookCircleReadResponseDTO } from '../api/api';
 import { BottomNav } from '../components/BottomNav';
@@ -73,9 +73,7 @@ export default function Circles() {
     };
   }, []);
 
-  const handleCopyCode = async (event: MouseEvent<HTMLButtonElement>, inviteCode: string) => {
-    event.stopPropagation();
-
+  const handleCopyCode = async (inviteCode: string) => {
     try {
       await copyTextToClipboard(inviteCode);
       toast.success('Invite code copied.');
@@ -145,38 +143,46 @@ export default function Circles() {
           ) : (
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
               {circles.map((circle) => (
-                <button
+                <article
                   key={circle.id}
-                  type="button"
-                  onClick={() => navigate(`/circles/${circle.id}`)}
                   className="rounded-[28px] border border-border bg-surface p-6 text-left shadow-[0_14px_28px_rgba(31,41,55,0.06)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-surface-alt"
                 >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <p className="truncate text-2xl font-semibold tracking-[-0.03em] text-text">{circle.bookTitle}</p>
-                      <p className="mt-1 truncate text-sm text-text-muted">{circle.bookAuthor}</p>
+                  <Link
+                    to={`/circles/${circle.id}`}
+                    className="block rounded-[20px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="min-w-0">
+                        <p className="truncate text-2xl font-semibold tracking-[-0.03em] text-text">{circle.bookTitle}</p>
+                        <p className="mt-1 truncate text-sm text-text-muted">{circle.bookAuthor}</p>
+                      </div>
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[16px] bg-brand-soft">
+                        <UsersRound size={20} className="text-brand-strong" />
+                      </div>
                     </div>
-                    <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[16px] bg-brand-soft">
-                      <UsersRound size={20} className="text-brand-strong" />
-                    </div>
-                  </div>
 
-                  <div className="mt-5 flex flex-wrap gap-2">
-                    <CircleChip label={getVisibilityLabel(circle.visibility)} tone="muted" />
-                    {circle.callerIsOwner ? <CircleChip label="Owner" tone="brand" /> : null}
-                    <CircleChip label={`${circle.currentMemberCount} / ${circle.memberCap}`} tone="accent" />
-                  </div>
+                    <div className="mt-5 flex flex-wrap gap-2">
+                      <CircleChip label={getVisibilityLabel(circle.visibility)} tone="muted" />
+                      {circle.callerIsOwner ? <CircleChip label="Owner" tone="brand" /> : null}
+                      <CircleChip label={`${circle.currentMemberCount} / ${circle.memberCap}`} tone="accent" />
+                    </div>
 
-                  <div className="mt-5 grid gap-3 sm:grid-cols-2">
-                    <div className="rounded-[20px] bg-surface-muted p-4">
-                      <p className="text-xs uppercase tracking-[0.18em] text-text-subtle">Created</p>
-                      <p className="mt-2 text-sm font-medium text-text">{formatCircleDate(circle.createdAt)}</p>
+                    <div className="mt-5 grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-[20px] bg-surface-muted p-4">
+                        <p className="text-xs uppercase tracking-[0.18em] text-text-subtle">Created</p>
+                        <p className="mt-2 text-sm font-medium text-text">{formatCircleDate(circle.createdAt)}</p>
+                      </div>
+                      <div className="rounded-[20px] bg-surface-muted p-4">
+                        <p className="text-xs uppercase tracking-[0.18em] text-text-subtle">Owner</p>
+                        <p className="mt-2 text-sm font-medium text-text">{circle.ownerNickname?.trim() || 'Anonymous'}</p>
+                      </div>
                     </div>
-                    <div className="rounded-[20px] bg-surface-muted p-4">
-                      <p className="text-xs uppercase tracking-[0.18em] text-text-subtle">Owner</p>
-                      <p className="mt-2 text-sm font-medium text-text">{circle.ownerNickname?.trim() || 'Anonymous'}</p>
+
+                    <div className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-brand-strong">
+                      <span>Open circle</span>
+                      <ArrowRight size={14} />
                     </div>
-                  </div>
+                  </Link>
 
                   {circle.callerIsOwner ? (
                     <div className="mt-5 flex items-center justify-between gap-3 rounded-[22px] border border-border bg-surface-alt px-4 py-3">
@@ -186,7 +192,7 @@ export default function Circles() {
                       </div>
                       <button
                         type="button"
-                        onClick={(event) => void handleCopyCode(event, circle.inviteCode)}
+                        onClick={() => void handleCopyCode(circle.inviteCode)}
                         className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-surface px-4 text-sm font-medium text-text transition-colors hover:bg-surface-muted"
                       >
                         <Copy size={14} />
@@ -194,12 +200,7 @@ export default function Circles() {
                       </button>
                     </div>
                   ) : null}
-
-                  <div className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-brand-strong">
-                    <span>Open circle</span>
-                    <ArrowRight size={14} />
-                  </div>
-                </button>
+                </article>
               ))}
             </div>
           )}
@@ -213,7 +214,7 @@ export default function Circles() {
         onClose={() => setIsCreateOpen(false)}
         onCreated={(circle) => {
           setIsCreateOpen(false);
-          navigate(`/circles/${circle.id}`);
+          void navigate(`/circles/${circle.id}`);
         }}
       />
 
@@ -222,7 +223,7 @@ export default function Circles() {
         onClose={() => setIsJoinOpen(false)}
         onJoined={(circle) => {
           setIsJoinOpen(false);
-          navigate(`/circles/${circle.id}`);
+          void navigate(`/circles/${circle.id}`);
         }}
       />
     </div>

@@ -1,15 +1,7 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
-import type { BookData } from '../../components/BookCard';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { BookPickupOverlay } from '../../components/BookPickupOverlay';
-
-interface BookTransitionState {
-  activeBook: BookData | null;
-  originRect: DOMRect | null;
-  start: (book: BookData, rect: DOMRect) => void;
-  clear: () => void;
-}
-
-const BookTransitionCtx = createContext<BookTransitionState | null>(null);
+import type { BookData } from '../../components/BookCard';
+import { BookTransitionContext } from './BookTransitionStore';
 
 export function BookTransitionProvider({ children }: { children: ReactNode }) {
   const [activeBook, setActiveBook] = useState<BookData | null>(null);
@@ -31,19 +23,11 @@ export function BookTransitionProvider({ children }: { children: ReactNode }) {
   );
 
   return (
-    <BookTransitionCtx.Provider value={value}>
+    <BookTransitionContext.Provider value={value}>
       {children}
       {activeBook && originRect && (
         <BookPickupOverlay book={activeBook} originRect={originRect} onComplete={clear} />
       )}
-    </BookTransitionCtx.Provider>
+    </BookTransitionContext.Provider>
   );
-}
-
-export function useBookTransition(): BookTransitionState {
-  const ctx = useContext(BookTransitionCtx);
-  if (!ctx) {
-    throw new Error('useBookTransition must be used within BookTransitionProvider');
-  }
-  return ctx;
 }

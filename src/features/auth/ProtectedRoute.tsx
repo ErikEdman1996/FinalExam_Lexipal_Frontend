@@ -3,7 +3,7 @@ import { Button } from '../../components/Button';
 import { BooksProvider } from '../books/BooksProvider';
 import { XpGainProvider } from '../xp/XpGainProvider';
 import { NicknameOnboardingScreen } from '../onboarding/NicknameOnboardingScreen';
-import { useAuth } from './AuthProvider';
+import { useAuth } from './useAuth';
 
 function AuthLoadingScreen({ message }: { message: string }) {
   return (

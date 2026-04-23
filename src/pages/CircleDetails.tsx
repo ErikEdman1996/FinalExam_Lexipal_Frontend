@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Copy, Lock, UsersRound } from 'lucide-react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   ApiResponseError,
@@ -25,7 +25,7 @@ import {
   getMemberDisplayName,
   getVisibilityDescription,
 } from '../features/bookCircles/utils';
-import { useAuth } from '../features/auth/AuthProvider';
+import { useAuth } from '../features/auth/useAuth';
 
 const POLL_INTERVAL_MS = 30_000;
 
@@ -149,7 +149,7 @@ export default function CircleDetails() {
         && (error.status === 403 || error.status === 404)
       ) {
         toast.error(error.message);
-        navigate('/circles', { replace: true });
+        void navigate('/circles', { replace: true });
         return false;
       }
 
@@ -268,14 +268,14 @@ export default function CircleDetails() {
       if (pendingAction.type === 'close') {
         await closeBookCircle(circle.id);
         toast.success('Circle closed.');
-        navigate('/circles', { replace: true });
+        void navigate('/circles', { replace: true });
         return;
       }
 
       if (pendingAction.type === 'leave') {
         await leaveBookCircle(circle.id);
         toast.success('You left the circle.');
-        navigate('/circles', { replace: true });
+        void navigate('/circles', { replace: true });
         return;
       }
 
@@ -349,13 +349,12 @@ export default function CircleDetails() {
       <div className="page-bg min-h-screen pb-24 lg:pl-60 lg:pb-0">
         <div className="mx-auto max-w-6xl px-4 py-16 text-center sm:px-6 lg:px-8">
           <p className="text-lg text-danger">{errorMessage ?? 'Circle not found.'}</p>
-          <button
-            type="button"
-            onClick={() => navigate('/circles')}
-            className="mt-4 text-sm text-text-muted transition-colors hover:text-text"
+          <Link
+            to="/circles"
+            className="mt-4 inline-flex text-sm text-text-muted transition-colors hover:text-text"
           >
             Go back to circles
-          </button>
+          </Link>
         </div>
         <BottomNav />
       </div>
@@ -365,14 +364,13 @@ export default function CircleDetails() {
   return (
     <div className="page-bg min-h-screen pb-28 lg:pl-60 lg:pb-0">
       <div className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-10">
-        <button
-          type="button"
-          onClick={() => navigate('/circles')}
+        <Link
+          to="/circles"
           className="inline-flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-text"
         >
           <ArrowLeft size={16} />
           Back to circles
-        </button>
+        </Link>
 
         <div className="mt-5 grid gap-4 sm:gap-5 xl:grid-cols-[minmax(0,320px)_minmax(0,1fr)] xl:items-start">
           <aside className="space-y-4 xl:sticky xl:top-6">

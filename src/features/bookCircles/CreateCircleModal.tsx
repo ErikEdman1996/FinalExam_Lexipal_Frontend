@@ -9,8 +9,14 @@ import {
   type BookCircleVisibility,
 } from '../../api/api';
 import { Button } from '../../components/Button';
+import { AppDialog, AppDialogClose, AppDialogTitle } from '../../components/dialog/AppDialog';
+import {
+  fieldErrorClassName,
+  fieldHintClassName,
+  fieldLabelClassName,
+} from '../../components/form/inputStyles';
 import { ProgressBar } from '../../components/ProgressBar';
-import { useBooks } from '../books/BooksProvider';
+import { useBooks } from '../books/useBooks';
 import {
   circleInputClassName,
   copyTextToClipboard,
@@ -221,29 +227,36 @@ export function CreateCircleModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/45 p-0 backdrop-blur-sm sm:items-center sm:p-4">
-      <div className="w-full max-w-3xl rounded-t-[32px] border border-border bg-surface shadow-[0_20px_56px_rgba(15,23,42,0.18)] animate-in slide-in-from-bottom duration-300 sm:rounded-[32px] sm:slide-in-from-bottom-0">
-        <div className="max-h-[92vh] overflow-y-auto p-6 sm:p-7">
+    <AppDialog
+      isOpen={isOpen}
+      onClose={onClose}
+      canClose={!isSubmitting}
+      contentClassName="w-full max-w-3xl rounded-t-[32px] border border-border bg-surface shadow-[0_20px_56px_rgba(15,23,42,0.18)] animate-in slide-in-from-bottom duration-300 sm:rounded-[32px] sm:slide-in-from-bottom-0"
+    >
+      <div className="max-h-[92vh] overflow-y-auto p-6 sm:p-7">
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-[0.72rem] uppercase tracking-[0.28em] text-text-subtle">BookCircle</p>
-              <h2 className="mt-2 text-2xl font-semibold text-text sm:text-3xl">
+              <AppDialogTitle className="mt-2 text-2xl font-semibold text-text sm:text-3xl">
                 {createdCircle ? 'Your circle is ready' : 'Create a circle'}
-              </h2>
+              </AppDialogTitle>
               <p className="mt-2 max-w-xl text-sm leading-relaxed text-text-muted">
                 {createdCircle
                   ? 'Share the invite code with friends, then jump into the circle detail page.'
                   : 'Pick a book, choose how visible progress should be, and generate an invite code for your group.'}
               </p>
             </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-surface-muted"
-              aria-label="Close create circle modal"
-            >
-              <X size={18} className="text-text-muted" />
-            </button>
+            <AppDialogClose asChild>
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={isSubmitting}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-60"
+                aria-label="Close create circle modal"
+              >
+                <X size={18} className="text-text-muted" />
+              </button>
+            </AppDialogClose>
           </div>
 
           {createdCircle ? (
@@ -308,7 +321,13 @@ export function CreateCircleModal({
               </div>
             </div>
           ) : (
-            <form className="mt-8 space-y-6" onSubmit={handleSubmit} noValidate>
+            <form
+              className="mt-8 space-y-6"
+              onSubmit={(event) => {
+                void handleSubmit(event);
+              }}
+              noValidate
+            >
               <div className="flex w-full gap-1 rounded-full border border-border bg-surface-muted p-1 sm:w-fit">
                 {([
                   { key: 'existing', label: 'Use existing book' },
@@ -406,17 +425,18 @@ export function CreateCircleModal({
                   )}
 
                   {fieldErrors.existingBookId ? (
-                    <p className="mt-2 text-sm text-danger">{fieldErrors.existingBookId}</p>
+                    <p className={fieldErrorClassName}>{fieldErrors.existingBookId}</p>
                   ) : null}
                 </div>
               ) : (
                 <div className="grid gap-4 sm:grid-cols-2">
                   <div className="sm:col-span-2">
-                    <label htmlFor="circle-book-title" className="mb-2 block text-sm text-text">
+                    <label htmlFor="circle-book-title" className={fieldLabelClassName}>
                       Book title
                     </label>
                     <input
                       id="circle-book-title"
+                      name="bookTitle"
                       type="text"
                       value={bookTitle}
                       onChange={(event) => {
@@ -426,18 +446,22 @@ export function CreateCircleModal({
                       maxLength={100}
                       className={circleInputClassName}
                       placeholder="Dune"
+                      autoComplete="off"
+                      inputMode="text"
+                      spellCheck={false}
                     />
                     {fieldErrors.bookTitle ? (
-                      <p className="mt-2 text-sm text-danger">{fieldErrors.bookTitle}</p>
+                      <p className={fieldErrorClassName}>{fieldErrors.bookTitle}</p>
                     ) : null}
                   </div>
 
                   <div>
-                    <label htmlFor="circle-book-author" className="mb-2 block text-sm text-text">
+                    <label htmlFor="circle-book-author" className={fieldLabelClassName}>
                       Author
                     </label>
                     <input
                       id="circle-book-author"
+                      name="bookAuthor"
                       type="text"
                       value={bookAuthor}
                       onChange={(event) => {
@@ -447,18 +471,22 @@ export function CreateCircleModal({
                       maxLength={100}
                       className={circleInputClassName}
                       placeholder="Frank Herbert"
+                      autoComplete="off"
+                      inputMode="text"
+                      spellCheck={false}
                     />
                     {fieldErrors.bookAuthor ? (
-                      <p className="mt-2 text-sm text-danger">{fieldErrors.bookAuthor}</p>
+                      <p className={fieldErrorClassName}>{fieldErrors.bookAuthor}</p>
                     ) : null}
                   </div>
 
                   <div>
-                    <label htmlFor="circle-total-pages" className="mb-2 block text-sm text-text">
+                    <label htmlFor="circle-total-pages" className={fieldLabelClassName}>
                       Total pages
                     </label>
                     <input
                       id="circle-total-pages"
+                      name="totalPages"
                       type="number"
                       min="1"
                       value={totalPages}
@@ -468,9 +496,10 @@ export function CreateCircleModal({
                       }}
                       className={circleInputClassName}
                       placeholder="688"
+                      inputMode="numeric"
                     />
                     {fieldErrors.totalPages ? (
-                      <p className="mt-2 text-sm text-danger">{fieldErrors.totalPages}</p>
+                      <p className={fieldErrorClassName}>{fieldErrors.totalPages}</p>
                     ) : null}
                   </div>
                 </div>
@@ -478,12 +507,13 @@ export function CreateCircleModal({
 
               <div className="grid gap-4 sm:grid-cols-2">
                 <div>
-                  <label htmlFor="circle-member-cap" className="mb-2 block text-sm text-text">
+                  <label htmlFor="circle-member-cap" className={fieldLabelClassName}>
                     Member cap
                   </label>
                   <div className="relative">
                     <input
                       id="circle-member-cap"
+                      name="memberCap"
                       type="number"
                       min="2"
                       max="50"
@@ -493,11 +523,16 @@ export function CreateCircleModal({
                         setFieldErrors((current) => ({ ...current, memberCap: undefined }));
                       }}
                       className={circleInputClassName}
+                      inputMode="numeric"
+                      aria-describedby="circle-member-cap-hint"
                     />
                     <Users size={16} className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-text-subtle" />
                   </div>
+                  <p id="circle-member-cap-hint" className={fieldHintClassName}>
+                    Choose between 2 and 50 members.
+                  </p>
                   {fieldErrors.memberCap ? (
-                    <p className="mt-2 text-sm text-danger">{fieldErrors.memberCap}</p>
+                    <p className={fieldErrorClassName}>{fieldErrors.memberCap}</p>
                   ) : null}
                 </div>
 
@@ -544,7 +579,7 @@ export function CreateCircleModal({
                   })}
                 </div>
                 {fieldErrors.visibility ? (
-                  <p className="mt-2 text-sm text-danger">{fieldErrors.visibility}</p>
+                  <p className={fieldErrorClassName}>{fieldErrors.visibility}</p>
                 ) : null}
               </div>
 
@@ -567,8 +602,7 @@ export function CreateCircleModal({
               </div>
             </form>
           )}
-        </div>
       </div>
-    </div>
+    </AppDialog>
   );
 }

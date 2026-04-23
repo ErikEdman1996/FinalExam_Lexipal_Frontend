@@ -9,6 +9,8 @@ import Profile from '../pages/Profile.tsx';
 import Landing from '../pages/Landing.tsx';
 import Circles from '../pages/Circles.tsx';
 import CircleDetails from '../pages/CircleDetails.tsx';
+import ReadingLists from '../pages/ReadingLists.tsx';
+import ReadingListDetails from '../pages/ReadingListDetails.tsx';
 import { ProtectedRoute } from '../features/auth/ProtectedRoute.tsx';
 
 export const router = createBrowserRouter([
@@ -26,6 +28,8 @@ export const router = createBrowserRouter([
       { path: '/codex/page/:pageNumber', Component: Codex },
       { path: '/circles', Component: Circles },
       { path: '/circles/:circleId', Component: CircleDetails },
+      { path: '/reading-lists', Component: ReadingLists },
+      { path: '/reading-lists/:listId', Component: ReadingListDetails },
       { path: '/challenges', Component: Challenge },
       { path: '/challenges/flashcard', Component: Flashcard },
       { path: '/profile', Component: Profile },

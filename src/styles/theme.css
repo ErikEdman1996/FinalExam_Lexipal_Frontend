@@ -124,3 +124,7 @@ body {
     radial-gradient(circle at bottom, var(--t-page-glow-2) 0%, transparent 28%),
     linear-gradient(180deg, var(--t-gradient-from) 0%, var(--t-gradient-via) 48%, var(--t-gradient-to) 100%);
 }
+
+.safe-area-inset-bottom {
+  padding-bottom: max(env(safe-area-inset-bottom), 0px);
+}

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { ArrowUpRight, BookCopy, Clock3, StickyNote, X } from 'lucide-react';
 import { ApiResponseError, getCircleMemberDetails, type CircleMemberDetailResponseDTO } from '../../api/api';
 import { Button } from '../../components/Button';
+import { AppDialog, AppDialogClose, AppDialogTitle } from '../../components/dialog/AppDialog';
 import {
   formatCircleDate,
   formatCircleDateTime,
@@ -95,32 +96,33 @@ export function MemberDetailsPanel({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-end bg-black/35 backdrop-blur-sm">
-      <button
-        type="button"
-        aria-label="Close member detail panel"
-        className="absolute inset-0"
-        onClick={onClose}
-      />
-
-      <aside className="relative z-10 flex h-[92vh] w-full max-w-2xl flex-col rounded-t-[32px] border border-border bg-surface shadow-[0_24px_64px_rgba(15,23,42,0.18)] animate-in slide-in-from-bottom duration-300 sm:h-full sm:rounded-none sm:rounded-l-[32px] sm:slide-in-from-right">
+    <AppDialog
+      isOpen={isOpen}
+      onClose={onClose}
+      variant="sheet"
+      contentClassName="relative ml-auto flex h-[92vh] w-full max-w-2xl flex-col rounded-t-[32px] border border-border bg-surface shadow-[0_24px_64px_rgba(15,23,42,0.18)] animate-in slide-in-from-bottom duration-300 sm:h-full sm:rounded-none sm:rounded-l-[32px] sm:slide-in-from-right"
+    >
         <div className="border-b border-border px-6 py-5 sm:px-7">
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-[0.72rem] uppercase tracking-[0.28em] text-text-subtle">Circle member</p>
-              <h2 className="mt-2 text-2xl font-semibold text-text">{details?.userNickname?.trim() || memberLabel}</h2>
+              <AppDialogTitle className="mt-2 text-2xl font-semibold text-text">
+                {details?.userNickname?.trim() || memberLabel}
+              </AppDialogTitle>
               <p className="mt-2 text-sm text-text-muted">
                 Reading sessions and saved notes for this circle book.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-surface-muted"
-              aria-label="Close member detail panel"
-            >
-              <X size={18} className="text-text-muted" />
-            </button>
+            <AppDialogClose asChild>
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-surface-muted"
+                aria-label="Close member detail panel"
+              >
+                <X size={18} className="text-text-muted" />
+              </button>
+            </AppDialogClose>
           </div>
         </div>
 
@@ -304,7 +306,7 @@ export function MemberDetailsPanel({
                           <p className="text-xs uppercase tracking-[0.2em] text-text-subtle">Saved note</p>
                           <p className="mt-2 text-sm text-text-muted">
                             Page {note.pageNumber}
-                            {note.chapterLabel ? ` • ${note.chapterLabel}` : ''}
+                            {note.chapterLabel ? ` - ${note.chapterLabel}` : ''}
                           </p>
                         </div>
                         <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-surface-alt">
@@ -337,7 +339,6 @@ export function MemberDetailsPanel({
             Close
           </Button>
         </div>
-      </aside>
-    </div>
+    </AppDialog>
   );
 }

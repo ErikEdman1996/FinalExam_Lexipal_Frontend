@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, Clock, FileText, Pencil, Play, Trash2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { BottomNav } from '../components/BottomNav';
 import { Button } from '../components/Button';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { NoteModal } from '../components/NoteModal';
-import { useBooks } from '../features/books/BooksProvider';
+import { useBooks } from '../features/books/useBooks';
+import { formatDateValue } from '../utils/formatting';
 import {
   deleteBook,
   deleteNote,
@@ -34,13 +35,7 @@ interface SessionData {
 }
 
 function formatSessionDate(timestamp: string | null | undefined) {
-  const parsed = new Date(timestamp ?? '');
-
-  if (Number.isNaN(parsed.getTime())) {
-    return timestamp || 'Unknown date';
-  }
-
-  return parsed.toLocaleDateString('en-US', {
+  return formatDateValue(timestamp, {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
@@ -48,19 +43,13 @@ function formatSessionDate(timestamp: string | null | undefined) {
 }
 
 function formatNoteCreatedAt(timestamp: string) {
-  const parsed = new Date(timestamp.replace(' ', 'T'));
-
-  if (Number.isNaN(parsed.getTime())) {
-    return timestamp || 'Unknown date';
-  }
-
-  return parsed.toLocaleString('en-US', {
+  return formatDateValue(new Date(timestamp.replace(' ', 'T')), {
     month: 'short',
     day: 'numeric',
     year: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
-  });
+  }, timestamp || 'Unknown date');
 }
 
 function mapApiSessionToSessionData(session: ApiSession): SessionData {
@@ -253,7 +242,7 @@ export default function BookDetails() {
       void refreshBooks({ silent: true }).catch((error) => {
         console.error('Error refreshing books after delete:', error);
       });
-      navigate('/library');
+      void navigate('/library');
     } catch (error) {
       console.error('Error deleting book:', error);
       setErrorMessage('Could not delete this book right now.');
@@ -336,12 +325,12 @@ export default function BookDetails() {
       <div className="page-bg min-h-screen pb-24 lg:pl-60 lg:pb-0">
         <div className="mx-auto max-w-6xl px-4 py-16 text-center sm:px-6 lg:px-8">
           <p className="text-lg text-danger">{errorMessage ?? 'Book not found.'}</p>
-          <button
-            onClick={() => navigate('/library')}
-            className="mt-4 text-sm text-text-muted transition-colors hover:text-text"
+          <Link
+            to="/library"
+            className="mt-4 inline-flex text-sm text-text-muted transition-colors hover:text-text"
           >
             Go back to Library
-          </button>
+          </Link>
         </div>
         <BottomNav />
       </div>
@@ -356,13 +345,13 @@ export default function BookDetails() {
       transition={{ duration: 0.2, ease: [0.22, 1, 0.36, 1] }}
     >
       <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8 lg:py-10">
-        <button
-          onClick={() => navigate('/library')}
+        <Link
+          to="/library"
           className="inline-flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-text"
         >
           <ArrowLeft size={16} />
           Back to library
-        </button>
+        </Link>
 
         <div className={`mt-5 grid gap-6 ${activeTab === 'notes' ? '' : 'lg:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)]'}`}>
           <div className="space-y-6">
@@ -403,7 +392,9 @@ export default function BookDetails() {
 
               <div className="mt-6 flex flex-wrap gap-3">
                 <Button
-                  onClick={() => navigate(`/book/${book.id}/session/new`)}
+                  onClick={() => {
+                    void navigate(`/book/${book.id}/session/new`);
+                  }}
                   className="rounded-full px-6 shadow-[0_12px_24px_rgba(76,167,132,0.18)]"
                 >
                   <span className="inline-flex items-center gap-2">
@@ -433,7 +424,9 @@ export default function BookDetails() {
                     </p>
                   </div>
                   <Button
-                    onClick={() => navigate(`/book/${book.id}/session/new`)}
+                    onClick={() => {
+                      void navigate(`/book/${book.id}/session/new`);
+                    }}
                     className="rounded-full px-6 sm:self-center"
                   >
                     <span className="inline-flex items-center gap-2">

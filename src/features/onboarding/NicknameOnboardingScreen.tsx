@@ -1,11 +1,15 @@
 import { useState, type FormEvent } from 'react';
-import { Button } from '../../components/Button';
 import { ApiValidationError, updateNickname } from '../../api/api';
-import { useAuth } from '../auth/AuthProvider';
+import { Button } from '../../components/Button';
+import {
+  fieldErrorClassName,
+  fieldHintClassName,
+  fieldLabelClassName,
+  inputClassName,
+} from '../../components/form/inputStyles';
+import { useAuth } from '../auth/useAuth';
 
 const NICKNAME_PATTERN = /^[a-zA-Z0-9_]{3,20}$/;
-const inputClassName =
-  'w-full rounded-[16px] border border-border bg-surface-muted px-4 py-3 text-text outline-none transition-all focus:border-brand focus:bg-surface focus:ring-2 focus:ring-brand';
 
 export function NicknameOnboardingScreen() {
   const { setProfile } = useAuth();
@@ -48,14 +52,20 @@ export function NicknameOnboardingScreen() {
             Other users will see this in book circles. 3-20 characters, letters/digits/underscore. You can change it later.
           </p>
 
-          <form onSubmit={handleSubmit} className="mt-6 space-y-4" noValidate>
+          <form
+            onSubmit={(event) => {
+              void handleSubmit(event);
+            }}
+            className="mt-6 space-y-4"
+            noValidate
+          >
             <div>
-              <label htmlFor="onboarding-nickname" className="mb-2 block text-sm text-text">
+              <label htmlFor="onboarding-nickname" className={fieldLabelClassName}>
                 Nickname
               </label>
               <input
                 id="onboarding-nickname"
-                autoFocus
+                name="nickname"
                 type="text"
                 value={nickname}
                 onChange={(event) => {
@@ -65,14 +75,15 @@ export function NicknameOnboardingScreen() {
                 className={inputClassName}
                 placeholder="e.g. moth_reader"
                 maxLength={20}
-                autoComplete="off"
+                autoComplete="nickname"
                 spellCheck={false}
+                inputMode="text"
                 required
               />
               {error ? (
-                <p className="mt-2 text-sm text-danger">{error}</p>
+                <p className={fieldErrorClassName}>{error}</p>
               ) : showFormatHint ? (
-                <p className="mt-2 text-sm text-text-subtle">
+                <p className={fieldHintClassName}>
                   3-20 characters, letters, digits or underscore.
                 </p>
               ) : null}

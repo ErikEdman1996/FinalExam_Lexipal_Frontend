@@ -1,10 +1,11 @@
 import { NavLink } from 'react-router-dom';
-import { BookOpen, Library, Trophy, User, UsersRound } from 'lucide-react';
+import { BookMarked, BookOpen, Library, Trophy, User, UsersRound } from 'lucide-react';
 import { ThemeToggle } from '../features/theme/ThemeToggle.tsx';
 import mothIcon from '../assets/moth_icon.png';
 
 const NAV_ITEMS = [
   { to: '/library', icon: Library, label: 'Library' },
+  { to: '/reading-lists', icon: BookMarked, label: 'Lists' },
   { to: '/circles', icon: UsersRound, label: 'Circles' },
   { to: '/codex', icon: BookOpen, label: 'Codex' },
   { to: '/challenges', icon: Trophy, label: 'Challenges' },

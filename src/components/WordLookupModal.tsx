@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Sparkles, X } from 'lucide-react';
 import { motion } from 'motion/react';
 import { Button } from './Button';
+import { AppDialog, AppDialogClose } from './dialog/AppDialog';
+import { inputClassName } from './form/inputStyles';
 import mothIcon from '../assets/moth_icon.png';
 import {
   type CodexOverallProgressDTO,
@@ -232,7 +234,7 @@ const getResultEyebrow = (result: LookupResult) => {
   return 'Collectible entry';
 };
 
-const searchInputClassName = 'w-full rounded-[16px] border border-border bg-surface-muted px-4 py-3 text-text placeholder:text-text-subtle transition-all focus:border-transparent focus:outline-none focus:ring-2 focus:ring-brand';
+const searchInputClassName = `${inputClassName} placeholder:text-text-subtle focus:border-transparent`;
 const resultInfoCardClassName = 'rounded-[18px] border border-border bg-surface-alt p-3 dark:bg-surface-muted';
 
 export function WordLookupModal({
@@ -512,22 +514,23 @@ export function WordLookupModal({
   const mysteryTraceFilter = getMysteryTraceFilter(result?.rarityTier ?? 'COMMON');
   
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4">
-      <div
-        className="w-full max-w-lg max-h-[94vh] overflow-y-auto rounded-t-[32px] border border-border bg-surface shadow-[0_8px_32px_rgba(0,0,0,0.12)] animate-in slide-in-from-bottom duration-300 sm:rounded-[32px] sm:slide-in-from-bottom-0"
-        role="dialog"
-        aria-modal="true"
-        aria-label="Word lookup"
-      >
+    <AppDialog
+      isOpen={isOpen}
+      onClose={onClose}
+      contentClassName="w-full max-w-lg max-h-[94vh] overflow-y-auto rounded-t-[32px] border border-border bg-surface shadow-[0_8px_32px_rgba(0,0,0,0.12)] animate-in slide-in-from-bottom duration-300 sm:rounded-[32px] sm:slide-in-from-bottom-0"
+    >
         <div className="p-6 pt-6">
           <div className="mb-4 flex justify-end">
-            <button
-              onClick={onClose}
-              className="flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-surface-muted"
-              aria-label="Close word lookup modal"
-            >
-              <X size={20} className="text-text-muted" />
-            </button>
+            <AppDialogClose asChild>
+              <button
+                type="button"
+                onClick={onClose}
+                className="flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-surface-muted"
+                aria-label="Close word lookup modal"
+              >
+                <X size={20} className="text-text-muted" />
+              </button>
+            </AppDialogClose>
           </div>
           <div
             className="relative transition-[height] duration-300"
@@ -609,8 +612,12 @@ export function WordLookupModal({
                   </motion.button>
                 ) : (
                   <>
+                    <label htmlFor="lookup-word" className="sr-only">
+                      Enter a word to look up
+                    </label>
                     <input
                       id="lookup-word"
+                      name="word"
                       type="text"
                       value={word}
                       onChange={(event) => setWord(event.target.value)}
@@ -622,8 +629,8 @@ export function WordLookupModal({
                       }}
                       className={searchInputClassName}
                       placeholder="Enter word"
-                      autoFocus
-                      aria-label="Enter word"
+                      autoComplete="off"
+                      spellCheck={false}
                     />
 
                     {lookupError ? (
@@ -851,7 +858,6 @@ export function WordLookupModal({
             </div>
           </div>
         </div>
-      </div>
-    </div>
+    </AppDialog>
   );
 }

@@ -1,8 +1,6 @@
 import {
-  createContext,
   startTransition,
   useCallback,
-  useContext,
   useEffect,
   useMemo,
   useRef,
@@ -10,21 +8,11 @@ import {
   type PropsWithChildren,
 } from 'react';
 import { getBooks, type ApiBook } from '../../api/api';
-
-interface RefreshBooksOptions {
-  silent?: boolean;
-}
-
-interface BooksContextValue {
-  books: ApiBook[];
-  isLoading: boolean;
-  errorMessage: string | null;
-  refreshBooks: (options?: RefreshBooksOptions) => Promise<ApiBook[]>;
-  upsertBook: (book: ApiBook) => void;
-  removeBook: (bookId: string | number) => void;
-}
-
-const BooksContext = createContext<BooksContextValue | null>(null);
+import {
+  BooksContext,
+  type BooksContextValue,
+  type RefreshBooksOptions,
+} from './BooksContext';
 
 export function BooksProvider({ children }: PropsWithChildren) {
   const [books, setBooks] = useState<ApiBook[]>([]);
@@ -99,15 +87,4 @@ export function BooksProvider({ children }: PropsWithChildren) {
   }), [books, errorMessage, isLoading, refreshBooks]);
 
   return <BooksContext.Provider value={value}>{children}</BooksContext.Provider>;
-}
-
-// eslint-disable-next-line react-refresh/only-export-components
-export function useBooks() {
-  const context = useContext(BooksContext);
-
-  if (!context) {
-    throw new Error('useBooks must be used within a BooksProvider.');
-  }
-
-  return context;
 }

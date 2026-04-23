@@ -1,10 +1,18 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, BookOpen, Check, Pause, Play, Search, Square } from 'lucide-react';
+import { ArrowLeft, BookOpen, Check, Pause, Play, Search, Square, X } from 'lucide-react';
 import { Button } from '../components/Button';
+import { AppDialog, AppDialogClose, AppDialogTitle } from '../components/dialog/AppDialog';
+import {
+  fieldErrorClassName,
+  fieldHintClassName,
+  fieldLabelClassName,
+  inputClassName,
+  textareaClassName,
+} from '../components/form/inputStyles';
 import { NoteModal } from '../components/NoteModal';
 import { WordLookupModal } from '../components/WordLookupModal';
-import { useXpGain } from '../features/xp/XpGainProvider';
+import { useXpGain } from '../features/xp/useXpGain';
 import {
   completeSession,
   createNote,
@@ -143,14 +151,14 @@ export default function ReadingSession() {
 
     const loadSessionContext = async () => {
       if (!bookId) {
-        navigate('/library');
+        void navigate('/library');
         return;
       }
 
       const parsedBookId = Number(bookId);
 
       if (!Number.isFinite(parsedBookId) || parsedBookId <= 0) {
-        navigate('/library');
+        void navigate('/library');
         return;
       }
 
@@ -301,7 +309,7 @@ export default function ReadingSession() {
 
     activeSessionRef.current = null;
     setActiveSession(null);
-    navigate(`/book/${bookId}`);
+    void navigate(`/book/${bookId}`);
   };
 
   const handleCaptureWord = (captureResult: SessionCodexEntry & {
@@ -429,7 +437,9 @@ export default function ReadingSession() {
           <div className="text-center">
             <p className="text-lg text-danger">{loadError ?? 'Session not found.'}</p>
             <button
-              onClick={() => navigate('/library')}
+              onClick={() => {
+                void navigate('/library');
+              }}
               className="mt-4 inline-flex h-11 items-center rounded-full bg-brand px-5 text-sm font-medium text-text-on-brand"
             >
               Back to library
@@ -445,7 +455,9 @@ export default function ReadingSession() {
       <div className="mx-auto max-w-lg">
         <div className="flex items-center gap-4">
           <button
-            onClick={() => navigate(-1)}
+            onClick={() => {
+              void navigate(-1);
+            }}
             className="flex h-11 w-11 items-center justify-center rounded-full border border-border bg-surface text-text shadow-[0_10px_20px_rgba(31,41,55,0.05)] transition-colors hover:bg-surface-alt"
           >
             <ArrowLeft size={20} />
@@ -676,19 +688,44 @@ function ReflectionModal({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-md rounded-[32px] border border-border bg-surface p-6 shadow-[0_24px_48px_rgba(17,24,39,0.18)]">
-        <div className="text-center">
+    <AppDialog
+      isOpen
+      onClose={onClose}
+      canClose={!isSubmitting}
+      contentClassName="w-full max-w-md rounded-[32px] border border-border bg-surface p-6 shadow-[0_24px_48px_rgba(17,24,39,0.18)]"
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex-1 text-center">
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-brand-soft">
             <BookOpen size={28} className="text-brand-strong" />
           </div>
-          <h2 className="mt-4 text-2xl font-semibold text-text">Session Complete</h2>
+          <AppDialogTitle className="mt-4 text-2xl font-semibold text-text">
+            Session complete
+          </AppDialogTitle>
           <p className="mt-2 text-sm text-text-muted">
             {formatTime(durationSeconds)} - {wordsCount} words captured
           </p>
         </div>
+        <AppDialogClose asChild>
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isSubmitting}
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full transition-colors hover:bg-surface-muted disabled:cursor-not-allowed disabled:opacity-60"
+            aria-label="Close session summary"
+          >
+            <X size={18} className="text-text-muted" />
+          </button>
+        </AppDialogClose>
+      </div>
 
-        <form onSubmit={handleSubmit} className="mt-6 space-y-4">
+      <form
+        onSubmit={(event) => {
+          void handleSubmit(event);
+        }}
+        className="mt-6 space-y-4"
+        noValidate
+      >
           <div className="rounded-[24px] bg-surface-muted p-4">
             <p className="text-xs uppercase tracking-[0.22em] text-text-subtle">Book</p>
             <p className="mt-2 text-base font-semibold text-text">{book.title}</p>
@@ -701,31 +738,41 @@ function ReflectionModal({
               <p className="mt-2 text-lg font-semibold text-text">{startPage}</p>
             </div>
             <div>
-              <label className="mb-2 block text-sm font-medium text-text">End Page</label>
+              <label htmlFor="session-end-page" className={fieldLabelClassName}>End Page</label>
               <input
+                id="session-end-page"
+                name="endPage"
                 type="number"
                 value={endPage}
                 onChange={(event) => setEndPage(event.target.value)}
-                className="w-full rounded-[16px] border border-border bg-surface-muted px-4 py-3 text-text outline-none transition-all focus:border-brand focus:bg-surface focus:ring-2 focus:ring-brand"
+                className={inputClassName}
+                inputMode="numeric"
+                aria-describedby="session-end-page-hint"
                 required
               />
+              <p id="session-end-page-hint" className={fieldHintClassName}>
+                Enter the last page you reached in this session.
+              </p>
             </div>
           </div>
 
           <div>
-            <label className="mb-2 block text-sm font-medium text-text">Reflection</label>
+            <label htmlFor="session-reflection" className={fieldLabelClassName}>Reflection</label>
             <textarea
+              id="session-reflection"
+              name="reflection"
               value={reflection}
               onChange={(event) => setReflection(event.target.value)}
               placeholder="What stood out in this session? What did you notice, learn, or enjoy?"
-              className="min-h-[140px] w-full resize-none rounded-[18px] border border-border bg-surface-muted px-4 py-3 text-text outline-none transition-all focus:border-brand focus:bg-surface focus:ring-2 focus:ring-brand"
+              className={`min-h-[140px] ${textareaClassName}`}
+              aria-describedby="session-reflection-hint"
             />
-            <p className={`mt-2 text-xs ${isValidReflection ? 'text-brand-strong' : 'text-text-muted'}`}>
+            <p id="session-reflection-hint" className={`mt-2 text-xs ${isValidReflection ? 'text-brand-strong' : 'text-text-muted'}`}>
               {trimmedReflectionLength}/50 characters minimum
             </p>
           </div>
 
-          {submitError ? <p className="text-sm text-danger">{submitError}</p> : null}
+          {submitError ? <p className={fieldErrorClassName}>{submitError}</p> : null}
 
           <div className="flex gap-3 pt-2">
             <Button
@@ -745,8 +792,7 @@ function ReflectionModal({
               {isSubmitting ? 'Saving...' : 'Save Session'}
             </Button>
           </div>
-        </form>
-      </div>
-    </div>
+      </form>
+    </AppDialog>
   );
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import { Brain, ChevronLeft, ChevronRight, Sparkles } from 'lucide-react';
 import { BottomNav } from '../components/BottomNav';
 import { Button } from '../components/Button';
@@ -7,10 +7,11 @@ import { QuestionCard } from '../components/flashcard/QuestionCard';
 import { TimerBar } from '../components/flashcard/TimerBar';
 import { StreakChip } from '../components/flashcard/StreakChip';
 import { GameOverSummary } from '../components/flashcard/GameOverSummary';
-import { useXpGain } from '../features/xp/XpGainProvider';
+import { useXpGain } from '../features/xp/useXpGain';
 import { useFlashcardGame } from '../features/flashcard/useFlashcardGame';
 import { buildDeck } from '../features/flashcard/buildDeck';
 import { toFlashcardCandidate, type FlashcardCandidate } from '../features/flashcard/types';
+import { formatDateValue } from '../utils/formatting';
 import {
   createChallengeAttempt,
   extractDefinitionFromDefinitions,
@@ -32,18 +33,12 @@ interface AttemptHistorySectionProps {
 }
 
 const formatAttemptDate = (value: string) => {
-  const parsed = new Date(value);
-
-  if (Number.isNaN(parsed.getTime())) {
-    return 'Unknown time';
-  }
-
-  return parsed.toLocaleString('en-US', {
+  return formatDateValue(value, {
     month: 'short',
     day: 'numeric',
     hour: 'numeric',
     minute: '2-digit',
-  });
+  }, 'Unknown time');
 };
 
 const toReadableDefinitionPreview = (value: string | null) => {
@@ -127,7 +122,6 @@ function AttemptHistorySection({ attempts }: AttemptHistorySectionProps) {
 }
 
 export default function Flashcard() {
-  const navigate = useNavigate();
   const [challenges, setChallenges] = useState<Challenge[]>([]);
   const [codexCards, setCodexCards] = useState<FlashcardCandidate[]>([]);
   const [attempts, setAttempts] = useState<ChallengeAttempt[]>([]);
@@ -189,15 +183,16 @@ export default function Flashcard() {
   const totalXpEarned = flashcardAttempts.reduce((sum, attempt) => sum + Math.max(0, attempt.xpAwarded), 0);
   const totalPasses = flashcardAttempts.filter((attempt) => attempt.result === 'PASS').length;
   const isLocked = codexCards.length < MIN_CODEX_WORDS;
+  const { advance, feedback, phase } = game;
 
   useEffect(() => {
-    if (game.phase !== 'locked') return;
-    const delay = game.feedback === 'correct' ? FEEDBACK_CORRECT_MS : FEEDBACK_WRONG_MS;
+    if (phase !== 'locked') return;
+    const delay = feedback === 'correct' ? FEEDBACK_CORRECT_MS : FEEDBACK_WRONG_MS;
     const timer = window.setTimeout(() => {
-      game.advance();
+      advance();
     }, delay);
     return () => window.clearTimeout(timer);
-  }, [game.phase, game.feedback, game.advance]);
+  }, [advance, feedback, phase]);
 
   const submitAttempt = async (
     codexEntryId: number,
@@ -292,14 +287,13 @@ export default function Flashcard() {
       <div className="mx-auto max-w-3xl px-5 py-8 sm:px-6 sm:py-10">
         <div className="mb-6 flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <button
-              type="button"
-              onClick={() => navigate('/challenges')}
+            <Link
+              to="/challenges"
               className="inline-flex items-center gap-1.5 rounded-full bg-surface-muted px-3 py-1.5 text-xs font-medium text-text-muted transition-colors hover:bg-surface-alt"
             >
               <ChevronLeft size={14} />
               Back to challenges
-            </button>
+            </Link>
             <h1 className="mt-3 text-4xl font-semibold tracking-[-0.03em] text-text">Flashcard</h1>
             <p className="mt-2 max-w-xl text-sm leading-relaxed text-text-muted">
               Pick the right definition from four choices before the timer runs out.

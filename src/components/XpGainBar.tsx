@@ -31,15 +31,21 @@ const getSourceLabel = (source?: string) => {
   return 'XP gained';
 };
 
-export function XpGainBar({ item, onComplete }: XpGainBarProps) {
+function XpGainBarItem({
+  item,
+  onComplete,
+}: {
+  item: XpGainPresentation;
+  onComplete: () => void;
+}) {
   const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
-  const [phase, setPhase] = useState<'hidden' | 'enter' | 'visible' | 'exit'>('hidden');
-  const [displayTotalXp, setDisplayTotalXp] = useState(0);
-  const safeXpPerLevel = item?.xpPerLevel ?? 100;
-  const safeToTotalXp = item?.toTotalXp ?? 0;
-  const safeLevel = item?.level ?? 1;
-  const safeXpIntoLevel = item?.xpIntoLevel ?? 0;
-  const safeLeveledUp = item?.leveledUp ?? false;
+  const [phase, setPhase] = useState<'enter' | 'visible' | 'exit'>('enter');
+  const [displayTotalXp, setDisplayTotalXp] = useState(() => item.fromTotalXp);
+  const safeXpPerLevel = item.xpPerLevel;
+  const safeToTotalXp = item.toTotalXp;
+  const safeLevel = item.level;
+  const safeXpIntoLevel = item.xpIntoLevel;
+  const safeLeveledUp = item.leveledUp;
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -58,11 +64,6 @@ export function XpGainBar({ item, onComplete }: XpGainBarProps) {
   }, []);
 
   useEffect(() => {
-    if (!item) {
-      setPhase('hidden');
-      return;
-    }
-
     const animationDurationMs = prefersReducedMotion ? 0 : 1200;
     const visibleHoldMs = prefersReducedMotion ? 3600 : 3900;
     const exitDurationMs = 260;
@@ -70,9 +71,6 @@ export function XpGainBar({ item, onComplete }: XpGainBarProps) {
     let exitTimeoutId: number | null = null;
     let completeTimeoutId: number | null = null;
     const xpDelta = Math.max(0, item.toTotalXp - item.fromTotalXp);
-
-    setDisplayTotalXp(item.fromTotalXp);
-    setPhase('enter');
 
     const startAnimation = () => {
       setPhase('visible');
@@ -108,7 +106,6 @@ export function XpGainBar({ item, onComplete }: XpGainBarProps) {
       setPhase('exit');
     }, animationDurationMs + visibleHoldMs);
     completeTimeoutId = window.setTimeout(() => {
-      setPhase('hidden');
       onComplete();
     }, animationDurationMs + visibleHoldMs + exitDurationMs);
 
@@ -140,10 +137,6 @@ export function XpGainBar({ item, onComplete }: XpGainBarProps) {
   const displayedProgressPercent = isAnimationComplete
     ? (Math.max(0, safeXpIntoLevel) / Math.max(1, safeXpPerLevel)) * 100
     : progressMeta.progressPercent;
-
-  if (!item || phase === 'hidden') {
-    return null;
-  }
 
   return (
     <div className="pointer-events-none fixed inset-x-0 top-0 z-[60] flex justify-center px-4 pt-4 sm:px-6 sm:pt-6">
@@ -198,4 +191,12 @@ export function XpGainBar({ item, onComplete }: XpGainBarProps) {
       </div>
     </div>
   );
+}
+
+export function XpGainBar({ item, onComplete }: XpGainBarProps) {
+  if (!item) {
+    return null;
+  }
+
+  return <XpGainBarItem key={item.id} item={item} onComplete={onComplete} />;
 }

@@ -1,6 +1,4 @@
 import {
-  createContext,
-  useContext,
   useEffect,
   useMemo,
   useState,
@@ -8,23 +6,7 @@ import {
 } from 'react';
 import keycloak from './keycloak';
 import { getProfile, type ProfileReadResponseDTO } from '../../api/api';
-
-interface AuthContextValue {
-  initialized: boolean;
-  authenticated: boolean;
-  isBootstrappingProfile: boolean;
-  hasBootstrappedProfile: boolean;
-  bootstrapError: string | null;
-  profile: ProfileReadResponseDTO | null;
-  needsOnboarding: boolean;
-  username: string;
-  login: () => Promise<void>;
-  logout: () => Promise<void>;
-  retryBootstrap: () => Promise<void>;
-  setProfile: (profile: ProfileReadResponseDTO) => void;
-}
-
-const AuthContext = createContext<AuthContextValue | null>(null);
+import { AuthContext, type AuthContextValue } from './AuthContext';
 
 let keycloakInitPromise: Promise<boolean> | null = null;
 
@@ -173,15 +155,4 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }), [authenticated, bootstrapError, hasBootstrappedProfile, initialized, isBootstrappingProfile, profile]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
-}
-
-// eslint-disable-next-line react-refresh/only-export-components
-export function useAuth() {
-  const context = useContext(AuthContext);
-
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider.');
-  }
-
-  return context;
 }

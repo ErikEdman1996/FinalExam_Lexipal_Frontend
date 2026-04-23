@@ -1,18 +1,12 @@
-import { createContext, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-
-export type ThemeName = 'light' | 'dark';
-export type ThemePreference = ThemeName | 'system';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
+import {
+  ThemeContext,
+  type ThemeContextValue,
+  type ThemeName,
+  type ThemePreference,
+} from './ThemeContext';
 
 const STORAGE_KEY = 'lexipal-theme';
-
-interface ThemeContextValue {
-  preference: ThemePreference;
-  theme: ThemeName;
-  setPreference: (next: ThemePreference) => void;
-  toggle: () => void;
-}
-
-export const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 function readStoredPreference(): ThemePreference {
   if (typeof window === 'undefined') {
