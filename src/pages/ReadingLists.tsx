@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from 'react';
 import {
   ArrowRight,
   BookMarked,
@@ -11,7 +11,7 @@ import {
   Trophy,
   UserCheck,
 } from 'lucide-react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   browseReadingLists,
@@ -38,7 +38,8 @@ import { fieldLabelClassName, inputClassName } from '../components/form/inputSty
 
 type TabKey = 'explore' | 'mine' | 'subscriptions';
 
-const PAGE_SIZE = 12;
+const PAGE_SIZE = 20;
+const VISIBLE_GENRE_COUNT = 3;
 
 const TABS: Array<{ key: TabKey; label: string; icon: typeof Sparkles }> = [
   { key: 'explore', label: 'Explore', icon: Sparkles },
@@ -60,136 +61,342 @@ function StatusChip({ label, tone }: { label: string; tone: 'brand' | 'accent' |
   );
 }
 
-function SummaryCard({
+function GenreChips({ genres }: { genres: string[] }) {
+  if (genres.length === 0) {
+    return <span className="text-sm text-text-subtle">No genres</span>;
+  }
+
+  const visibleGenres = genres.slice(0, VISIBLE_GENRE_COUNT);
+  const hiddenCount = genres.length - visibleGenres.length;
+
+  return (
+    <div className="flex flex-wrap gap-2">
+      {visibleGenres.map((genre) => (
+        <span key={genre} className="rounded-full bg-brand-soft px-3 py-1 text-xs font-medium text-brand-strong">
+          {genre}
+        </span>
+      ))}
+      {hiddenCount > 0 ? (
+        <span className="rounded-full bg-surface-muted px-3 py-1 text-xs font-medium text-text-muted">
+          +{hiddenCount}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+function stopRowNavigation(event: MouseEvent<HTMLElement>) {
+  event.stopPropagation();
+}
+
+function handleRowKeyDown(event: KeyboardEvent<HTMLElement>, onOpen: () => void) {
+  if (event.key !== 'Enter' && event.key !== ' ') {
+    return;
+  }
+
+  event.preventDefault();
+  onOpen();
+}
+
+function ReadingListRow({
   list,
+  onOpen,
   onStarToggle,
   onSubscribeToggle,
   busy,
 }: {
   list: ReadingListSummaryResponseDTO;
+  onOpen: (listId: number) => void;
   onStarToggle: (list: ReadingListSummaryResponseDTO) => void;
   onSubscribeToggle: (list: ReadingListSummaryResponseDTO) => void;
   busy: boolean;
 }) {
+  const openList = () => onOpen(list.id);
+
   return (
-    <article className="rounded-[28px] border border-border bg-surface p-6 text-left shadow-[0_14px_28px_rgba(31,41,55,0.06)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-surface-alt">
-      <Link
-        to={`/reading-lists/${list.id}`}
-        className="block rounded-[20px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-      >
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="truncate text-2xl font-semibold tracking-[-0.03em] text-text">{list.title}</p>
-            <p className="mt-1 truncate text-sm text-text-muted">
-              By {getOwnerDisplayName(list.ownerNickname, list.ownerUserId)}
-            </p>
+    <div
+      role="link"
+      tabIndex={0}
+      onClick={openList}
+      onKeyDown={(event) => handleRowKeyDown(event, openList)}
+      className="group cursor-pointer border-t border-border px-4 py-4 transition-colors hover:bg-surface-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand"
+      aria-label={`Open ${list.title}`}
+    >
+      <div className="grid gap-4 md:grid-cols-[minmax(0,1.45fr)_minmax(10rem,0.9fr)_6rem_7rem_8rem_auto] md:items-center">
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <p className="truncate text-lg font-semibold text-text">{list.title}</p>
+            {list.isSubscribed ? <UserCheck size={14} className="shrink-0 text-accent-strong" /> : null}
           </div>
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[16px] bg-brand-soft">
-            <BookMarked size={20} className="text-brand-strong" />
-          </div>
-        </div>
-
-        {list.description ? (
-          <p className="mt-3 text-sm leading-relaxed text-text-muted">
-            {truncateDescription(list.description)}
+          <p className="mt-1 truncate text-sm text-text-muted">
+            By {getOwnerDisplayName(list.ownerNickname, list.ownerUserId)}
           </p>
-        ) : null}
-
-        <div className="mt-5 flex flex-wrap gap-2">
-          {list.status !== 'PUBLISHED' ? (
-            <StatusChip label={getReadingListStatusLabel(list.status)} tone="muted" />
+          {list.description ? (
+            <p className="mt-2 line-clamp-2 text-sm leading-relaxed text-text-muted md:hidden">
+              {truncateDescription(list.description, 120)}
+            </p>
           ) : null}
-          {list.callerIsOwner ? <StatusChip label="Owner" tone="brand" /> : null}
-          {list.isSubscribed ? <StatusChip label="Subscribed" tone="accent" /> : null}
-          <StatusChip label={`${list.bookCount} book${list.bookCount === 1 ? '' : 's'}`} tone="muted" />
+          <div className="mt-3 flex flex-wrap gap-2 md:hidden">
+            {list.status !== 'PUBLISHED' ? (
+              <StatusChip label={getReadingListStatusLabel(list.status)} tone="muted" />
+            ) : null}
+            {list.callerIsOwner ? <StatusChip label="Owner" tone="brand" /> : null}
+            <StatusChip label={`${list.bookCount} book${list.bookCount === 1 ? '' : 's'}`} tone="muted" />
+          </div>
         </div>
 
-        <div className="mt-5 inline-flex items-center gap-2 text-sm font-medium text-brand-strong">
-          <span>Open list</span>
-          <ArrowRight size={14} />
+        <GenreChips genres={list.genres} />
+
+        <div className="hidden text-sm text-text-muted md:block">
+          <span className="font-medium text-text">{list.bookCount}</span>
+          {' '}
+          book{list.bookCount === 1 ? '' : 's'}
         </div>
-      </Link>
 
-      <div className="mt-4 flex items-center justify-between gap-3 border-t border-border pt-4">
-        <button
-          type="button"
-          onClick={() => onStarToggle(list)}
-          disabled={busy}
-          className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
-            list.hasStarred
-              ? 'bg-accent-soft text-accent-strong'
-              : 'bg-surface-muted text-text-muted hover:text-text'
-          } disabled:cursor-not-allowed disabled:opacity-60`}
-          aria-label={list.hasStarred ? 'Remove star' : 'Star list'}
-        >
-          <Star size={14} className={list.hasStarred ? 'fill-current' : ''} />
-          {list.starCount}
-        </button>
-
-        {list.callerIsOwner ? (
-          <span className="text-xs text-text-subtle">Created {formatCircleDate(list.createdAt)}</span>
-        ) : list.status === 'PUBLISHED' ? (
+        <div>
           <button
             type="button"
-            onClick={() => onSubscribeToggle(list)}
+            onClick={(event) => {
+              stopRowNavigation(event);
+              onStarToggle(list);
+            }}
             disabled={busy}
-            className={`rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
-              list.isSubscribed
-                ? 'bg-surface-muted text-text'
-                : 'bg-brand text-text-on-brand hover:bg-brand-hover'
+            className={`inline-flex items-center gap-2 rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
+              list.hasStarred
+                ? 'bg-accent-soft text-accent-strong'
+                : 'bg-surface-muted text-text-muted hover:text-text'
             } disabled:cursor-not-allowed disabled:opacity-60`}
+            aria-label={list.hasStarred ? 'Remove star' : 'Star list'}
           >
-            {list.isSubscribed ? 'Unsubscribe' : 'Subscribe'}
+            <Star size={14} className={list.hasStarred ? 'fill-current' : ''} />
+            {list.starCount}
           </button>
-        ) : null}
+        </div>
+
+        <div className="text-sm text-text-muted">
+          <span className="md:hidden">Created </span>
+          {formatCircleDate(list.createdAt)}
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 md:justify-end">
+          <div className="hidden flex-wrap gap-2 lg:flex">
+            {list.status !== 'PUBLISHED' ? (
+              <StatusChip label={getReadingListStatusLabel(list.status)} tone="muted" />
+            ) : null}
+            {list.callerIsOwner ? <StatusChip label="Owner" tone="brand" /> : null}
+          </div>
+
+          {list.callerIsOwner || list.status !== 'PUBLISHED' ? (
+            <button
+              type="button"
+              onClick={(event) => {
+                stopRowNavigation(event);
+                openList();
+              }}
+              className="inline-flex items-center gap-2 rounded-full bg-surface-muted px-3 py-1.5 text-sm font-medium text-text transition-colors hover:bg-brand-soft hover:text-brand-strong"
+            >
+              Open
+              <ArrowRight size={14} />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={(event) => {
+                stopRowNavigation(event);
+                onSubscribeToggle(list);
+              }}
+              disabled={busy}
+              className={`rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
+                list.isSubscribed
+                  ? 'bg-surface-muted text-text'
+                  : 'bg-brand text-text-on-brand hover:bg-brand-hover'
+              } disabled:cursor-not-allowed disabled:opacity-60`}
+            >
+              {list.isSubscribed ? 'Unsubscribe' : 'Subscribe'}
+            </button>
+          )}
+        </div>
       </div>
-    </article>
+    </div>
   );
 }
 
-function SubscriptionCard({ subscription }: { subscription: ReadingListSubscriptionResponseDTO }) {
+function SubscriptionRow({
+  subscription,
+  onOpen,
+}: {
+  subscription: ReadingListSubscriptionResponseDTO;
+  onOpen: (listId: number) => void;
+}) {
   const progressPercent = subscription.slotsTotal > 0
     ? Math.round((subscription.slotsCompleted / subscription.slotsTotal) * 100)
     : 0;
   const isComplete = subscription.completedAt != null;
+  const openList = () => onOpen(subscription.listId);
 
   return (
-    <Link
-      to={`/reading-lists/${subscription.listId}`}
-      className="block rounded-[28px] border border-border bg-surface p-6 text-left shadow-[0_14px_28px_rgba(31,41,55,0.06)] transition-all duration-200 hover:-translate-y-0.5 hover:bg-surface-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+    <div
+      role="link"
+      tabIndex={0}
+      onClick={openList}
+      onKeyDown={(event) => handleRowKeyDown(event, openList)}
+      className="group cursor-pointer border-t border-border px-4 py-4 transition-colors hover:bg-surface-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand"
+      aria-label={`Open ${subscription.listTitle}`}
     >
-      <div className="flex items-start justify-between gap-4">
+      <div className="grid gap-4 md:grid-cols-[minmax(0,1.45fr)_minmax(11rem,0.9fr)_7rem_8rem_auto] md:items-center">
         <div className="min-w-0">
-          <p className="truncate text-xl font-semibold text-text">{subscription.listTitle}</p>
+          <div className="flex items-center gap-2">
+            <p className="truncate text-lg font-semibold text-text">{subscription.listTitle}</p>
+            {isComplete ? <Trophy size={14} className="shrink-0 text-accent-strong" /> : null}
+          </div>
           <p className="mt-1 truncate text-sm text-text-muted">
             By {subscription.ownerNickname?.trim() || 'Anonymous'}
           </p>
         </div>
-        {isComplete ? (
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[16px] bg-accent-soft text-accent-strong">
-            <Trophy size={20} />
+
+        <div>
+          <div className="flex items-center justify-between text-sm text-text-muted">
+            <span>{subscription.slotsCompleted} / {subscription.slotsTotal}</span>
+            <span className="font-semibold text-text">{progressPercent}%</span>
           </div>
-        ) : null}
-      </div>
-
-      <div className="mt-5">
-        <div className="flex items-center justify-between text-sm text-text-muted">
-          <span>{subscription.slotsCompleted} / {subscription.slotsTotal} books</span>
-          <span className="font-semibold text-text">{progressPercent}%</span>
+          <div className="mt-2">
+            <ProgressBar current={subscription.slotsCompleted} total={Math.max(1, subscription.slotsTotal)} height="sm" />
+          </div>
         </div>
-        <div className="mt-2">
-          <ProgressBar current={subscription.slotsCompleted} total={Math.max(1, subscription.slotsTotal)} height="md" />
+
+        <div className="text-sm text-text-muted">
+          <span className="font-medium text-text">{subscription.slotsTotal}</span>
+          {' '}
+          books
+        </div>
+
+        <div className="text-sm text-text-muted">
+          {isComplete
+            ? `Completed ${formatCircleDate(subscription.completedAt ?? '')}`
+            : `Joined ${formatCircleDate(subscription.subscribedAt)}`}
+        </div>
+
+        <div className="md:text-right">
+          <button
+            type="button"
+            onClick={(event) => {
+              stopRowNavigation(event);
+              openList();
+            }}
+            className="inline-flex items-center gap-2 rounded-full bg-surface-muted px-3 py-1.5 text-sm font-medium text-text transition-colors hover:bg-brand-soft hover:text-brand-strong"
+          >
+            Open
+            <ArrowRight size={14} />
+          </button>
         </div>
       </div>
-
-      <p className="mt-4 text-xs text-text-subtle">
-        {isComplete
-          ? `Completed ${formatCircleDate(subscription.completedAt ?? '')}`
-          : `Subscribed ${formatCircleDate(subscription.subscribedAt)}`}
-      </p>
-    </Link>
+    </div>
   );
 }
+
+function ListHeader({ kind }: { kind: 'reading-lists' | 'subscriptions' }) {
+  if (kind === 'subscriptions') {
+    return (
+      <div className="hidden grid-cols-[minmax(0,1.45fr)_minmax(11rem,0.9fr)_7rem_8rem_auto] gap-4 bg-surface-muted px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-text-subtle md:grid">
+        <span>List</span>
+        <span>Progress</span>
+        <span>Books</span>
+        <span>Date</span>
+        <span className="text-right">Action</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="hidden grid-cols-[minmax(0,1.45fr)_minmax(10rem,0.9fr)_6rem_7rem_8rem_auto] gap-4 bg-surface-muted px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-text-subtle md:grid">
+      <span>List</span>
+      <span>Genres</span>
+      <span>Books</span>
+      <span>Stars</span>
+      <span>Created</span>
+      <span className="text-right">Action</span>
+    </div>
+  );
+}
+
+function PaginationFooter({
+  page,
+  hasNext,
+  onPrevious,
+  onNext,
+  label,
+}: {
+  page: number;
+  hasNext: boolean;
+  onPrevious: () => void;
+  onNext: () => void;
+  label: string;
+}) {
+  return (
+    <div className="flex flex-col gap-3 border-t border-border bg-surface px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+      <span className="text-sm text-text-muted">{label}</span>
+      <div className="flex items-center justify-between gap-3 sm:justify-end">
+        <Button type="button" variant="outline" className="rounded-full px-4" disabled={page === 0} onClick={onPrevious}>
+          <span className="inline-flex items-center gap-2">
+            <ChevronLeft size={14} />
+            Previous
+          </span>
+        </Button>
+        <span className="min-w-16 text-center text-sm font-medium text-text">Page {page + 1}</span>
+        <Button type="button" variant="outline" className="rounded-full px-4" disabled={!hasNext} onClick={onNext}>
+          <span className="inline-flex items-center gap-2">
+            Next
+            <ChevronRight size={14} />
+          </span>
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+function StatePanel({
+  icon: Icon,
+  title,
+  message,
+  action,
+  danger = false,
+}: {
+  icon: typeof Sparkles;
+  title: string;
+  message: string;
+  action?: React.ReactNode;
+  danger?: boolean;
+}) {
+  return (
+    <div className={`rounded-[22px] border bg-surface px-6 py-14 text-center shadow-[0_14px_28px_rgba(31,41,55,0.05)] ${danger ? 'border-danger/30' : 'border-border'}`}>
+      <div className={`mx-auto flex h-14 w-14 items-center justify-center rounded-[18px] ${danger ? 'bg-danger-soft text-danger' : 'bg-brand-soft text-brand-strong'}`}>
+        <Icon size={24} />
+      </div>
+      <h2 className={`mt-5 text-xl font-semibold text-text ${danger ? 'text-danger' : ''}`}>{title}</h2>
+      <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-text-muted">{message}</p>
+      {action ? <div className="mt-5">{action}</div> : null}
+    </div>
+  );
+}
+
+const getClientPageItems = <Item,>(items: Item[], page: number) => {
+  const start = page * PAGE_SIZE;
+  return items.slice(start, start + PAGE_SIZE);
+};
+
+const getLastClientPage = (itemCount: number) => {
+  return Math.max(0, Math.ceil(itemCount / PAGE_SIZE) - 1);
+};
+
+const getRangeLabel = (page: number, total: number) => {
+  if (total === 0) {
+    return 'No results';
+  }
+
+  const start = page * PAGE_SIZE + 1;
+  const end = Math.min(total, (page + 1) * PAGE_SIZE);
+  return `Showing ${start}-${end} of ${total}`;
+};
 
 export default function ReadingLists() {
   const navigate = useNavigate();
@@ -200,6 +407,8 @@ export default function ReadingLists() {
   const [searchQuery, setSearchQuery] = useState('');
   const [minStars, setMinStars] = useState('0');
   const [page, setPage] = useState(0);
+  const [myPage, setMyPage] = useState(0);
+  const [subsPage, setSubsPage] = useState(0);
   const [exploreLoading, setExploreLoading] = useState(true);
   const [exploreError, setExploreError] = useState<string | null>(null);
   const [hasNextPage, setHasNextPage] = useState(false);
@@ -229,6 +438,20 @@ export default function ReadingLists() {
     const parsed = Number(minStars);
     return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 0;
   }, [minStars]);
+
+  const visibleMyLists = useMemo(() => getClientPageItems(myLists, myPage), [myLists, myPage]);
+  const visibleSubscriptions = useMemo(
+    () => getClientPageItems(subscriptions, subsPage),
+    [subscriptions, subsPage],
+  );
+
+  useEffect(() => {
+    setMyPage((current) => Math.min(current, getLastClientPage(myLists.length)));
+  }, [myLists.length]);
+
+  useEffect(() => {
+    setSubsPage((current) => Math.min(current, getLastClientPage(subscriptions.length)));
+  }, [subscriptions.length]);
 
   const loadExplore = useCallback(async () => {
     const requestId = latestExploreRequestRef.current + 1;
@@ -298,6 +521,10 @@ export default function ReadingLists() {
     if (tab === 'subscriptions') void loadSubscriptions();
   }, [tab, loadSubscriptions]);
 
+  const openList = (listId: number) => {
+    void navigate(`/reading-lists/${listId}`);
+  };
+
   const applySummaryChange = (listId: number, patch: Partial<ReadingListSummaryResponseDTO>) => {
     const update = (current: ReadingListSummaryResponseDTO[]) =>
       current.map((list) => (list.id === listId ? { ...list, ...patch } : list));
@@ -362,130 +589,126 @@ export default function ReadingLists() {
   const renderExplore = () => {
     if (exploreLoading) {
       return (
-        <div className="rounded-[28px] border border-border bg-surface px-6 py-16 text-center shadow-[0_14px_28px_rgba(31,41,55,0.05)]">
-          <p className="text-sm text-text-muted">Loading reading lists...</p>
-        </div>
+        <StatePanel
+          icon={BookMarked}
+          title="Loading reading lists"
+          message="Fetching the next page of curated roadmaps."
+        />
       );
     }
 
     if (exploreError) {
       return (
-        <div className="rounded-[28px] border border-danger/30 bg-surface px-6 py-16 text-center shadow-[0_14px_28px_rgba(31,41,55,0.05)]">
-          <p className="text-lg font-semibold text-danger">{exploreError}</p>
-          <Button type="button" variant="outline" className="mt-4 rounded-full px-5" onClick={() => void loadExplore()}>
-            Try again
-          </Button>
-        </div>
+        <StatePanel
+          icon={BookMarked}
+          title={exploreError}
+          message="Try again in a moment."
+          danger
+          action={(
+            <Button type="button" variant="outline" className="rounded-full px-5" onClick={() => void loadExplore()}>
+              Try again
+            </Button>
+          )}
+        />
       );
     }
 
     if (exploreLists.length === 0) {
       return (
-        <div className="rounded-[32px] border border-border bg-surface px-6 py-16 text-center shadow-[0_14px_28px_rgba(31,41,55,0.05)]">
-          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-brand-soft">
-            <Sparkles size={30} className="text-brand-strong" />
-          </div>
-          <h2 className="mt-6 text-2xl font-semibold text-text">No reading lists match your filters</h2>
-          <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-text-muted">
-            Try a different search, lower the star minimum, or author the first list yourself.
-          </p>
-        </div>
+        <StatePanel
+          icon={Sparkles}
+          title="No reading lists match your filters"
+          message="Try a different search, lower the star minimum, or author the first list yourself."
+        />
       );
     }
 
     return (
-      <>
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-          {exploreLists.map((list) => (
-            <SummaryCard
-              key={list.id}
-              list={list}
-              onStarToggle={(target) => { void handleStarToggle(target); }}
-              onSubscribeToggle={(target) => { void handleSubscribeToggle(target); }}
-              busy={busyListId === list.id}
-            />
-          ))}
-        </div>
-
-        <div className="mt-6 flex items-center justify-between">
-          <Button
-            type="button"
-            variant="outline"
-            className="rounded-full px-4"
-            disabled={page === 0}
-            onClick={() => setPage((current) => Math.max(0, current - 1))}
-          >
-            <span className="inline-flex items-center gap-2">
-              <ChevronLeft size={14} />
-              Previous
-            </span>
-          </Button>
-          <span className="text-sm text-text-muted">Page {page + 1}</span>
-          <Button
-            type="button"
-            variant="outline"
-            className="rounded-full px-4"
-            disabled={!hasNextPage}
-            onClick={() => setPage((current) => current + 1)}
-          >
-            <span className="inline-flex items-center gap-2">
-              Next
-              <ChevronRight size={14} />
-            </span>
-          </Button>
-        </div>
-      </>
+      <div className="overflow-hidden rounded-[22px] border border-border bg-surface shadow-[0_14px_28px_rgba(31,41,55,0.05)]">
+        <ListHeader kind="reading-lists" />
+        {exploreLists.map((list) => (
+          <ReadingListRow
+            key={list.id}
+            list={list}
+            onOpen={openList}
+            onStarToggle={(target) => { void handleStarToggle(target); }}
+            onSubscribeToggle={(target) => { void handleSubscribeToggle(target); }}
+            busy={busyListId === list.id}
+          />
+        ))}
+        <PaginationFooter
+          page={page}
+          hasNext={hasNextPage}
+          onPrevious={() => setPage((current) => Math.max(0, current - 1))}
+          onNext={() => setPage((current) => current + 1)}
+          label={`Showing ${exploreLists.length} result${exploreLists.length === 1 ? '' : 's'} on this page`}
+        />
+      </div>
     );
   };
 
   const renderMine = () => {
     if (myLoading) {
       return (
-        <div className="rounded-[28px] border border-border bg-surface px-6 py-16 text-center shadow-[0_14px_28px_rgba(31,41,55,0.05)]">
-          <p className="text-sm text-text-muted">Loading your lists...</p>
-        </div>
+        <StatePanel
+          icon={BookMarked}
+          title="Loading your lists"
+          message="Fetching the roadmaps you have authored."
+        />
       );
     }
 
     if (myError) {
       return (
-        <div className="rounded-[28px] border border-danger/30 bg-surface px-6 py-16 text-center shadow-[0_14px_28px_rgba(31,41,55,0.05)]">
-          <p className="text-lg font-semibold text-danger">{myError}</p>
-          <Button type="button" variant="outline" className="mt-4 rounded-full px-5" onClick={() => void loadMine()}>
-            Try again
-          </Button>
-        </div>
+        <StatePanel
+          icon={BookMarked}
+          title={myError}
+          message="Try again in a moment."
+          danger
+          action={(
+            <Button type="button" variant="outline" className="rounded-full px-5" onClick={() => void loadMine()}>
+              Try again
+            </Button>
+          )}
+        />
       );
     }
 
     if (myLists.length === 0) {
       return (
-        <div className="rounded-[32px] border border-border bg-surface px-6 py-16 text-center shadow-[0_14px_28px_rgba(31,41,55,0.05)]">
-          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-brand-soft">
-            <ListPlus size={30} className="text-brand-strong" />
-          </div>
-          <h2 className="mt-6 text-2xl font-semibold text-text">You haven&apos;t authored a list yet</h2>
-          <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-text-muted">
-            Curate your favourite books into a roadmap others can subscribe to.
-          </p>
-          <Button type="button" className="mt-6 rounded-full px-5" onClick={() => setIsCreateOpen(true)}>
-            Create a list
-          </Button>
-        </div>
+        <StatePanel
+          icon={ListPlus}
+          title="You haven't authored a list yet"
+          message="Curate your favourite books into a roadmap others can subscribe to."
+          action={(
+            <Button type="button" className="rounded-full px-5" onClick={() => setIsCreateOpen(true)}>
+              Create a list
+            </Button>
+          )}
+        />
       );
     }
 
     return (
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {myLists.map((list) => (
-          <SummaryCard
+      <div className="overflow-hidden rounded-[22px] border border-border bg-surface shadow-[0_14px_28px_rgba(31,41,55,0.05)]">
+        <ListHeader kind="reading-lists" />
+        {visibleMyLists.map((list) => (
+          <ReadingListRow
             key={list.id}
             list={list}
+            onOpen={openList}
             onStarToggle={(target) => { void handleStarToggle(target); }}
             onSubscribeToggle={(target) => { void handleSubscribeToggle(target); }}
             busy={busyListId === list.id}
           />
         ))}
+        <PaginationFooter
+          page={myPage}
+          hasNext={(myPage + 1) * PAGE_SIZE < myLists.length}
+          onPrevious={() => setMyPage((current) => Math.max(0, current - 1))}
+          onNext={() => setMyPage((current) => current + 1)}
+          label={getRangeLabel(myPage, myLists.length)}
+        />
       </div>
     );
   };
@@ -493,58 +716,69 @@ export default function ReadingLists() {
   const renderSubscriptions = () => {
     if (subsLoading) {
       return (
-        <div className="rounded-[28px] border border-border bg-surface px-6 py-16 text-center shadow-[0_14px_28px_rgba(31,41,55,0.05)]">
-          <p className="text-sm text-text-muted">Loading your subscriptions...</p>
-        </div>
+        <StatePanel
+          icon={UserCheck}
+          title="Loading your subscriptions"
+          message="Fetching the roadmaps you are following."
+        />
       );
     }
 
     if (subsError) {
       return (
-        <div className="rounded-[28px] border border-danger/30 bg-surface px-6 py-16 text-center shadow-[0_14px_28px_rgba(31,41,55,0.05)]">
-          <p className="text-lg font-semibold text-danger">{subsError}</p>
-          <Button type="button" variant="outline" className="mt-4 rounded-full px-5" onClick={() => void loadSubscriptions()}>
-            Try again
-          </Button>
-        </div>
+        <StatePanel
+          icon={UserCheck}
+          title={subsError}
+          message="Try again in a moment."
+          danger
+          action={(
+            <Button type="button" variant="outline" className="rounded-full px-5" onClick={() => void loadSubscriptions()}>
+              Try again
+            </Button>
+          )}
+        />
       );
     }
 
     if (subscriptions.length === 0) {
       return (
-        <div className="rounded-[32px] border border-border bg-surface px-6 py-16 text-center shadow-[0_14px_28px_rgba(31,41,55,0.05)]">
-          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full bg-brand-soft">
-            <UserCheck size={30} className="text-brand-strong" />
-          </div>
-          <h2 className="mt-6 text-2xl font-semibold text-text">No subscriptions yet</h2>
-          <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-text-muted">
-            Browse explore and subscribe to a list to start earning bonus XP while you read through it.
-          </p>
-        </div>
+        <StatePanel
+          icon={UserCheck}
+          title="No subscriptions yet"
+          message="Browse explore and subscribe to a list to start earning bonus XP while you read through it."
+        />
       );
     }
 
     return (
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {subscriptions.map((subscription) => (
-          <SubscriptionCard key={subscription.listId} subscription={subscription} />
+      <div className="overflow-hidden rounded-[22px] border border-border bg-surface shadow-[0_14px_28px_rgba(31,41,55,0.05)]">
+        <ListHeader kind="subscriptions" />
+        {visibleSubscriptions.map((subscription) => (
+          <SubscriptionRow key={subscription.listId} subscription={subscription} onOpen={openList} />
         ))}
+        <PaginationFooter
+          page={subsPage}
+          hasNext={(subsPage + 1) * PAGE_SIZE < subscriptions.length}
+          onPrevious={() => setSubsPage((current) => Math.max(0, current - 1))}
+          onNext={() => setSubsPage((current) => current + 1)}
+          label={getRangeLabel(subsPage, subscriptions.length)}
+        />
       </div>
     );
   };
 
   return (
     <div className="page-bg min-h-screen pb-28 lg:pl-60 lg:pb-0">
-      <div className="mx-auto w-full max-w-6xl px-4 py-6 sm:px-6 lg:px-8 lg:py-10">
-        <section className="rounded-[32px] border border-border bg-surface p-6 shadow-[0_20px_48px_rgba(15,23,42,0.07)] sm:p-7">
-          <div className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
+      <div className="mx-auto w-full max-w-7xl px-4 py-5 sm:px-6 lg:px-8 lg:py-8">
+        <section className="rounded-[24px] border border-border bg-surface px-5 py-4 shadow-[0_14px_32px_rgba(15,23,42,0.06)] sm:px-6">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-[0.72rem] font-medium uppercase tracking-[0.32em] text-text-subtle">Curated roadmaps</p>
-              <h1 className="mt-2 text-[1.9rem] font-semibold leading-tight tracking-[-0.05em] text-text sm:text-[2.4rem]">
+              <h1 className="mt-1 text-[1.7rem] font-semibold leading-tight text-text sm:text-[2rem]">
                 Reading lists
               </h1>
-              <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text-muted sm:text-base">
-                Follow curated roadmaps, track your progress through each book, and earn bonus XP as you finish.
+              <p className="mt-1 max-w-2xl text-sm leading-relaxed text-text-muted">
+                Search, subscribe, and track curated book roadmaps.
               </p>
             </div>
 
@@ -557,73 +791,75 @@ export default function ReadingLists() {
           </div>
         </section>
 
-        <div className="mt-6 flex w-full gap-1 rounded-full border border-border bg-surface-muted p-1 sm:w-fit">
-          {TABS.map((option) => {
-            const Icon = option.icon;
-            const isActive = option.key === tab;
-            return (
-              <button
-                key={option.key}
-                type="button"
-                onClick={() => setTab(option.key)}
-                className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-all ${
-                  isActive
-                    ? 'bg-brand text-text-on-brand shadow-[0_8px_18px_rgba(154,74,66,0.24)]'
-                    : 'text-text-muted hover:text-text'
-                }`}
-              >
-                <Icon size={14} />
-                {option.label}
-              </button>
-            );
-          })}
-        </div>
-
-        {tab === 'explore' ? (
-          <div className="mt-6 rounded-[28px] border border-border bg-surface p-4 shadow-[0_14px_28px_rgba(31,41,55,0.05)] sm:p-6">
-            <div className="grid gap-4 sm:grid-cols-[1fr_auto]">
-              <div>
-                <label htmlFor="reading-list-search" className={fieldLabelClassName}>
-                  Search by title
-                </label>
-                <div className="relative">
-                  <input
-                    id="reading-list-search"
-                    type="text"
-                    value={searchInput}
-                    onChange={(event) => setSearchInput(event.target.value)}
-                    className={`${inputClassName} pl-10`}
-                    placeholder="Sci-fi, fantasy, programming..."
-                    autoComplete="off"
-                  />
-                  <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-subtle" />
-                </div>
-              </div>
-              <div>
-                <label htmlFor="reading-list-min-stars" className={fieldLabelClassName}>
-                  Min stars
-                </label>
-                <div className="relative">
-                  <input
-                    id="reading-list-min-stars"
-                    type="number"
-                    min="0"
-                    value={minStars}
-                    onChange={(event) => {
-                      setMinStars(event.target.value);
-                      setPage(0);
-                    }}
-                    className={`${inputClassName} w-28 pr-10`}
-                    inputMode="numeric"
-                  />
-                  <Star size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-text-subtle" />
-                </div>
-              </div>
+        <section className="mt-4 rounded-[22px] border border-border bg-surface p-3 shadow-[0_10px_24px_rgba(31,41,55,0.05)]">
+          <div className="flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+            <div className="flex w-full gap-1 overflow-x-auto rounded-full border border-border bg-surface-muted p-1 sm:w-fit">
+              {TABS.map((option) => {
+                const Icon = option.icon;
+                const isActive = option.key === tab;
+                return (
+                  <button
+                    key={option.key}
+                    type="button"
+                    onClick={() => setTab(option.key)}
+                    className={`inline-flex shrink-0 items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-all ${
+                      isActive
+                        ? 'bg-brand text-text-on-brand shadow-[0_8px_18px_rgba(154,74,66,0.24)]'
+                        : 'text-text-muted hover:text-text'
+                    }`}
+                  >
+                    <Icon size={14} />
+                    {option.label}
+                  </button>
+                );
+              })}
             </div>
-          </div>
-        ) : null}
 
-        <div className="mt-6">
+            {tab === 'explore' ? (
+              <div className="grid flex-1 gap-3 sm:grid-cols-[minmax(16rem,1fr)_9rem] xl:max-w-3xl">
+                <div>
+                  <label htmlFor="reading-list-search" className={fieldLabelClassName}>
+                    Search lists
+                  </label>
+                  <div className="relative">
+                    <input
+                      id="reading-list-search"
+                      type="text"
+                      value={searchInput}
+                      onChange={(event) => setSearchInput(event.target.value)}
+                      className={`${inputClassName} pl-10`}
+                      placeholder="Search lists, genres, books, or authors"
+                      autoComplete="off"
+                    />
+                    <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-subtle" />
+                  </div>
+                </div>
+                <div>
+                  <label htmlFor="reading-list-min-stars" className={fieldLabelClassName}>
+                    Min stars
+                  </label>
+                  <div className="relative">
+                    <input
+                      id="reading-list-min-stars"
+                      type="number"
+                      min="0"
+                      value={minStars}
+                      onChange={(event) => {
+                        setMinStars(event.target.value);
+                        setPage(0);
+                      }}
+                      className={`${inputClassName} pr-10`}
+                      inputMode="numeric"
+                    />
+                    <Star size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-text-subtle" />
+                  </div>
+                </div>
+              </div>
+            ) : null}
+          </div>
+        </section>
+
+        <div className="mt-4">
           {tab === 'explore' ? renderExplore() : null}
           {tab === 'mine' ? renderMine() : null}
           {tab === 'subscriptions' ? renderSubscriptions() : null}

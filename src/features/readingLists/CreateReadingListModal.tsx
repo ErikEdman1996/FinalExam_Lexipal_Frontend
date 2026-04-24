@@ -16,7 +16,8 @@ import {
   fieldLabelClassName,
   textareaClassName,
 } from '../../components/form/inputStyles';
-import { normalizeTitleAuthorKey, readingListInputClassName } from './utils';
+import { GenreEditor } from './GenreEditor';
+import { normalizeTitleAuthorKey, readingListInputClassName, validateGenreList } from './utils';
 
 interface CreateReadingListModalProps {
   isOpen: boolean;
@@ -37,7 +38,7 @@ interface SlotError {
   note?: string;
 }
 
-type FormField = 'title' | 'description' | 'status' | 'books';
+type FormField = 'title' | 'description' | 'status' | 'genres' | 'books';
 
 const STATUS_OPTIONS: Array<{ value: ReadingListStatus; label: string; description: string }> = [
   { value: 'PUBLISHED', label: 'Published', description: 'Anyone can browse, star, and subscribe.' },
@@ -65,6 +66,7 @@ export function CreateReadingListModal({
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [status, setStatus] = useState<ReadingListStatus>('PUBLISHED');
+  const [genres, setGenres] = useState<string[]>([]);
   const [slots, setSlots] = useState<SlotDraft[]>(() => [makeEmptySlot()]);
   const [slotErrors, setSlotErrors] = useState<Record<string, SlotError>>({});
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<FormField, string>>>({});
@@ -79,6 +81,7 @@ export function CreateReadingListModal({
     setTitle('');
     setDescription('');
     setStatus('PUBLISHED');
+    setGenres([]);
     setSlots([makeEmptySlot()]);
     setSlotErrors({});
     setFieldErrors({});
@@ -155,6 +158,11 @@ export function CreateReadingListModal({
       nextFieldErrors.description = 'Description must be 2000 characters or fewer.';
     }
 
+    const genreError = validateGenreList(genres);
+    if (genreError) {
+      nextFieldErrors.genres = genreError;
+    }
+
     if (slots.length === 0) {
       nextFieldErrors.books = 'A reading list must contain at least one book.';
     }
@@ -210,6 +218,7 @@ export function CreateReadingListModal({
         title: title.trim(),
         description: description.trim() ? description.trim() : null,
         status,
+        ...(genres.length > 0 ? { genres } : {}),
         books: slots.map((slot, index) => ({
           title: slot.title.trim(),
           author: slot.author.trim(),
@@ -314,6 +323,18 @@ export function CreateReadingListModal({
             <p className={fieldHintClassName}>Optional, up to 2000 characters.</p>
             {fieldErrors.description ? <p className={fieldErrorClassName}>{fieldErrors.description}</p> : null}
           </div>
+
+          <GenreEditor
+            id="reading-list-genres"
+            genres={genres}
+            onGenresChange={(nextGenres) => {
+              setGenres(nextGenres);
+              setFieldErrors((current) => ({ ...current, genres: undefined }));
+            }}
+            error={fieldErrors.genres}
+            onErrorClear={() => setFieldErrors((current) => ({ ...current, genres: undefined }))}
+            disabled={isSubmitting}
+          />
 
           <div>
             <p className={fieldLabelClassName}>Visibility</p>

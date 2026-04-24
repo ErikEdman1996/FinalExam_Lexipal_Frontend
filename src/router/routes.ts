@@ -11,6 +11,7 @@ import Circles from '../pages/Circles.tsx';
 import CircleDetails from '../pages/CircleDetails.tsx';
 import ReadingLists from '../pages/ReadingLists.tsx';
 import ReadingListDetails from '../pages/ReadingListDetails.tsx';
+import AdminDashboard from '../pages/AdminDashboard.tsx';
 import { ProtectedRoute } from '../features/auth/ProtectedRoute.tsx';
 
 export const router = createBrowserRouter([
@@ -30,6 +31,7 @@ export const router = createBrowserRouter([
       { path: '/circles/:circleId', Component: CircleDetails },
       { path: '/reading-lists', Component: ReadingLists },
       { path: '/reading-lists/:listId', Component: ReadingListDetails },
+      { path: '/admin', Component: AdminDashboard },
       { path: '/challenges', Component: Challenge },
       { path: '/challenges/flashcard', Component: Flashcard },
       { path: '/profile', Component: Profile },

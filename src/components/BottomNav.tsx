@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom';
-import { BookMarked, BookOpen, Library, Trophy, User, UsersRound } from 'lucide-react';
+import { BookMarked, BookOpen, Library, ShieldCheck, Trophy, User, UsersRound } from 'lucide-react';
 import { ThemeToggle } from '../features/theme/ThemeToggle.tsx';
+import { useAuth } from '../features/auth/useAuth';
 import mothIcon from '../assets/moth_icon.png';
 
 const NAV_ITEMS = [
@@ -13,11 +14,16 @@ const NAV_ITEMS = [
 ] as const;
 
 export function BottomNav() {
+  const { isAdmin } = useAuth();
+  const navItems = isAdmin
+    ? [...NAV_ITEMS, { to: '/admin', icon: ShieldCheck, label: 'Admin' }]
+    : NAV_ITEMS;
+
   return (
     <>
       <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-surface safe-area-inset-bottom lg:hidden">
         <div className="mx-auto flex h-16 max-w-[480px] items-center justify-around px-4">
-          {NAV_ITEMS.map(({ to, icon: Icon, label }) => (
+          {navItems.map(({ to, icon: Icon, label }) => (
             <NavLink
               key={to}
               to={to}
@@ -61,7 +67,7 @@ export function BottomNav() {
           <p className="px-3 pb-2 text-[0.66rem] font-medium uppercase tracking-[0.28em] text-text-subtle">
             Menu
           </p>
-          {NAV_ITEMS.map(({ to, icon: Icon, label }) => (
+          {navItems.map(({ to, icon: Icon, label }) => (
             <NavLink
               key={to}
               to={to}

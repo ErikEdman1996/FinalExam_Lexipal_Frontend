@@ -10,6 +10,8 @@ export interface AuthContextValue {
   profile: ProfileReadResponseDTO | null;
   needsOnboarding: boolean;
   username: string;
+  roles: string[];
+  isAdmin: boolean;
   login: () => Promise<void>;
   logout: () => Promise<void>;
   retryBootstrap: () => Promise<void>;

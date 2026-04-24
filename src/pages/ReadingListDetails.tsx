@@ -51,6 +51,14 @@ function StatusChip({ label, tone }: { label: string; tone: 'brand' | 'accent' |
   );
 }
 
+function GenreChip({ label }: { label: string }) {
+  return (
+    <span className="rounded-full bg-brand-soft px-3 py-1 text-xs font-medium text-brand-strong">
+      {label}
+    </span>
+  );
+}
+
 function SlotRow({
   slot,
   index,
@@ -330,6 +338,13 @@ export default function ReadingListDetails() {
                 {' · '}
                 {formatCircleDate(list.createdAt)}
               </p>
+              {list.genres.length > 0 ? (
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {list.genres.map((genre) => (
+                    <GenreChip key={genre} label={genre} />
+                  ))}
+                </div>
+              ) : null}
             </div>
 
             <div className="flex flex-wrap items-center gap-2">

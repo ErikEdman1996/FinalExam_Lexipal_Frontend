@@ -15,7 +15,8 @@ import {
   fieldLabelClassName,
   textareaClassName,
 } from '../../components/form/inputStyles';
-import { readingListInputClassName } from './utils';
+import { GenreEditor } from './GenreEditor';
+import { readingListInputClassName, validateGenreList } from './utils';
 
 interface EditReadingListModalProps {
   isOpen: boolean;
@@ -24,7 +25,7 @@ interface EditReadingListModalProps {
   onUpdated: (list: ReadingListDetailResponseDTO) => void;
 }
 
-type EditField = 'title' | 'description' | 'status';
+type EditField = 'title' | 'description' | 'status' | 'genres';
 
 const STATUS_OPTIONS: ReadingListStatus[] = ['PUBLISHED', 'DRAFT', 'ARCHIVED'];
 
@@ -37,6 +38,8 @@ export function EditReadingListModal({
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [status, setStatus] = useState<ReadingListStatus>('PUBLISHED');
+  const [genres, setGenres] = useState<string[]>([]);
+  const [genresEdited, setGenresEdited] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<EditField, string>>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -46,12 +49,16 @@ export function EditReadingListModal({
       setFieldErrors({});
       setSubmitError(null);
       setIsSubmitting(false);
+      setGenres([]);
+      setGenresEdited(false);
       return;
     }
 
     setTitle(list.title);
     setDescription(list.description ?? '');
     setStatus(list.status);
+    setGenres(list.genres);
+    setGenresEdited(false);
     setFieldErrors({});
     setSubmitError(null);
   }, [isOpen, list]);
@@ -78,6 +85,11 @@ export function EditReadingListModal({
       nextErrors.description = 'Description must be 2000 characters or fewer.';
     }
 
+    const genreError = validateGenreList(genres);
+    if (genreError) {
+      nextErrors.genres = genreError;
+    }
+
     if (Object.keys(nextErrors).length > 0) {
       setFieldErrors(nextErrors);
       return;
@@ -94,6 +106,7 @@ export function EditReadingListModal({
           ? (trimmedDescription ? trimmedDescription : null)
           : undefined,
         status: status !== list.status ? status : undefined,
+        genres: genresEdited ? genres : undefined,
       });
 
       toast.success('Reading list updated.');
@@ -186,6 +199,19 @@ export function EditReadingListModal({
             />
             {fieldErrors.description ? <p className={fieldErrorClassName}>{fieldErrors.description}</p> : null}
           </div>
+
+          <GenreEditor
+            id="edit-list-genres"
+            genres={genres}
+            onGenresChange={(nextGenres) => {
+              setGenres(nextGenres);
+              setGenresEdited(true);
+              setFieldErrors((current) => ({ ...current, genres: undefined }));
+            }}
+            error={fieldErrors.genres}
+            onErrorClear={() => setFieldErrors((current) => ({ ...current, genres: undefined }))}
+            disabled={isSubmitting}
+          />
 
           <div>
             <p className={fieldLabelClassName}>Status</p>

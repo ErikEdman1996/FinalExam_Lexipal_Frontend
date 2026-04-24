@@ -9,6 +9,7 @@ import { getProfile, type ProfileReadResponseDTO } from '../../api/api';
 import { AuthContext, type AuthContextValue } from './AuthContext';
 
 let keycloakInitPromise: Promise<boolean> | null = null;
+const BACKEND_CLIENT_ID = 'Lexipal_Backend';
 
 async function initKeycloakOnce() {
   if (!keycloakInitPromise) {
@@ -23,6 +24,29 @@ async function initKeycloakOnce() {
 
 async function bootstrapProfile() {
   return getProfile();
+}
+
+function getBackendRoles(): string[] {
+  const tokenParsed = keycloak.tokenParsed as Record<string, unknown> | undefined;
+  const resourceAccess = tokenParsed?.resource_access;
+
+  if (resourceAccess == null || typeof resourceAccess !== 'object') {
+    return [];
+  }
+
+  const backendAccess = (resourceAccess as Record<string, unknown>)[BACKEND_CLIENT_ID];
+
+  if (backendAccess == null || typeof backendAccess !== 'object') {
+    return [];
+  }
+
+  const roles = (backendAccess as Record<string, unknown>).roles;
+
+  if (!Array.isArray(roles)) {
+    return [];
+  }
+
+  return roles.filter((role): role is string => typeof role === 'string');
 }
 
 export function AuthProvider({ children }: PropsWithChildren) {
@@ -116,7 +140,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
     };
   }, [authenticated, initialized]);
 
-  const value = useMemo<AuthContextValue>(() => ({
+  const value = useMemo<AuthContextValue>(() => {
+    const roles = getBackendRoles();
+
+    return {
     initialized,
     authenticated,
     isBootstrappingProfile,
@@ -126,6 +153,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
     needsOnboarding:
       profile != null && (profile.needsOnboarding || profile.nickname == null || profile.nickname.trim() === ''),
     username: String(keycloak.tokenParsed?.preferred_username ?? ''),
+    roles,
+    isAdmin: roles.includes('admin'),
     login: async () => {
       await keycloak.login({
         redirectUri: `${window.location.origin}/library`,
@@ -152,7 +181,8 @@ export function AuthProvider({ children }: PropsWithChildren) {
       }
     },
     setProfile,
-  }), [authenticated, bootstrapError, hasBootstrappedProfile, initialized, isBootstrappingProfile, profile]);
+    };
+  }, [authenticated, bootstrapError, hasBootstrappedProfile, initialized, isBootstrappingProfile, profile]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

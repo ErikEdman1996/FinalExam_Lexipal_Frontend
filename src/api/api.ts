@@ -3205,6 +3205,7 @@ export interface ReadingListCreateRequestDTO {
     title: string;
     description?: string | null;
     status?: ReadingListStatus;
+    genres?: string[];
     books: ReadingListBookSlotRequestDTO[];
 }
 
@@ -3212,6 +3213,7 @@ export interface ReadingListUpdateRequestDTO {
     title?: string;
     description?: string | null;
     status?: ReadingListStatus;
+    genres?: string[] | null;
 }
 
 export interface ReadingListSummaryResponseDTO {
@@ -3221,6 +3223,7 @@ export interface ReadingListSummaryResponseDTO {
     ownerNickname: string | null;
     ownerUserId: number;
     status: ReadingListStatus;
+    genres: string[];
     starCount: number;
     bookCount: number;
     callerIsOwner: boolean;
@@ -3247,6 +3250,7 @@ export interface ReadingListDetailResponseDTO {
     ownerNickname: string | null;
     ownerUserId: number;
     status: ReadingListStatus;
+    genres: string[];
     starCount: number;
     callerIsOwner: boolean;
     hasStarred: boolean;
@@ -3271,6 +3275,74 @@ export interface BrowseReadingListsOptions {
     minStars?: number;
     page?: number;
     size?: number;
+}
+
+export type AdminAnalyticsRange = 'TODAY' | 'LAST_7_DAYS' | 'THIS_MONTH' | 'LAST_30_DAYS' | 'ALL_TIME';
+
+export interface AdminDashboardRangeDTO {
+    key: AdminAnalyticsRange;
+    startDate: string | null;
+    endDate: string;
+    timezone: string;
+}
+
+export interface AdminDashboardSummaryDTO {
+    totalUsers: number;
+    newUsers: number;
+    activeUsers: number;
+    totalPagesRead: number;
+    completedBooks: number;
+    completedSessions: number;
+    totalMinutesRead: number;
+    capturedWords: number;
+    xpAwarded: number;
+    readingListsCreated: number;
+    readingListSubscriptions: number;
+    readingListCompletions: number;
+}
+
+export interface AdminDashboardLifetimeDTO {
+    totalUsers: number;
+    totalBooks: number;
+    completedBooks: number;
+    totalPagesRead: number;
+    completedSessions: number;
+    totalXpAwarded: number;
+}
+
+export interface AdminDashboardDailyPointDTO {
+    date: string;
+    pagesRead: number;
+    completedSessions: number;
+    completedBooks: number;
+    newUsers: number;
+    activeUsers: number;
+    xpAwarded: number;
+}
+
+export interface AdminDashboardTopUserDTO {
+    userId: number;
+    nickname: string | null;
+    totalPagesRead: number;
+    completedBooks: number;
+    completedSessions: number;
+    totalXpEarned: number;
+}
+
+export interface AdminDashboardTopBookDTO {
+    title: string;
+    author: string;
+    completedCount: number;
+    pagesRead: number;
+}
+
+export interface AdminDashboardResponseDTO {
+    range: AdminDashboardRangeDTO;
+    summary: AdminDashboardSummaryDTO;
+    lifetime: AdminDashboardLifetimeDTO;
+    dailySeries: AdminDashboardDailyPointDTO[];
+    topUsers: AdminDashboardTopUserDTO[];
+    topBooks: AdminDashboardTopBookDTO[];
 }
 
 const toReadingListStatus = (value: unknown): ReadingListStatus => {
@@ -3298,6 +3370,7 @@ const toReadingListSummary = (value: unknown): ReadingListSummaryResponseDTO | n
         ownerNickname: typeof value.ownerNickname === 'string' ? value.ownerNickname : null,
         ownerUserId: toFiniteNumber(value.ownerUserId) ?? 0,
         status: toReadingListStatus(value.status),
+        genres: toStringArray(value.genres),
         starCount: Math.max(0, toFiniteNumber(value.starCount) ?? 0),
         bookCount: Math.max(0, toFiniteNumber(value.bookCount) ?? 0),
         callerIsOwner: value.callerIsOwner === true,
@@ -3353,6 +3426,7 @@ const toReadingListDetail = (value: unknown): ReadingListDetailResponseDTO => {
         ownerNickname: typeof value.ownerNickname === 'string' ? value.ownerNickname : null,
         ownerUserId: toFiniteNumber(value.ownerUserId) ?? 0,
         status: toReadingListStatus(value.status),
+        genres: toStringArray(value.genres),
         starCount: Math.max(0, toFiniteNumber(value.starCount) ?? 0),
         callerIsOwner: value.callerIsOwner === true,
         hasStarred: value.hasStarred === true,
@@ -3421,13 +3495,156 @@ const normalizeReadingListSubscriptions = (value: unknown): ReadingListSubscript
         .filter((sub): sub is ReadingListSubscriptionResponseDTO => sub !== null);
 };
 
-type ReadingListCreateFieldName = 'title' | 'description' | 'status' | 'books';
+const toAdminAnalyticsRange = (value: unknown): AdminAnalyticsRange => {
+    if (
+        value === 'TODAY'
+        || value === 'LAST_7_DAYS'
+        || value === 'THIS_MONTH'
+        || value === 'LAST_30_DAYS'
+        || value === 'ALL_TIME'
+    ) {
+        return value;
+    }
+
+    return 'THIS_MONTH';
+};
+
+const toAdminRange = (value: unknown): AdminDashboardRangeDTO => {
+    const record = isRecord(value) ? value : {};
+
+    return {
+        key: toAdminAnalyticsRange(record.key),
+        startDate: typeof record.startDate === 'string' ? record.startDate : null,
+        endDate: typeof record.endDate === 'string' ? record.endDate : '',
+        timezone: typeof record.timezone === 'string' ? record.timezone : 'Europe/Stockholm',
+    };
+};
+
+const toAdminSummary = (value: unknown): AdminDashboardSummaryDTO => {
+    const record = isRecord(value) ? value : {};
+
+    return {
+        totalUsers: Math.max(0, toFiniteNumber(record.totalUsers) ?? 0),
+        newUsers: Math.max(0, toFiniteNumber(record.newUsers) ?? 0),
+        activeUsers: Math.max(0, toFiniteNumber(record.activeUsers) ?? 0),
+        totalPagesRead: Math.max(0, toFiniteNumber(record.totalPagesRead) ?? 0),
+        completedBooks: Math.max(0, toFiniteNumber(record.completedBooks) ?? 0),
+        completedSessions: Math.max(0, toFiniteNumber(record.completedSessions) ?? 0),
+        totalMinutesRead: Math.max(0, toFiniteNumber(record.totalMinutesRead) ?? 0),
+        capturedWords: Math.max(0, toFiniteNumber(record.capturedWords) ?? 0),
+        xpAwarded: Math.max(0, toFiniteNumber(record.xpAwarded) ?? 0),
+        readingListsCreated: Math.max(0, toFiniteNumber(record.readingListsCreated) ?? 0),
+        readingListSubscriptions: Math.max(0, toFiniteNumber(record.readingListSubscriptions) ?? 0),
+        readingListCompletions: Math.max(0, toFiniteNumber(record.readingListCompletions) ?? 0),
+    };
+};
+
+const toAdminLifetime = (value: unknown): AdminDashboardLifetimeDTO => {
+    const record = isRecord(value) ? value : {};
+
+    return {
+        totalUsers: Math.max(0, toFiniteNumber(record.totalUsers) ?? 0),
+        totalBooks: Math.max(0, toFiniteNumber(record.totalBooks) ?? 0),
+        completedBooks: Math.max(0, toFiniteNumber(record.completedBooks) ?? 0),
+        totalPagesRead: Math.max(0, toFiniteNumber(record.totalPagesRead) ?? 0),
+        completedSessions: Math.max(0, toFiniteNumber(record.completedSessions) ?? 0),
+        totalXpAwarded: Math.max(0, toFiniteNumber(record.totalXpAwarded) ?? 0),
+    };
+};
+
+const toAdminDailyPoint = (value: unknown): AdminDashboardDailyPointDTO | null => {
+    if (!isRecord(value) || typeof value.date !== 'string') {
+        return null;
+    }
+
+    return {
+        date: value.date,
+        pagesRead: Math.max(0, toFiniteNumber(value.pagesRead) ?? 0),
+        completedSessions: Math.max(0, toFiniteNumber(value.completedSessions) ?? 0),
+        completedBooks: Math.max(0, toFiniteNumber(value.completedBooks) ?? 0),
+        newUsers: Math.max(0, toFiniteNumber(value.newUsers) ?? 0),
+        activeUsers: Math.max(0, toFiniteNumber(value.activeUsers) ?? 0),
+        xpAwarded: Math.max(0, toFiniteNumber(value.xpAwarded) ?? 0),
+    };
+};
+
+const toAdminTopUser = (value: unknown): AdminDashboardTopUserDTO | null => {
+    if (!isRecord(value)) {
+        return null;
+    }
+
+    const userId = toFiniteNumber(value.userId);
+
+    if (userId == null) {
+        return null;
+    }
+
+    return {
+        userId,
+        nickname: typeof value.nickname === 'string' ? value.nickname : null,
+        totalPagesRead: Math.max(0, toFiniteNumber(value.totalPagesRead) ?? 0),
+        completedBooks: Math.max(0, toFiniteNumber(value.completedBooks) ?? 0),
+        completedSessions: Math.max(0, toFiniteNumber(value.completedSessions) ?? 0),
+        totalXpEarned: Math.max(0, toFiniteNumber(value.totalXpEarned) ?? 0),
+    };
+};
+
+const toAdminTopBook = (value: unknown): AdminDashboardTopBookDTO | null => {
+    if (!isRecord(value)) {
+        return null;
+    }
+
+    return {
+        title: typeof value.title === 'string' ? value.title : 'Untitled',
+        author: typeof value.author === 'string' ? value.author : 'Unknown author',
+        completedCount: Math.max(0, toFiniteNumber(value.completedCount) ?? 0),
+        pagesRead: Math.max(0, toFiniteNumber(value.pagesRead) ?? 0),
+    };
+};
+
+const toAdminDashboard = (value: unknown): AdminDashboardResponseDTO => {
+    if (!isRecord(value)) {
+        throw new Error('Unexpected admin dashboard response shape.');
+    }
+
+    return {
+        range: toAdminRange(value.range),
+        summary: toAdminSummary(value.summary),
+        lifetime: toAdminLifetime(value.lifetime),
+        dailySeries: Array.isArray(value.dailySeries)
+            ? value.dailySeries
+                .map(toAdminDailyPoint)
+                .filter((point): point is AdminDashboardDailyPointDTO => point !== null)
+            : [],
+        topUsers: Array.isArray(value.topUsers)
+            ? value.topUsers
+                .map(toAdminTopUser)
+                .filter((user): user is AdminDashboardTopUserDTO => user !== null)
+            : [],
+        topBooks: Array.isArray(value.topBooks)
+            ? value.topBooks
+                .map(toAdminTopBook)
+                .filter((book): book is AdminDashboardTopBookDTO => book !== null)
+            : [],
+    };
+};
+
+type ReadingListCreateFieldName = 'title' | 'description' | 'status' | 'genres' | 'books';
 const READING_LIST_CREATE_FIELD_NAMES = [
     'title',
     'description',
     'status',
+    'genres',
     'books',
 ] as const satisfies readonly ReadingListCreateFieldName[];
+
+type ReadingListUpdateFieldName = 'title' | 'description' | 'status' | 'genres';
+const READING_LIST_UPDATE_FIELD_NAMES = [
+    'title',
+    'description',
+    'status',
+    'genres',
+] as const satisfies readonly ReadingListUpdateFieldName[];
 
 export const createReadingList = async (payload: ReadingListCreateRequestDTO) => {
     try {
@@ -3573,10 +3790,10 @@ export const updateReadingList = async (
             const errorPayload = await readErrorPayload(res);
 
             if (res.status === 400) {
-                const fieldErrors = extractFieldErrors(errorPayload, ['title', 'description', 'status'] as const);
+                const fieldErrors = extractFieldErrors(errorPayload, READING_LIST_UPDATE_FIELD_NAMES);
                 const message = normalizeErrorMessage(errorPayload, 'Could not update the reading list.');
 
-                throw new ApiValidationError<'title' | 'description' | 'status'>(message, {
+                throw new ApiValidationError<ReadingListUpdateFieldName>(message, {
                     status: 400,
                     fieldErrors,
                 });
@@ -3669,6 +3886,25 @@ export const unstarReadingList = async (listId: string | number) => {
         }
     } catch (error) {
         console.error('Error unstarring reading list:', error);
+        throw error;
+    }
+};
+
+export const getAdminDashboard = async (range: AdminAnalyticsRange = 'THIS_MONTH') => {
+    try {
+        const params = new URLSearchParams({ range });
+        const res = await fetch(`${API_BASE_URL}/admin/dashboard?${params.toString()}`, {
+            headers: await buildAuthHeaders(),
+        });
+
+        if (!res.ok) {
+            throw toApiResponseError(await readErrorPayload(res), 'Could not load admin dashboard.', res.status);
+        }
+
+        const data = await res.json();
+        return toAdminDashboard(data);
+    } catch (error) {
+        console.error('Error fetching admin dashboard:', error);
         throw error;
     }
 };
