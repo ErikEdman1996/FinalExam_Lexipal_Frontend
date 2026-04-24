@@ -19,6 +19,7 @@ import { ProgressBar } from '../components/ProgressBar';
 import { CircleChatPanel } from '../features/bookCircles/CircleChatPanel';
 import { MemberDetailsPanel } from '../features/bookCircles/MemberDetailsPanel';
 import { NextMeetingModal } from '../features/bookCircles/NextMeetingModal';
+import { PortraitImage } from '../features/portraits/portraitAssets';
 import {
   canDrillIntoMember,
   copyTextToClipboard,
@@ -33,26 +34,6 @@ import {
 import { useAuth } from '../features/auth/useAuth';
 
 const POLL_INTERVAL_MS = 30_000;
-
-const AVATAR_PALETTE = [
-  'bg-indigo-500',
-  'bg-emerald-500',
-  'bg-rose-500',
-  'bg-amber-500',
-  'bg-sky-500',
-  'bg-violet-500',
-  'bg-teal-500',
-  'bg-pink-500',
-];
-
-const getMemberInitial = (nickname: string | null): string => {
-  const trimmed = nickname?.trim() ?? '';
-  return trimmed ? trimmed.charAt(0).toUpperCase() : '?';
-};
-
-const getMemberAvatarClass = (userId: number): string => {
-  return AVATAR_PALETTE[Math.abs(userId) % AVATAR_PALETTE.length];
-};
 
 type CirclePendingAction =
   | { type: 'close' }
@@ -601,8 +582,8 @@ export default function CircleDetails() {
                     targetUserId: member.userId,
                   });
 
-                  const initial = getMemberInitial(member.userNickname);
-                  const avatarClass = getMemberAvatarClass(member.userId);
+                  const memberPortrait = member.selectedPortrait
+                    ?? (isCurrentUser ? profile?.selectedPortrait : null);
                   const isHidden = member.progressPercentage == null;
 
                   const progressContent = isHidden ? (
@@ -632,12 +613,11 @@ export default function CircleDetails() {
 
                   const rowContent = (
                     <div className="flex items-start gap-3 sm:items-center sm:gap-4">
-                      <div
-                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-semibold text-white shadow-sm sm:h-11 sm:w-11 ${avatarClass}`}
-                        aria-hidden="true"
-                      >
-                        {initial}
-                      </div>
+                      <PortraitImage
+                        assetKey={memberPortrait?.assetKey}
+                        name={memberPortrait?.name ?? memberName}
+                        className="h-10 w-10 shrink-0 shadow-[0_8px_18px_rgba(31,41,55,0.12)] ring-2 ring-surface sm:h-11 sm:w-11"
+                      />
 
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">

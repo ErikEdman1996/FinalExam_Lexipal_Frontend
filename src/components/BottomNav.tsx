@@ -1,7 +1,21 @@
 import { NavLink } from 'react-router-dom';
-import { BookMarked, BookOpen, Library, ShieldCheck, Trophy, User, UsersRound } from 'lucide-react';
-import { ThemeToggle } from '../features/theme/ThemeToggle.tsx';
+import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
+import {
+  BookMarked,
+  BookOpen,
+  Ellipsis,
+  Library,
+  LogOut,
+  Moon,
+  ShieldCheck,
+  Sun,
+  Trophy,
+  User,
+  UsersRound,
+} from 'lucide-react';
 import { useAuth } from '../features/auth/useAuth';
+import { useTheme } from '../features/theme/useTheme';
+import { PortraitImage } from '../features/portraits/portraitAssets';
 import mothIcon from '../assets/moth_icon.png';
 
 const NAV_ITEMS = [
@@ -14,10 +28,15 @@ const NAV_ITEMS = [
 ] as const;
 
 export function BottomNav() {
-  const { isAdmin } = useAuth();
+  const { isAdmin, logout, profile, username } = useAuth();
+  const { theme, toggle } = useTheme();
   const navItems = isAdmin
     ? [...NAV_ITEMS, { to: '/admin', icon: ShieldCheck, label: 'Admin' }]
     : NAV_ITEMS;
+  const nickname = profile?.nickname?.trim() || username || 'Reader';
+  const handle = username ? `@${username}` : 'Lexipal profile';
+  const isDark = theme === 'dark';
+  const ThemeIcon = isDark ? Sun : Moon;
 
   return (
     <>
@@ -97,8 +116,75 @@ export function BottomNav() {
           ))}
         </div>
 
-        <div className="mt-auto flex flex-col gap-3">
-          <ThemeToggle variant="row" />
+        <div className="mt-auto">
+          <div className="flex items-center gap-3 rounded-[22px] px-2 py-2.5 transition-colors hover:bg-surface-alt">
+            <NavLink
+              to="/profile"
+              className="flex min-w-0 flex-1 items-center gap-3 rounded-[18px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+            >
+              <PortraitImage
+                assetKey={profile?.selectedPortrait?.assetKey}
+                name={profile?.selectedPortrait?.name ?? nickname}
+                className="h-12 w-12 shrink-0 shadow-[0_10px_22px_rgba(31,41,55,0.12)]"
+              />
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-semibold text-text">{nickname}</span>
+                <span className="mt-0.5 block truncate text-sm text-text-muted">{handle}</span>
+              </span>
+            </NavLink>
+
+            <DropdownMenu.Root>
+              <DropdownMenu.Trigger asChild>
+                <button
+                  type="button"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-text transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                  aria-label="Open profile menu"
+                >
+                  <Ellipsis size={22} />
+                </button>
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Portal>
+                <DropdownMenu.Content
+                  align="end"
+                  side="top"
+                  sideOffset={10}
+                  className="z-50 w-60 rounded-[22px] border border-border bg-surface p-2 shadow-[0_24px_54px_rgba(15,23,42,0.22)]"
+                >
+                  <DropdownMenu.Item
+                    onSelect={toggle}
+                    className="flex cursor-pointer items-center justify-between gap-3 rounded-[16px] px-3 py-3 text-sm font-medium text-text outline-none transition-colors hover:bg-surface-alt focus:bg-surface-alt"
+                  >
+                    <span className="flex items-center gap-3">
+                      <span className="flex h-9 w-9 items-center justify-center rounded-[12px] bg-surface-muted text-text">
+                        <ThemeIcon size={18} />
+                      </span>
+                      <span className="flex flex-col">
+                        <span>Appearance</span>
+                        <span className="text-xs font-normal text-text-muted">
+                          {isDark ? 'Dark theme on' : 'Light theme on'}
+                        </span>
+                      </span>
+                    </span>
+                    <span className="rounded-full bg-brand-soft px-2.5 py-1 text-xs font-medium text-brand-strong">
+                      {isDark ? 'Dark' : 'Light'}
+                    </span>
+                  </DropdownMenu.Item>
+
+                  <DropdownMenu.Separator className="my-1 h-px bg-border" />
+
+                  <DropdownMenu.Item
+                    onSelect={() => void logout()}
+                    className="flex cursor-pointer items-center gap-3 rounded-[16px] px-3 py-3 text-sm font-medium text-danger outline-none transition-colors hover:bg-danger-soft focus:bg-danger-soft"
+                  >
+                    <span className="flex h-9 w-9 items-center justify-center rounded-[12px] bg-danger-soft text-danger">
+                      <LogOut size={18} />
+                    </span>
+                    Log out
+                  </DropdownMenu.Item>
+                </DropdownMenu.Content>
+              </DropdownMenu.Portal>
+            </DropdownMenu.Root>
+          </div>
         </div>
       </aside>
     </>

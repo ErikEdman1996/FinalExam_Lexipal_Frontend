@@ -92,6 +92,7 @@ export interface BookCircleCreateResponseDTO {
 export interface BookCircleMemberSummaryDTO {
     userId: number;
     userNickname: string | null;
+    selectedPortrait: PortraitResponseDTO | null;
     role: BookCircleMemberRole;
     readPages: number | null;
     totalPages: number | null;
@@ -137,6 +138,7 @@ export interface CircleChatHistoryResponseDTO {
 export interface CircleChatPresenceMemberDTO {
     userId: number;
     userNickname: string | null;
+    selectedPortrait?: PortraitResponseDTO | null;
 }
 
 export type CircleChatEventType =
@@ -194,6 +196,7 @@ export interface CircleMemberDetailResponseDTO {
     circleId: number;
     userId: number;
     userNickname: string | null;
+    selectedPortrait: PortraitResponseDTO | null;
     role: BookCircleMemberRole;
     joinedAt: string;
     readPages: number;
@@ -407,6 +410,30 @@ export interface DailyActivityReadResponseDTO {
     xpEarned: number;
 }
 
+export interface AchievementResponseDTO {
+    code: string;
+    category: string;
+    title: string;
+    description: string;
+    threshold: number;
+    progress: number;
+    unlocked: boolean;
+    unlockedAt: string | null;
+    sortOrder: number;
+}
+
+export interface PortraitResponseDTO {
+    code: string;
+    name: string;
+    description: string;
+    assetKey: string;
+    requiredLevel: number;
+    sortOrder: number;
+    unlocked: boolean;
+    selected: boolean;
+    unlockedAt: string | null;
+}
+
 export interface ProfileReadResponseDTO {
     id: number | null;
     status: string;
@@ -416,6 +443,7 @@ export interface ProfileReadResponseDTO {
     stats: ProfileStatsResponseDTO;
     streak: StreakMetaDataReadResponseDTO | null;
     recentDailyActivities: DailyActivityReadResponseDTO[];
+    selectedPortrait: PortraitResponseDTO | null;
 }
 
 export interface XpUpdateResponseDTO {
@@ -846,6 +874,42 @@ const toDailyActivity = (value: unknown): DailyActivityReadResponseDTO | null =>
     };
 };
 
+const toAchievement = (value: unknown): AchievementResponseDTO | null => {
+    if (!isRecord(value) || typeof value.code !== 'string') {
+        return null;
+    }
+
+    return {
+        code: value.code,
+        category: typeof value.category === 'string' ? value.category : 'general',
+        title: typeof value.title === 'string' ? value.title : value.code,
+        description: typeof value.description === 'string' ? value.description : '',
+        threshold: Math.max(0, toFiniteNumber(value.threshold) ?? 0),
+        progress: Math.max(0, toFiniteNumber(value.progress) ?? 0),
+        unlocked: value.unlocked === true,
+        unlockedAt: typeof value.unlockedAt === 'string' && value.unlockedAt.trim() ? value.unlockedAt : null,
+        sortOrder: toFiniteNumber(value.sortOrder) ?? 0,
+    };
+};
+
+const toPortrait = (value: unknown): PortraitResponseDTO | null => {
+    if (!isRecord(value) || typeof value.code !== 'string') {
+        return null;
+    }
+
+    return {
+        code: value.code,
+        name: typeof value.name === 'string' ? value.name : value.code,
+        description: typeof value.description === 'string' ? value.description : '',
+        assetKey: typeof value.assetKey === 'string' ? value.assetKey : '',
+        requiredLevel: Math.max(1, toFiniteNumber(value.requiredLevel) ?? 1),
+        sortOrder: toFiniteNumber(value.sortOrder) ?? 0,
+        unlocked: value.unlocked === true,
+        selected: value.selected === true,
+        unlockedAt: typeof value.unlockedAt === 'string' && value.unlockedAt.trim() ? value.unlockedAt : null,
+    };
+};
+
 const findNoteLikeRecord = (value: unknown, depth = 0): Record<string, unknown> | null => {
     if (depth > 6 || value == null) {
         return null;
@@ -1130,6 +1194,42 @@ const normalizeCodexBoardResponse = (value: unknown): CodexBoardResponseDTO => {
     };
 };
 
+const normalizeAchievementsResponse = (value: unknown): AchievementResponseDTO[] => {
+    const array = Array.isArray(value)
+        ? value
+        : (isRecord(value)
+            ? [value.achievements, value.content, value.data, value.items]
+                .find((candidate) => Array.isArray(candidate)) as unknown[] | undefined
+            : undefined);
+
+    if (!Array.isArray(array)) {
+        return [];
+    }
+
+    return array
+        .map(toAchievement)
+        .filter((achievement): achievement is AchievementResponseDTO => achievement !== null)
+        .sort((a, b) => a.sortOrder - b.sortOrder);
+};
+
+const normalizePortraitsResponse = (value: unknown): PortraitResponseDTO[] => {
+    const array = Array.isArray(value)
+        ? value
+        : (isRecord(value)
+            ? [value.portraits, value.content, value.data, value.items]
+                .find((candidate) => Array.isArray(candidate)) as unknown[] | undefined
+            : undefined);
+
+    if (!Array.isArray(array)) {
+        return [];
+    }
+
+    return array
+        .map(toPortrait)
+        .filter((portrait): portrait is PortraitResponseDTO => portrait !== null)
+        .sort((a, b) => a.sortOrder - b.sortOrder);
+};
+
 const normalizeProfileResponse = (value: unknown): ProfileReadResponseDTO => {
     if (!isRecord(value)) {
         throw new Error('Unexpected profile response shape.');
@@ -1154,6 +1254,7 @@ const normalizeProfileResponse = (value: unknown): ProfileReadResponseDTO => {
         stats: toProfileStats(value.stats),
         streak: toStreakMetadata(value.streak),
         recentDailyActivities,
+        selectedPortrait: toPortrait(value.selectedPortrait),
     };
 };
 
@@ -1333,6 +1434,7 @@ const toBookCircleMemberSummary = (value: unknown): BookCircleMemberSummaryDTO |
     return {
         userId,
         userNickname: typeof value.userNickname === 'string' ? value.userNickname : null,
+        selectedPortrait: toPortrait(value.selectedPortrait),
         role: toBookCircleMemberRole(value.role),
         readPages: value.readPages == null ? null : (toFiniteNumber(value.readPages) ?? null),
         totalPages: value.totalPages == null ? null : (toFiniteNumber(value.totalPages) ?? null),
@@ -1470,6 +1572,7 @@ const toCircleChatPresenceMember = (value: unknown): CircleChatPresenceMemberDTO
     return {
         userId,
         userNickname: typeof value.userNickname === 'string' ? value.userNickname : null,
+        selectedPortrait: toPortrait(value.selectedPortrait),
     };
 };
 
@@ -1541,6 +1644,7 @@ const normalizeCircleMemberDetailResponse = (value: unknown): CircleMemberDetail
         circleId: toFiniteNumber(value.circleId) ?? 0,
         userId: toFiniteNumber(value.userId) ?? 0,
         userNickname: typeof value.userNickname === 'string' ? value.userNickname : null,
+        selectedPortrait: toPortrait(value.selectedPortrait),
         role: toBookCircleMemberRole(value.role),
         joinedAt: typeof value.joinedAt === 'string' ? value.joinedAt : '',
         readPages: Math.max(0, toFiniteNumber(value.readPages) ?? 0),
@@ -2055,6 +2159,80 @@ export const getProfile = async () => {
         return normalizeProfileResponse(data);
     } catch (error) {
         console.error('Error fetching profile:', error);
+        throw error;
+    }
+};
+
+export const getMyAchievements = async () => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/achievements/me`, {
+            headers: await buildAuthHeaders(),
+        });
+
+        if (!res.ok) {
+            throw toApiResponseError(await readErrorPayload(res), 'Could not load your achievements.', res.status);
+        }
+
+        const data = await res.json();
+        return normalizeAchievementsResponse(data);
+    } catch (error) {
+        console.error('Error fetching achievements:', error);
+        throw error;
+    }
+};
+
+export const getMyPortraits = async () => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/portraits/me`, {
+            headers: await buildAuthHeaders(),
+        });
+
+        if (!res.ok) {
+            throw toApiResponseError(await readErrorPayload(res), 'Could not load your portraits.', res.status);
+        }
+
+        const data = await res.json();
+        return normalizePortraitsResponse(data);
+    } catch (error) {
+        console.error('Error fetching portraits:', error);
+        throw error;
+    }
+};
+
+export const selectPortrait = async (portraitCode: string) => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/portraits/me/selected`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(await buildAuthHeaders()),
+            },
+            body: JSON.stringify({ portraitCode }),
+        });
+
+        if (!res.ok) {
+            const errorPayload = await readErrorPayload(res);
+
+            if (res.status === 400) {
+                throw new ApiResponseError('That portrait is still locked.', {
+                    status: 400,
+                    payload: errorPayload,
+                });
+            }
+
+            throw toApiResponseError(errorPayload, 'Could not update your portrait.', res.status);
+        }
+
+        const data = await res.json();
+        const portrait = toPortrait(data);
+
+        if (!portrait) {
+            throw new Error('Unexpected portrait response shape.');
+        }
+
+        return portrait;
+    } catch (error) {
+        console.error('Error selecting portrait:', error);
         throw error;
     }
 };
