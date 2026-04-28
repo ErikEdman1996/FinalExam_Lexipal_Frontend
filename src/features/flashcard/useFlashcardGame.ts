@@ -66,7 +66,7 @@ export function useFlashcardGame(): FlashcardGame {
       const correct = currentCard ? index === currentCard.correctIndex : false;
       const nextStreak = correct ? state.streak + 1 : 0;
       const result: AttemptResult = {
-        codexEntryId: currentCard?.card.codexEntryId ?? 0,
+        wordLookupId: currentCard?.card.wordLookupId ?? 0,
         lemma: currentCard?.card.lemma ?? '',
         correct,
         timedOut: false,
@@ -93,7 +93,7 @@ export function useFlashcardGame(): FlashcardGame {
     const elapsedMs = Date.now() - state.timeStartedAt;
     const currentCard = state.cards[state.index];
     const result: AttemptResult = {
-      codexEntryId: currentCard?.card.codexEntryId ?? 0,
+      wordLookupId: currentCard?.card.wordLookupId ?? 0,
       lemma: currentCard?.card.lemma ?? '',
       correct: false,
       timedOut: true,

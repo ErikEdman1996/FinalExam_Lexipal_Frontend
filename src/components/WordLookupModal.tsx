@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Sparkles, X } from 'lucide-react';
 import { motion } from 'motion/react';
 import { Button } from './Button';
@@ -8,13 +9,12 @@ import mothIcon from '../assets/moth_icon.png';
 import {
   type CodexOverallProgressDTO,
   type CodexPageProgressDTO,
-  createCodexEntry,
+  createWordLookup,
   extractDictionarySenses,
   extractDefinitionFromDefinitions,
   extractPhoneticText,
   extractPartsOfSpeechFromDefinitions,
   extractSynonymsFromDefinitions,
-  getDictionaryWord,
   normalizeRarityTier,
   type DictionarySense,
   type XpUpdateResponseDTO,
@@ -39,8 +39,8 @@ interface WordLookupModalProps {
     pageProgress: CodexPageProgressDTO | null;
     overallProgress: CodexOverallProgressDTO | null;
   }) => void;
-  codexEntryLemmas: string[];
   sessionId?: number | null;
+  bookId?: string | number | null;
 }
 
 type CapturePayload = Parameters<WordLookupModalProps['onCapture']>[0];
@@ -57,31 +57,17 @@ interface LookupResult {
   partsOfSpeech: string[];
   phoneticText: string;
   isCollectible: boolean;
+  isNewLookup: boolean;
   isNewCapture: boolean;
   alreadyCaptured: boolean;
   rarityTier: RarityTier;
   xpValue: number;
+  lookupCount: number;
   pageNumber: number | null;
   slotNumber: number | null;
   pageProgress: CodexPageProgressDTO | null;
   overallProgress: CodexOverallProgressDTO | null;
 }
-
-const getRarityTierFromScore = (score: number | null | undefined): RarityTier => {
-  if ((score ?? 0) >= 0.9) {
-    return 'MYTHIC';
-  }
-
-  if ((score ?? 0) >= 0.7) {
-    return 'RARE';
-  }
-
-  if ((score ?? 0) >= 0.5) {
-    return 'UNCOMMON';
-  }
-
-  return 'COMMON';
-};
 
 const getRarityBorderClass = (tier: LookupResult['rarityTier']) => {
   if (tier === 'MYTHIC') {
@@ -220,18 +206,18 @@ const getLookupCardHeight = (result: LookupResult | null) => {
 
 const getResultEyebrow = (result: LookupResult) => {
   if (!result.isCollectible) {
-    return 'Dictionary entry';
+    return 'Looked-up word';
   }
 
   if (result.isNewCapture) {
-    return 'New collectible';
+    return 'New Codex capture';
   }
 
   if (result.alreadyCaptured) {
-    return 'Already collected';
+    return 'Already in Codex';
   }
 
-  return 'Collectible entry';
+  return 'Codex word';
 };
 
 const searchInputClassName = `${inputClassName} placeholder:text-text-subtle focus:border-transparent`;
@@ -241,9 +227,10 @@ export function WordLookupModal({
   isOpen,
   onClose,
   onCapture,
-  codexEntryLemmas,
   sessionId,
+  bookId,
 }: WordLookupModalProps) {
+  const navigate = useNavigate();
   const [word, setWord] = useState('');
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState(false);
@@ -257,7 +244,6 @@ export function WordLookupModal({
   const revealTimeoutRef = useRef<number | null>(null);
   const pendingCapturePayloadRef = useRef<CapturePayload | null>(null);
   const captureCommittedRef = useRef(false);
-  const codexEntryLemmaSet = useMemo(() => new Set(codexEntryLemmas.map((lemma) => lemma.toLowerCase())), [codexEntryLemmas]);
   const shouldShowCaptureParticles = !!result?.isNewCapture && !!result?.isCollectible && result.rarityTier !== 'COMMON';
 
   useEffect(() => {
@@ -329,62 +315,44 @@ export function WordLookupModal({
       setIsSearching(true);
       setLookupError(null);
 
-      let nextResult: LookupResult;
-      let nextXpUpdate: XpUpdateResponseDTO | null = null;
-
-      if (sessionId) {
-        const codexEntryResponse = await createCodexEntry(sessionId, {
-          lemma: trimmedWord,
-        });
-
-        const codexEntry = codexEntryResponse.codexEntry;
-        const mappedDefinition = extractDefinitionFromDefinitions(codexEntry.definitions);
-        const mappedSenses = extractDictionarySenses(codexEntry.definitions);
-        const mappedSynonyms = extractSynonymsFromDefinitions(codexEntry.definitions);
-        const mappedPartsOfSpeech = extractPartsOfSpeechFromDefinitions(codexEntry.definitions);
-        const mappedPhoneticText = extractPhoneticText(codexEntry.phonetics);
-
-        nextResult = {
-          lemma: codexEntry.lemma ?? trimmedWord,
-          definition: mappedDefinition || 'No definition available right now.',
-          senses: mappedSenses,
-          synonyms: mappedSynonyms,
-          partsOfSpeech: mappedPartsOfSpeech,
-          phoneticText: mappedPhoneticText,
-          isCollectible: codexEntryResponse.isCollectible,
-          isNewCapture: codexEntryResponse.isNewCapture,
-          alreadyCaptured: codexEntryResponse.alreadyCaptured,
-          rarityTier: normalizeRarityTier(codexEntryResponse.rarityTier),
-          xpValue: codexEntry.xpValue ?? 0,
-          pageNumber: codexEntryResponse.pageNumber,
-          slotNumber: codexEntryResponse.slotNumber,
-          pageProgress: codexEntryResponse.pageProgress,
-          overallProgress: codexEntryResponse.overallProgress,
-        };
-        nextXpUpdate = codexEntryResponse.xpUpdate;
-      } else {
-        const fetchedWord = await getDictionaryWord(trimmedWord);
-        const normalizedLemma = (fetchedWord.lemma ?? trimmedWord).toLowerCase();
-        const fallbackNewCapture = !codexEntryLemmaSet.has(normalizedLemma);
-
-        nextResult = {
-          lemma: fetchedWord.lemma ?? trimmedWord,
-          definition: extractDefinitionFromDefinitions(fetchedWord.definitions) || 'No definition available right now.',
-          senses: extractDictionarySenses(fetchedWord.definitions),
-          synonyms: extractSynonymsFromDefinitions(fetchedWord.definitions),
-          partsOfSpeech: extractPartsOfSpeechFromDefinitions(fetchedWord.definitions),
-          phoneticText: extractPhoneticText(fetchedWord.phonetics),
-          isCollectible: fallbackNewCapture,
-          isNewCapture: fallbackNewCapture,
-          alreadyCaptured: !fallbackNewCapture,
-          rarityTier: getRarityTierFromScore(fetchedWord.rarityScore),
-          xpValue: fallbackNewCapture ? 10 : 0,
-          pageNumber: null,
-          slotNumber: null,
-          pageProgress: null,
-          overallProgress: null,
-        };
+      if (!sessionId) {
+        setLookupError('Start this reading session before looking up a word.');
+        return;
       }
+
+      const lookupResponse = await createWordLookup(sessionId, {
+        lemma: trimmedWord,
+      });
+      const { wordLookup } = lookupResponse;
+      const mappedDefinition = extractDefinitionFromDefinitions(wordLookup.definitions);
+      const mappedSenses = extractDictionarySenses(wordLookup.definitions);
+      const mappedSynonyms = extractSynonymsFromDefinitions(wordLookup.definitions);
+      const mappedPartsOfSpeech = extractPartsOfSpeechFromDefinitions(wordLookup.definitions);
+      const mappedPhoneticText = extractPhoneticText(wordLookup.phonetics);
+      const captureXp = lookupResponse.isNewCapture
+        ? lookupResponse.xpUpdate?.xpAwarded ?? lookupResponse.codexEntry?.xpValue ?? 0
+        : 0;
+
+      const nextResult: LookupResult = {
+        lemma: wordLookup.lemma || trimmedWord,
+        definition: mappedDefinition || 'No definition available right now.',
+        senses: mappedSenses,
+        synonyms: mappedSynonyms,
+        partsOfSpeech: mappedPartsOfSpeech,
+        phoneticText: mappedPhoneticText,
+        isCollectible: lookupResponse.isCollectible,
+        isNewLookup: lookupResponse.isNewLookup,
+        isNewCapture: lookupResponse.isNewCapture,
+        alreadyCaptured: lookupResponse.alreadyCaptured,
+        rarityTier: normalizeRarityTier(lookupResponse.rarityTier ?? lookupResponse.codexEntry?.rarityTier),
+        xpValue: captureXp,
+        lookupCount: wordLookup.lookupCount,
+        pageNumber: lookupResponse.pageNumber,
+        slotNumber: lookupResponse.slotNumber,
+        pageProgress: lookupResponse.pageProgress,
+        overallProgress: lookupResponse.overallProgress,
+      };
+      const nextXpUpdate = lookupResponse.xpUpdate;
 
       setWord(nextResult.lemma);
       setResult(nextResult);
@@ -437,7 +405,7 @@ export function WordLookupModal({
 
       onCapture(capturePayload);
     } catch (error) {
-      console.error('Error creating codex entry:', error);
+      console.error('Error looking up word:', error);
       setLookupError('Could not look up this word right now. Please try again.');
     } finally {
       searchInFlightRef.current = false;
@@ -637,12 +605,6 @@ export function WordLookupModal({
                       <p className="mt-2 text-sm text-danger">{lookupError}</p>
                     ) : null}
 
-                    {!sessionId ? (
-                      <p className="mt-3 text-xs leading-relaxed text-text-muted">
-                        Running in fallback mode: this capture is tracked in-session only until session context is available.
-                      </p>
-                    ) : null}
-
                     <div className="mt-6 flex gap-3">
                       <Button variant="outline" onClick={onClose} className="flex-1">
                         Exit
@@ -711,6 +673,9 @@ export function WordLookupModal({
                                 {result.partsOfSpeech[0]}
                               </span>
                             ) : null}
+                            <span className="rounded-full bg-surface-alt px-2.5 py-1 text-xs font-medium text-text-muted">
+                              {result.isNewLookup ? 'Saved to history' : `${result.lookupCount} lookups`}
+                            </span>
                           </div>
                         </div>
                         {result.isCollectible ? (
@@ -724,6 +689,18 @@ export function WordLookupModal({
                         <div className="mt-3 inline-flex self-start items-center gap-2 rounded-full bg-brand-soft px-3 py-1 text-sm font-medium text-brand-strong">
                           <Sparkles size={14} />
                           +{result.xpValue} XP
+                        </div>
+                      ) : null}
+
+                      {!result.isCollectible ? (
+                        <div className="mt-4 rounded-[18px] border border-border bg-surface-alt p-3 text-sm leading-relaxed text-text-muted">
+                          This word is saved in Looked-up Words. It is not on the Codex board, so no Codex capture was created.
+                        </div>
+                      ) : null}
+
+                      {result.alreadyCaptured ? (
+                        <div className="mt-4 rounded-[18px] border border-border bg-surface-alt p-3 text-sm leading-relaxed text-text-muted">
+                          This word was already in your Codex. No new capture XP was awarded.
                         </div>
                       ) : null}
 
@@ -795,20 +772,47 @@ export function WordLookupModal({
                         </p>
                       </div>
 
-                      <div className="mt-auto flex gap-3 pt-6">
-                        <Button
-                          variant="outline"
-                          className="flex-1"
-                          onClick={handleSearchAnother}
-                        >
-                          Search another
-                        </Button>
-                        <Button
-                          className="flex-1"
-                          onClick={onClose}
-                        >
-                          Close
-                        </Button>
+                      <div className="mt-auto flex flex-col gap-3 pt-6">
+                        {result.isNewCapture && result.isCollectible && result.pageNumber != null && result.slotNumber != null ? (
+                          <Button
+                            className="w-full"
+                            onClick={() => {
+                              const targetPage = result.pageNumber;
+                              const targetSlot = result.slotNumber;
+                              const targetLemma = result.lemma;
+                              const targetRarity = result.rarityTier;
+                              onClose();
+                              void navigate(`/codex/page/${targetPage}`, {
+                                state: {
+                                  revealSlot: {
+                                    pageNumber: targetPage,
+                                    slotNumber: targetSlot,
+                                    lemma: targetLemma,
+                                    rarityTier: targetRarity,
+                                  },
+                                  returnToSession: bookId != null ? { bookId } : null,
+                                },
+                              });
+                            }}
+                          >
+                            Go to Codex
+                          </Button>
+                        ) : null}
+                        <div className="flex gap-3">
+                          <Button
+                            variant="outline"
+                            className="flex-1"
+                            onClick={handleSearchAnother}
+                          >
+                            Search another
+                          </Button>
+                          <Button
+                            className="flex-1"
+                            onClick={onClose}
+                          >
+                            Close
+                          </Button>
+                        </div>
                       </div>
                     </div>
                   </>

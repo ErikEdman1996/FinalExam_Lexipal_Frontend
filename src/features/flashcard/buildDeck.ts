@@ -31,17 +31,17 @@ export const buildDeck = (
   return shuffled.map((card) => {
     const distractors = pickDistractors(card, pool, maxOptions - 1);
     const correctOption: QuizOption = {
-      codexEntryId: card.codexEntryId,
+      wordLookupId: card.wordLookupId,
       text: card.definition,
     };
     const distractorOptions: QuizOption[] = distractors.map((distractor) => ({
-      codexEntryId: distractor.codexEntryId,
+      wordLookupId: distractor.wordLookupId,
       text: distractor.definition,
     }));
 
     const options = shuffle([correctOption, ...distractorOptions]);
     const correctIndex = options.findIndex(
-      (option) => option.codexEntryId === card.codexEntryId,
+      (option) => option.wordLookupId === card.wordLookupId,
     );
 
     return { card, options, correctIndex };

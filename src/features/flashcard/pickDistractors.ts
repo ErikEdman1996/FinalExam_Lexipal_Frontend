@@ -25,7 +25,7 @@ export const pickDistractors = (
   count: number,
 ): FlashcardCandidate[] => {
   const otherEntries = pool.filter(
-    (entry) => entry.codexEntryId !== current.codexEntryId && entry.definition !== current.definition,
+    (entry) => entry.wordLookupId !== current.wordLookupId && entry.definition !== current.definition,
   );
 
   const samePos = shuffle(otherEntries.filter((entry) => shareAnyPos(current, entry)));

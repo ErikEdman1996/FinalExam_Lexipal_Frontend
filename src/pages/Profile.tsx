@@ -55,6 +55,51 @@ const ACHIEVEMENT_FILTERS: { value: AchievementFilter; label: string }[] = [
   { value: 'locked', label: 'Locked' },
 ];
 
+type ProfileTab = 'overview' | 'achievements';
+
+const PROFILE_TABS: { value: ProfileTab; label: string }[] = [
+  { value: 'overview', label: 'Overview' },
+  { value: 'achievements', label: 'Achievements' },
+];
+
+interface ProfileTabsProps {
+  active: ProfileTab;
+  unlockedCount: number;
+  totalCount: number;
+  onChange: (next: ProfileTab) => void;
+}
+
+function ProfileTabs({ active, unlockedCount, totalCount, onChange }: ProfileTabsProps) {
+  return (
+    <div className="flex w-full gap-1 rounded-full border border-border bg-surface p-1 shadow-[0_8px_18px_rgba(31,41,55,0.04)] sm:w-fit">
+      {PROFILE_TABS.map((tab) => {
+        const isActive = tab.value === active;
+        const showBadge = tab.value === 'achievements' && totalCount > 0;
+
+        return (
+          <button
+            key={tab.value}
+            type="button"
+            onClick={() => onChange(tab.value)}
+            className={`inline-flex items-center gap-2 whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition-all duration-200 ${
+              isActive
+                ? 'bg-brand text-text-on-brand shadow-[0_6px_14px_rgba(154,74,66,0.24)]'
+                : 'text-text-muted hover:text-text'
+            }`}
+          >
+            <span>{tab.label}</span>
+            {showBadge ? (
+              <span className={`text-xs ${isActive ? 'text-text-on-brand/80' : 'text-text-subtle'}`}>
+                {unlockedCount}/{totalCount}
+              </span>
+            ) : null}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 const formatMemberSince = (value: string) => {
   return formatLongDate(value);
 };
@@ -529,6 +574,7 @@ export default function Profile() {
   const [nicknameDraft, setNicknameDraft] = useState('');
   const [nicknameError, setNicknameError] = useState<string | null>(null);
   const [isSavingNickname, setIsSavingNickname] = useState(false);
+  const [activeTab, setActiveTab] = useState<ProfileTab>('overview');
 
   useEffect(() => {
     let isMounted = true;
@@ -733,6 +779,9 @@ export default function Profile() {
     }
   };
 
+  const unlockedAchievementsCount = achievements.filter((achievement) => achievement.unlocked).length;
+  const totalAchievementsCount = achievements.length;
+
   const statCards = [
     {
       label: 'Current Streak',
@@ -858,16 +907,27 @@ export default function Profile() {
           </div>
         </section>
 
-        {showNewUserState ? (
-          <section className="mt-6 rounded-[28px] border border-border bg-[linear-gradient(135deg,var(--color-surface)_0%,var(--color-brand-soft)_100%)] p-5 shadow-[0_14px_30px_rgba(31,41,55,0.05)]">
-            <p className="text-base font-medium text-text">Your journey is just getting started</p>
-            <p className="mt-2 text-sm leading-relaxed text-text-muted">
-              Finish your first reading session to begin earning XP, building streaks, and filling out your profile.
-            </p>
-          </section>
-        ) : null}
+        <div className="mt-6 flex justify-start">
+          <ProfileTabs
+            active={activeTab}
+            unlockedCount={unlockedAchievementsCount}
+            totalCount={totalAchievementsCount}
+            onChange={setActiveTab}
+          />
+        </div>
 
-        <section className="mt-6 rounded-[28px] border border-border bg-surface p-5 shadow-[0_14px_30px_rgba(31,41,55,0.05)]">
+        {activeTab === 'overview' ? (
+          <>
+            {showNewUserState ? (
+              <section className="mt-6 rounded-[28px] border border-border bg-[linear-gradient(135deg,var(--color-surface)_0%,var(--color-brand-soft)_100%)] p-5 shadow-[0_14px_30px_rgba(31,41,55,0.05)]">
+                <p className="text-base font-medium text-text">Your journey is just getting started</p>
+                <p className="mt-2 text-sm leading-relaxed text-text-muted">
+                  Finish your first reading session to begin earning XP, building streaks, and filling out your profile.
+                </p>
+              </section>
+            ) : null}
+
+            <section className="mt-6 rounded-[28px] border border-border bg-surface p-5 shadow-[0_14px_30px_rgba(31,41,55,0.05)]">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
             <div>
               <p className="text-xs uppercase tracking-[0.22em] text-text-subtle">Nickname</p>
@@ -923,41 +983,43 @@ export default function Profile() {
           </div>
         </section>
 
-        <AchievementsSection
-          achievements={achievements}
-          isLoading={isAchievementsLoading}
-          errorMessage={achievementsError}
-        />
+            <section className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {statCards.map((card, index) => (
+                <ProfileStatCard
+                  key={card.label}
+                  label={card.label}
+                  value={card.value}
+                  icon={card.icon}
+                  tone={card.tone}
+                  delayMs={index * 80}
+                />
+              ))}
+            </section>
 
-        <section className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {statCards.map((card, index) => (
-            <ProfileStatCard
-              key={card.label}
-              label={card.label}
-              value={card.value}
-              icon={card.icon}
-              tone={card.tone}
-              delayMs={index * 80}
-            />
-          ))}
-        </section>
+            <section className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <DetailCard
+                title="Last Active"
+                value={lastActive}
+                description="Your most recent recorded reading activity."
+              />
+              <DetailCard
+                title="Reading Momentum"
+                value={currentStreak > 0 ? `${currentStreak} day streak` : 'Start your streak'}
+                description="Read on consecutive days to build consistency and improve your longest run."
+              />
+            </section>
 
-        <section className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <DetailCard
-            title="Last Active"
-            value={lastActive}
-            description="Your most recent recorded reading activity."
+            <div className="mt-6">
+              <RecentActivitySection activities={recentDailyActivities} />
+            </div>
+          </>
+        ) : (
+          <AchievementsSection
+            achievements={achievements}
+            isLoading={isAchievementsLoading}
+            errorMessage={achievementsError}
           />
-          <DetailCard
-            title="Reading Momentum"
-            value={currentStreak > 0 ? `${currentStreak} day streak` : 'Start your streak'}
-            description="Read on consecutive days to build consistency and improve your longest run."
-          />
-        </section>
-
-        <div className="mt-6">
-          <RecentActivitySection activities={recentDailyActivities} />
-        </div>
+        )}
       </div>
 
       <PortraitCollectionModal

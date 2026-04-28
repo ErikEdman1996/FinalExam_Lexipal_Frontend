@@ -69,7 +69,7 @@ export function GameOverSummary({
           <div className="mt-3 flex flex-wrap gap-2">
             {results.map((result, index) => (
               <div
-                key={`${result.codexEntryId}-${index}`}
+                key={`${result.wordLookupId}-${index}`}
                 className={`flex min-w-[6rem] flex-col items-center gap-1 rounded-[18px] px-3 py-2 text-xs ${
                   result.correct ? 'bg-brand-soft text-brand-strong' : 'bg-danger-soft text-danger'
                 }`}

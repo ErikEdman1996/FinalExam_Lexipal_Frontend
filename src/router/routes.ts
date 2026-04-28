@@ -5,6 +5,7 @@ import ReadingSession from '../pages/ReadingSession.tsx';
 import Codex from '../pages/Codex.tsx';
 import Challenge from '../pages/Challenge.tsx';
 import Flashcard from '../pages/Flashcard.tsx';
+import WordLookups from '../pages/WordLookups.tsx';
 import Profile from '../pages/Profile.tsx';
 import Landing from '../pages/Landing.tsx';
 import Circles from '../pages/Circles.tsx';
@@ -27,6 +28,7 @@ export const router = createBrowserRouter([
       { path: '/book/:bookId/session/new', Component: ReadingSession },
       { path: '/codex', Component: Codex },
       { path: '/codex/page/:pageNumber', Component: Codex },
+      { path: '/word-lookups', Component: WordLookups },
       { path: '/circles', Component: Circles },
       { path: '/circles/:circleId', Component: CircleDetails },
       { path: '/reading-lists', Component: ReadingLists },

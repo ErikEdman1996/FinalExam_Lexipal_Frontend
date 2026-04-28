@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useState,
@@ -57,6 +58,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
   const [bootstrapError, setBootstrapError] = useState<string | null>(null);
   const [profile, setProfile] = useState<ProfileReadResponseDTO | null>(null);
 
+  const clearAuthState = useCallback(() => {
+    setAuthenticated(false);
+    setProfile(null);
+    setHasBootstrappedProfile(false);
+    setBootstrapError(null);
+    setIsBootstrappingProfile(false);
+  }, []);
+
   useEffect(() => {
     let isMounted = true;
 
@@ -93,15 +102,54 @@ export function AuthProvider({ children }: PropsWithChildren) {
   }, []);
 
   useEffect(() => {
+    const endAuthSession = () => {
+      keycloak.clearToken();
+      clearAuthState();
+    };
+
+    const handleTokenExpired = () => {
+      void keycloak.updateToken(30)
+        .then((refreshed) => {
+          if (refreshed) {
+            setAuthenticated(true);
+          }
+        })
+        .catch((error) => {
+          console.error('Auth token refresh failed:', error);
+          endAuthSession();
+        });
+    };
+
+    const handleAuthEnded = () => {
+      clearAuthState();
+    };
+
+    keycloak.onTokenExpired = handleTokenExpired;
+    keycloak.onAuthRefreshError = endAuthSession;
+    keycloak.onAuthLogout = handleAuthEnded;
+
+    return () => {
+      if (keycloak.onTokenExpired === handleTokenExpired) {
+        keycloak.onTokenExpired = undefined;
+      }
+
+      if (keycloak.onAuthRefreshError === endAuthSession) {
+        keycloak.onAuthRefreshError = undefined;
+      }
+
+      if (keycloak.onAuthLogout === handleAuthEnded) {
+        keycloak.onAuthLogout = undefined;
+      }
+    };
+  }, [clearAuthState]);
+
+  useEffect(() => {
     let isMounted = true;
 
     const runBootstrap = async () => {
       if (!initialized || !authenticated) {
         if (isMounted) {
-          setProfile(null);
-          setHasBootstrappedProfile(false);
-          setBootstrapError(null);
-          setIsBootstrappingProfile(false);
+          clearAuthState();
         }
         return;
       }
@@ -138,7 +186,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     return () => {
       isMounted = false;
     };
-  }, [authenticated, initialized]);
+  }, [authenticated, clearAuthState, initialized]);
 
   const value = useMemo<AuthContextValue>(() => {
     const roles = getBackendRoles();

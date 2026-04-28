@@ -17,7 +17,7 @@ import {
   extractDefinitionFromDefinitions,
   getChallengeAttempts,
   getChallenges,
-  getCodexEntries,
+  getWordLookups,
   type Challenge,
   type ChallengeAttempt,
 } from '../api/api';
@@ -26,7 +26,7 @@ const CARD_DURATION_MS = 10000;
 const FEEDBACK_CORRECT_MS = 800;
 const FEEDBACK_WRONG_MS = 1200;
 const DECK_SIZE = 10;
-const MIN_CODEX_WORDS = 2;
+const MIN_LOOKUP_WORDS = 2;
 
 interface AttemptHistorySectionProps {
   attempts: ChallengeAttempt[];
@@ -123,7 +123,7 @@ function AttemptHistorySection({ attempts }: AttemptHistorySectionProps) {
 
 export default function Flashcard() {
   const [challenges, setChallenges] = useState<Challenge[]>([]);
-  const [codexCards, setCodexCards] = useState<FlashcardCandidate[]>([]);
+  const [lookupCards, setLookupCards] = useState<FlashcardCandidate[]>([]);
   const [attempts, setAttempts] = useState<ChallengeAttempt[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -139,9 +139,9 @@ export default function Flashcard() {
         setIsLoading(true);
         setErrorMessage(null);
 
-        const [challengeList, codexEntries, attemptList] = await Promise.all([
+        const [challengeList, wordLookups, attemptList] = await Promise.all([
           getChallenges(),
-          getCodexEntries(),
+          getWordLookups(),
           getChallengeAttempts(),
         ]);
 
@@ -150,8 +150,8 @@ export default function Flashcard() {
         }
 
         setChallenges(challengeList);
-        setCodexCards(
-          codexEntries
+        setLookupCards(
+          wordLookups
             .map(toFlashcardCandidate)
             .filter((entry): entry is FlashcardCandidate => entry !== null),
         );
@@ -182,7 +182,7 @@ export default function Flashcard() {
     : [];
   const totalXpEarned = flashcardAttempts.reduce((sum, attempt) => sum + Math.max(0, attempt.xpAwarded), 0);
   const totalPasses = flashcardAttempts.filter((attempt) => attempt.result === 'PASS').length;
-  const isLocked = codexCards.length < MIN_CODEX_WORDS;
+  const isLocked = lookupCards.length < MIN_LOOKUP_WORDS;
   const { advance, feedback, phase } = game;
 
   useEffect(() => {
@@ -195,7 +195,7 @@ export default function Flashcard() {
   }, [advance, feedback, phase]);
 
   const submitAttempt = async (
-    codexEntryId: number,
+    wordLookupId: number,
     result: 'PASS' | 'FAIL',
     userAnswer: string | undefined,
   ) => {
@@ -204,7 +204,7 @@ export default function Flashcard() {
       const attempt = await createChallengeAttempt(flashcardChallenge.id, {
         result,
         userAnswer,
-        codexEntryId,
+        wordLookupId,
       });
       setAttempts((prev) => [attempt, ...prev]);
       game.applyXp(attempt.xpAwarded);
@@ -227,7 +227,7 @@ export default function Flashcard() {
     const pickedOption = game.currentCard.options[optionIndex];
     const { correct } = game.pick(optionIndex);
     void submitAttempt(
-      game.currentCard.card.codexEntryId,
+      game.currentCard.card.wordLookupId,
       correct ? 'PASS' : 'FAIL',
       pickedOption?.text,
     );
@@ -238,14 +238,14 @@ export default function Flashcard() {
       return;
     }
     setSubmissionError(null);
-    const codexEntryId = game.currentCard.card.codexEntryId;
+    const wordLookupId = game.currentCard.card.wordLookupId;
     game.timeout();
-    void submitAttempt(codexEntryId, 'FAIL', undefined);
+    void submitAttempt(wordLookupId, 'FAIL', undefined);
   };
 
   const handleStartSession = () => {
     if (!flashcardChallenge || isLocked) return;
-    const deck = buildDeck(codexCards, DECK_SIZE);
+    const deck = buildDeck(lookupCards, DECK_SIZE);
     if (deck.length === 0) return;
     setSubmissionError(null);
     game.start(deck);
@@ -308,7 +308,7 @@ export default function Flashcard() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div className="rounded-[24px] bg-surface-muted p-4">
               <p className="text-xs uppercase tracking-[0.18em] text-text-subtle">Cards Ready</p>
-              <p className="mt-2 text-3xl font-semibold text-text">{codexCards.length}</p>
+              <p className="mt-2 text-3xl font-semibold text-text">{lookupCards.length}</p>
             </div>
             <div className="rounded-[24px] bg-brand-soft p-4">
               <p className="text-xs uppercase tracking-[0.18em] text-brand-strong">Total Passes</p>
@@ -338,7 +338,7 @@ export default function Flashcard() {
                   Difficulty: {flashcardChallenge.difficulty}
                 </span>
                 <span className="rounded-full bg-brand-soft px-3 py-1.5 text-brand-strong">
-                  {codexCards.length} Codex cards ready
+                  {lookupCards.length} looked-up words ready
                 </span>
               </div>
 
@@ -350,7 +350,7 @@ export default function Flashcard() {
                   </p>
                 </div>
                 <Button onClick={handleStartSession} disabled={isLocked} className="shrink-0">
-                  {isLocked ? `Save ${MIN_CODEX_WORDS}+ words` : 'Start'}
+                  {isLocked ? `Look up ${MIN_LOOKUP_WORDS}+ words` : 'Start'}
                 </Button>
               </div>
             </section>
@@ -358,10 +358,10 @@ export default function Flashcard() {
             {isLocked ? (
               <section className="rounded-[28px] border border-border bg-[linear-gradient(135deg,var(--color-surface-alt)_0%,var(--color-brand-soft)_100%)] p-5 shadow-[0_14px_30px_rgba(31,41,55,0.05)]">
                 <p className="text-base font-medium text-text">
-                  Save at least {MIN_CODEX_WORDS} Codex words to unlock this challenge
+                  Look up at least {MIN_LOOKUP_WORDS} words to unlock this challenge
                 </p>
                 <p className="mt-2 text-sm leading-relaxed text-text-muted">
-                  Your Codex is the deck source. Distractor options are drawn from your other saved words.
+                  Your looked-up words are the deck source. Distractor options are drawn from the rest of your word history.
                 </p>
               </section>
             ) : (
@@ -370,7 +370,7 @@ export default function Flashcard() {
                   <div>
                     <p className="text-xs uppercase tracking-[0.22em] text-text-subtle">Ready Deck</p>
                     <p className="mt-2 text-lg font-semibold text-text">
-                      {codexCards.length} saved words are ready for the quiz
+                      {lookupCards.length} looked-up words are ready for the quiz
                     </p>
                   </div>
                   <div className="flex h-12 w-12 items-center justify-center rounded-[18px] bg-brand-soft">

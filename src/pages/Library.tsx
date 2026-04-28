@@ -9,7 +9,7 @@ import {
   Search,
   X,
 } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { createBook, type ApiBook, type CreateBookRequest } from '../api/api';
 import { AddBookModal } from '../components/AddBookModal.tsx';
 import { BookCard, type BookData } from '../components/BookCard.tsx';
@@ -21,8 +21,20 @@ import { useBooks } from '../features/books/useBooks.ts';
 type BookStatus = 'active' | 'completed' | 'archived';
 type TabKey = 'all' | 'active' | 'completed' | 'archived';
 type StatTone = 'brand' | 'accent';
+type SortKey =
+  | 'author-last-asc'
+  | 'author-last-desc'
+  | 'title-asc'
+  | 'title-desc'
+  | 'pages-read-desc'
+  | 'pages-read-asc'
+  | 'progress-desc'
+  | 'progress-asc'
+  | 'created-desc'
+  | 'created-asc';
 
 interface LibraryBook extends BookData {
+  createdAt: string;
   status: BookStatus;
 }
 
@@ -52,6 +64,8 @@ function mapBackendBookToLibraryBook(book: ApiBook): LibraryBook {
     id: String(book.id),
     title: book.title,
     author: book.author,
+    coverImageUrl: book.coverImageUrl,
+    createdAt: book.createdAt,
     pagesRead: safeReadPages,
     totalPages: safeTotalPages,
     sessions: sessionCount,
@@ -100,11 +114,86 @@ interface LibraryTabsProps {
 }
 
 const TABS: Array<{ key: TabKey; label: string }> = [
-  { key: 'all', label: 'All' },
   { key: 'active', label: 'Reading' },
   { key: 'completed', label: 'Completed' },
   { key: 'archived', label: 'Archived' },
+  { key: 'all', label: 'All' },
 ];
+
+const SORT_OPTIONS: Array<{ value: SortKey; label: string }> = [
+  { value: 'author-last-asc', label: 'Author last name (A-Z)' },
+  { value: 'author-last-desc', label: 'Author last name (Z-A)' },
+  { value: 'title-asc', label: 'Title (A-Z)' },
+  { value: 'title-desc', label: 'Title (Z-A)' },
+  { value: 'pages-read-desc', label: 'Most read' },
+  { value: 'pages-read-asc', label: 'Least read' },
+  { value: 'progress-desc', label: 'Highest progress' },
+  { value: 'progress-asc', label: 'Lowest progress' },
+  { value: 'created-desc', label: 'Newest added' },
+  { value: 'created-asc', label: 'Oldest added' },
+];
+
+const DEFAULT_SORT: SortKey = 'author-last-asc';
+const SORT_VALUES = new Set<SortKey>(SORT_OPTIONS.map((option) => option.value));
+
+function isSortKey(value: string | null): value is SortKey {
+  return value != null && SORT_VALUES.has(value as SortKey);
+}
+
+function getAuthorLastName(author: string) {
+  const parts = author.trim().split(/\s+/).filter(Boolean);
+  return parts.at(-1)?.toLowerCase() ?? '';
+}
+
+function compareText(left: string, right: string) {
+  return left.localeCompare(right, undefined, { sensitivity: 'base', numeric: true });
+}
+
+function getProgress(book: LibraryBook) {
+  return book.totalPages > 0 ? book.pagesRead / book.totalPages : 0;
+}
+
+function getCreatedAtMs(book: LibraryBook) {
+  const parsed = new Date(book.createdAt).getTime();
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function compareTieBreakers(left: LibraryBook, right: LibraryBook) {
+  const titleComparison = compareText(left.title, right.title);
+
+  if (titleComparison !== 0) {
+    return titleComparison;
+  }
+
+  return Number(left.id) - Number(right.id);
+}
+
+function sortBooks(books: LibraryBook[], sortKey: SortKey) {
+  return [...books].sort((left, right) => {
+    let result = 0;
+
+    if (sortKey === 'author-last-asc' || sortKey === 'author-last-desc') {
+      result = compareText(getAuthorLastName(left.author), getAuthorLastName(right.author));
+      if (result === 0) {
+        result = compareText(left.author, right.author);
+      }
+    } else if (sortKey === 'title-asc' || sortKey === 'title-desc') {
+      result = compareText(left.title, right.title);
+    } else if (sortKey === 'pages-read-desc' || sortKey === 'pages-read-asc') {
+      result = left.pagesRead - right.pagesRead;
+    } else if (sortKey === 'progress-desc' || sortKey === 'progress-asc') {
+      result = getProgress(left) - getProgress(right);
+    } else {
+      result = getCreatedAtMs(left) - getCreatedAtMs(right);
+    }
+
+    if (sortKey.endsWith('-desc')) {
+      result *= -1;
+    }
+
+    return result || compareTieBreakers(left, right);
+  });
+}
 
 function LibraryTabs({ active, onChange, counts }: LibraryTabsProps) {
   return (
@@ -169,6 +258,7 @@ function LibraryEmptyFiltered({ query, activeTab, onClear }: FilteredEmptyProps)
 
 export default function Library() {
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { start: startBookTransition, activeBook } = useBookTransition();
   const {
     books: apiBooks,
@@ -179,8 +269,10 @@ export default function Library() {
   } = useBooks();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeTab, setActiveTab] = useState<TabKey>('all');
+  const [activeTab, setActiveTab] = useState<TabKey>('active');
   const hadCachedBooksOnMountRef = useRef(apiBooks.length > 0);
+  const sortParam = searchParams.get('sort');
+  const sortKey: SortKey = isSortKey(sortParam) ? sortParam : DEFAULT_SORT;
 
   const books = useMemo(() => {
     return apiBooks.map(mapBackendBookToLibraryBook);
@@ -217,7 +309,7 @@ export default function Library() {
   const visibleBooks = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
 
-    return books.filter((book) => {
+    const filteredBooks = books.filter((book) => {
       if (activeTab !== 'all' && book.status !== activeTab) {
         return false;
       }
@@ -231,11 +323,19 @@ export default function Library() {
         book.author.toLowerCase().includes(query)
       );
     });
-  }, [books, searchQuery, activeTab]);
+
+    return sortBooks(filteredBooks, sortKey);
+  }, [books, searchQuery, activeTab, sortKey]);
 
   const handleClearFilters = () => {
     setSearchQuery('');
     setActiveTab('all');
+  };
+
+  const handleSortChange = (nextSort: SortKey) => {
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set('sort', nextSort);
+    setSearchParams(nextParams);
   };
 
   return (
@@ -272,25 +372,46 @@ export default function Library() {
           </div>
         </section>
 
-        <div className="mt-6 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-          <div className="relative w-full lg:max-w-sm">
-            <label htmlFor="library-search" className="sr-only">
-              Search books by title or author
-            </label>
-            <Search
-              size={16}
-              className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-text-subtle"
-            />
-            <input
-              id="library-search"
-              name="search"
-              type="search"
-              value={searchQuery}
-              onChange={(event) => setSearchQuery(event.target.value)}
-              placeholder="Search title or author"
-              className={`${inputClassName} h-11 rounded-full bg-surface pl-10 shadow-[0_8px_18px_rgba(31,41,55,0.04)]`}
-              autoComplete="off"
-            />
+        <div className="mt-6 flex flex-col gap-3 xl:flex-row xl:items-end xl:justify-between">
+          <div className="grid w-full gap-3 sm:grid-cols-[minmax(16rem,1fr)_minmax(12rem,16rem)] xl:max-w-2xl">
+            <div>
+              <label htmlFor="library-search" className="sr-only">
+                Search books by title or author
+              </label>
+              <div className="relative">
+                <Search
+                  size={16}
+                  className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-text-subtle"
+                />
+                <input
+                  id="library-search"
+                  name="search"
+                  type="search"
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  placeholder="Search title or author"
+                  className={`${inputClassName} h-11 rounded-full bg-surface pl-10 shadow-[0_8px_18px_rgba(31,41,55,0.04)]`}
+                  autoComplete="off"
+                />
+              </div>
+            </div>
+            <div>
+              <label htmlFor="library-sort" className="sr-only">
+                Sort books
+              </label>
+              <select
+                id="library-sort"
+                value={sortKey}
+                onChange={(event) => handleSortChange(event.target.value as SortKey)}
+                className={`${inputClassName} h-11 rounded-full bg-surface shadow-[0_8px_18px_rgba(31,41,55,0.04)]`}
+              >
+                {SORT_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
           <LibraryTabs active={activeTab} onChange={setActiveTab} counts={counts} />
         </div>

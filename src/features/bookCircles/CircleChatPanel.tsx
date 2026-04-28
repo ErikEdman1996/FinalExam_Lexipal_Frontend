@@ -736,7 +736,7 @@ export function CircleChatPanel({
         <div
           ref={messageListRef}
           onScroll={handleMessageListScroll}
-          className="flex max-h-[32rem] min-h-[18rem] flex-col gap-3 overflow-y-auto pr-1"
+          className="flex max-h-[40rem] min-h-[22rem] flex-col gap-3 overflow-y-auto pr-1"
         >
           {isInitialHistoryLoading && messages.length === 0 ? (
             <div className="flex min-h-[16rem] items-center justify-center rounded-[20px] bg-surface px-4 text-sm text-text-muted">

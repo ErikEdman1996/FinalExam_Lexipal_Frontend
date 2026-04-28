@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ArrowLeft, BookOpen, Check, Pause, Play, Search, Square, X } from 'lucide-react';
+import { BookCover } from '../components/BookCover';
 import { Button } from '../components/Button';
 import { AppDialog, AppDialogClose, AppDialogTitle } from '../components/dialog/AppDialog';
 import {
@@ -61,6 +62,7 @@ export default function ReadingSession() {
   const [showReflectionModal, setShowReflectionModal] = useState(false);
   const [showWordLookupModal, setShowWordLookupModal] = useState(false);
   const [showNoteModal, setShowNoteModal] = useState(false);
+  const [isPreparingLookup, setIsPreparingLookup] = useState(false);
   const [noteToastMessage, setNoteToastMessage] = useState<string | null>(null);
   const [seconds, setSeconds] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
@@ -410,6 +412,37 @@ export default function ReadingSession() {
     }
   };
 
+  const handleOpenWordLookup = async () => {
+    if (activeSessionRef.current) {
+      setShowWordLookupModal(true);
+      return;
+    }
+
+    if (!bookId) {
+      setActionError('Missing book id.');
+      return;
+    }
+
+    const parsedBookId = Number(bookId);
+
+    if (!Number.isFinite(parsedBookId) || parsedBookId <= 0) {
+      setActionError('Invalid book id.');
+      return;
+    }
+
+    try {
+      setIsPreparingLookup(true);
+      setActionError(null);
+      await ensureSessionInitialized(parsedBookId);
+      setShowWordLookupModal(true);
+    } catch (error) {
+      console.error('Error preparing word lookup:', error);
+      setActionError(getErrorMessage(error, 'Could not prepare word lookup right now.'));
+    } finally {
+      setIsPreparingLookup(false);
+    }
+  };
+
   const draftStartPage = activeSession?.startPage ?? Math.max(0, book?.readPages ?? 0);
   const draftEndPage = activeSession
     ? Math.max(activeSession.endPage, activeSession.startPage)
@@ -462,6 +495,13 @@ export default function ReadingSession() {
           >
             <ArrowLeft size={20} />
           </button>
+          <BookCover
+            title={book.title}
+            author={book.author}
+            coverImageUrl={book.coverImageUrl}
+            size="xs"
+            className="shrink-0"
+          />
           <div className="min-w-0 flex-1">
             <p className="text-xs uppercase tracking-[0.22em] text-text-subtle">Reading Session</p>
             <h1 className="truncate text-2xl font-semibold text-text">{book.title}</h1>
@@ -520,11 +560,14 @@ export default function ReadingSession() {
 
           <div className="mt-5 flex flex-wrap justify-center gap-3">
             <button
-              onClick={() => setShowWordLookupModal(true)}
-              className="inline-flex h-11 items-center gap-2 rounded-full bg-accent-soft px-5 text-sm font-medium text-accent-strong transition-colors hover:bg-accent-soft/80"
+              onClick={() => {
+                void handleOpenWordLookup();
+              }}
+              disabled={isPreparingLookup}
+              className="inline-flex h-11 items-center gap-2 rounded-full bg-accent-soft px-5 text-sm font-medium text-accent-strong transition-colors hover:bg-accent-soft/80 disabled:cursor-not-allowed disabled:opacity-60"
             >
               <Search size={16} />
-              Look up Word
+              {isPreparingLookup ? 'Preparing...' : 'Look up Word'}
             </button>
             {activeSession ? (
               <button
@@ -569,8 +612,8 @@ export default function ReadingSession() {
       <WordLookupModal
         isOpen={showWordLookupModal}
         onClose={() => setShowWordLookupModal(false)}
-        codexEntryLemmas={codexEntries.map((codexEntry) => codexEntry.lemma)}
         sessionId={activeSession?.id}
+        bookId={bookId}
         onCapture={handleCaptureWord}
       />
 
@@ -726,10 +769,19 @@ function ReflectionModal({
         className="mt-6 space-y-4"
         noValidate
       >
-          <div className="rounded-[24px] bg-surface-muted p-4">
-            <p className="text-xs uppercase tracking-[0.22em] text-text-subtle">Book</p>
-            <p className="mt-2 text-base font-semibold text-text">{book.title}</p>
-            <p className="mt-1 text-sm text-text-muted">{book.author}</p>
+          <div className="flex items-center gap-3 rounded-[24px] bg-surface-muted p-4">
+            <BookCover
+              title={book.title}
+              author={book.author}
+              coverImageUrl={book.coverImageUrl}
+              size="xs"
+              className="shrink-0"
+            />
+            <div className="min-w-0">
+              <p className="text-xs uppercase tracking-[0.22em] text-text-subtle">Book</p>
+              <p className="mt-1 text-base font-semibold text-text">{book.title}</p>
+              <p className="mt-1 text-sm text-text-muted">{book.author}</p>
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3">

@@ -21,6 +21,7 @@ import {
   subscribeToReadingList,
   unstarReadingList,
   unsubscribeFromReadingList,
+  type ReadingListSort,
   type ReadingListSubscriptionResponseDTO,
   type ReadingListSummaryResponseDTO,
 } from '../api/api';
@@ -45,6 +46,13 @@ const TABS: Array<{ key: TabKey; label: string; icon: typeof Sparkles }> = [
   { key: 'explore', label: 'Explore', icon: Sparkles },
   { key: 'mine', label: 'My lists', icon: BookMarked },
   { key: 'subscriptions', label: 'Subscribed', icon: UserCheck },
+];
+
+const SORT_OPTIONS: Array<{ value: ReadingListSort; label: string }> = [
+  { value: 'POPULAR', label: 'Most popular' },
+  { value: 'RECENT', label: 'Most recent' },
+  { value: 'OLDEST', label: 'Oldest' },
+  { value: 'TITLE_ASC', label: 'Title (A-Z)' },
 ];
 
 function StatusChip({ label, tone }: { label: string; tone: 'brand' | 'accent' | 'muted' }) {
@@ -122,7 +130,7 @@ function ReadingListRow({
       className="group cursor-pointer border-t border-border px-4 py-4 transition-colors hover:bg-surface-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand"
       aria-label={`Open ${list.title}`}
     >
-      <div className="grid gap-4 md:grid-cols-[minmax(0,1.45fr)_minmax(10rem,0.9fr)_6rem_7rem_8rem_auto] md:items-center">
+      <div className="grid gap-4 md:grid-cols-[minmax(0,1.45fr)_minmax(10rem,0.9fr)_6rem_7rem_8rem_8rem] md:items-center">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <p className="truncate text-lg font-semibold text-text">{list.title}</p>
@@ -136,11 +144,15 @@ function ReadingListRow({
               {truncateDescription(list.description, 120)}
             </p>
           ) : null}
-          <div className="mt-3 flex flex-wrap gap-2 md:hidden">
-            {list.status !== 'PUBLISHED' ? (
-              <StatusChip label={getReadingListStatusLabel(list.status)} tone="muted" />
-            ) : null}
-            {list.callerIsOwner ? <StatusChip label="Owner" tone="brand" /> : null}
+          {list.status !== 'PUBLISHED' || list.callerIsOwner ? (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {list.status !== 'PUBLISHED' ? (
+                <StatusChip label={getReadingListStatusLabel(list.status)} tone="muted" />
+              ) : null}
+              {list.callerIsOwner ? <StatusChip label="Owner" tone="brand" /> : null}
+            </div>
+          ) : null}
+          <div className="mt-2 flex flex-wrap gap-2 md:hidden">
             <StatusChip label={`${list.bookCount} book${list.bookCount === 1 ? '' : 's'}`} tone="muted" />
           </div>
         </div>
@@ -179,13 +191,6 @@ function ReadingListRow({
         </div>
 
         <div className="flex flex-wrap items-center gap-2 md:justify-end">
-          <div className="hidden flex-wrap gap-2 lg:flex">
-            {list.status !== 'PUBLISHED' ? (
-              <StatusChip label={getReadingListStatusLabel(list.status)} tone="muted" />
-            ) : null}
-            {list.callerIsOwner ? <StatusChip label="Owner" tone="brand" /> : null}
-          </div>
-
           {list.callerIsOwner || list.status !== 'PUBLISHED' ? (
             <button
               type="button"
@@ -243,7 +248,7 @@ function SubscriptionRow({
       className="group cursor-pointer border-t border-border px-4 py-4 transition-colors hover:bg-surface-alt focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand"
       aria-label={`Open ${subscription.listTitle}`}
     >
-      <div className="grid gap-4 md:grid-cols-[minmax(0,1.45fr)_minmax(11rem,0.9fr)_7rem_8rem_auto] md:items-center">
+      <div className="grid gap-4 md:grid-cols-[minmax(0,1.45fr)_minmax(11rem,0.9fr)_7rem_8rem_7rem] md:items-center">
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <p className="truncate text-lg font-semibold text-text">{subscription.listTitle}</p>
@@ -297,7 +302,7 @@ function SubscriptionRow({
 function ListHeader({ kind }: { kind: 'reading-lists' | 'subscriptions' }) {
   if (kind === 'subscriptions') {
     return (
-      <div className="hidden grid-cols-[minmax(0,1.45fr)_minmax(11rem,0.9fr)_7rem_8rem_auto] gap-4 bg-surface-muted px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-text-subtle md:grid">
+      <div className="hidden grid-cols-[minmax(0,1.45fr)_minmax(11rem,0.9fr)_7rem_8rem_7rem] gap-4 bg-surface-muted px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-text-subtle md:grid">
         <span>List</span>
         <span>Progress</span>
         <span>Books</span>
@@ -308,7 +313,7 @@ function ListHeader({ kind }: { kind: 'reading-lists' | 'subscriptions' }) {
   }
 
   return (
-    <div className="hidden grid-cols-[minmax(0,1.45fr)_minmax(10rem,0.9fr)_6rem_7rem_8rem_auto] gap-4 bg-surface-muted px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-text-subtle md:grid">
+    <div className="hidden grid-cols-[minmax(0,1.45fr)_minmax(10rem,0.9fr)_6rem_7rem_8rem_8rem] gap-4 bg-surface-muted px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-text-subtle md:grid">
       <span>List</span>
       <span>Genres</span>
       <span>Books</span>
@@ -405,7 +410,7 @@ export default function ReadingLists() {
   const [exploreLists, setExploreLists] = useState<ReadingListSummaryResponseDTO[]>([]);
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [minStars, setMinStars] = useState('0');
+  const [sort, setSort] = useState<ReadingListSort>('POPULAR');
   const [page, setPage] = useState(0);
   const [myPage, setMyPage] = useState(0);
   const [subsPage, setSubsPage] = useState(0);
@@ -434,11 +439,6 @@ export default function ReadingLists() {
     return () => window.clearTimeout(handle);
   }, [searchInput]);
 
-  const parsedMinStars = useMemo(() => {
-    const parsed = Number(minStars);
-    return Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 0;
-  }, [minStars]);
-
   const visibleMyLists = useMemo(() => getClientPageItems(myLists, myPage), [myLists, myPage]);
   const visibleSubscriptions = useMemo(
     () => getClientPageItems(subscriptions, subsPage),
@@ -462,9 +462,9 @@ export default function ReadingLists() {
       setExploreError(null);
       const response = await browseReadingLists({
         q: searchQuery,
-        minStars: parsedMinStars,
         page,
         size: PAGE_SIZE,
+        sort,
       });
 
       if (latestExploreRequestRef.current !== requestId) return;
@@ -479,7 +479,7 @@ export default function ReadingLists() {
         setExploreLoading(false);
       }
     }
-  }, [page, parsedMinStars, searchQuery]);
+  }, [page, searchQuery, sort]);
 
   const loadMine = useCallback(async () => {
     try {
@@ -816,7 +816,7 @@ export default function ReadingLists() {
             </div>
 
             {tab === 'explore' ? (
-              <div className="grid flex-1 gap-3 sm:grid-cols-[minmax(16rem,1fr)_9rem] xl:max-w-3xl">
+              <div className="grid flex-1 gap-3 sm:grid-cols-[minmax(16rem,1fr)_12rem] xl:max-w-3xl">
                 <div>
                   <label htmlFor="reading-list-search" className={fieldLabelClassName}>
                     Search lists
@@ -835,24 +835,24 @@ export default function ReadingLists() {
                   </div>
                 </div>
                 <div>
-                  <label htmlFor="reading-list-min-stars" className={fieldLabelClassName}>
-                    Min stars
+                  <label htmlFor="reading-list-sort" className={fieldLabelClassName}>
+                    Sort by
                   </label>
-                  <div className="relative">
-                    <input
-                      id="reading-list-min-stars"
-                      type="number"
-                      min="0"
-                      value={minStars}
-                      onChange={(event) => {
-                        setMinStars(event.target.value);
-                        setPage(0);
-                      }}
-                      className={`${inputClassName} pr-10`}
-                      inputMode="numeric"
-                    />
-                    <Star size={14} className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-text-subtle" />
-                  </div>
+                  <select
+                    id="reading-list-sort"
+                    value={sort}
+                    onChange={(event) => {
+                      setSort(event.target.value as ReadingListSort);
+                      setPage(0);
+                    }}
+                    className={inputClassName}
+                  >
+                    {SORT_OPTIONS.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
             ) : null}

@@ -4,6 +4,7 @@ import {
   BookMarked,
   BookOpen,
   Ellipsis,
+  History,
   Library,
   LogOut,
   Moon,
@@ -19,19 +20,20 @@ import { PortraitImage } from '../features/portraits/portraitAssets';
 import mothIcon from '../assets/moth_icon.png';
 
 const NAV_ITEMS = [
-  { to: '/library', icon: Library, label: 'Library' },
-  { to: '/reading-lists', icon: BookMarked, label: 'Lists' },
-  { to: '/circles', icon: UsersRound, label: 'Circles' },
-  { to: '/codex', icon: BookOpen, label: 'Codex' },
-  { to: '/challenges', icon: Trophy, label: 'Challenges' },
-  { to: '/profile', icon: User, label: 'Profile' },
+  { to: '/library', icon: Library, label: 'Library', mobileLabel: 'Library' },
+  { to: '/reading-lists', icon: BookMarked, label: 'Lists', mobileLabel: 'Lists' },
+  { to: '/circles', icon: UsersRound, label: 'Circles', mobileLabel: 'Circles' },
+  { to: '/codex', icon: BookOpen, label: 'Codex', mobileLabel: 'Codex' },
+  { to: '/word-lookups', icon: History, label: 'Word History', mobileLabel: 'History' },
+  { to: '/challenges', icon: Trophy, label: 'Challenges', mobileLabel: 'Play' },
+  { to: '/profile', icon: User, label: 'Profile', mobileLabel: 'Profile' },
 ] as const;
 
 export function BottomNav() {
   const { isAdmin, logout, profile, username } = useAuth();
   const { theme, toggle } = useTheme();
   const navItems = isAdmin
-    ? [...NAV_ITEMS, { to: '/admin', icon: ShieldCheck, label: 'Admin' }]
+    ? [...NAV_ITEMS, { to: '/admin', icon: ShieldCheck, label: 'Admin', mobileLabel: 'Admin' }]
     : NAV_ITEMS;
   const nickname = profile?.nickname?.trim() || username || 'Reader';
   const handle = username ? `@${username}` : 'Lexipal profile';
@@ -41,13 +43,13 @@ export function BottomNav() {
   return (
     <>
       <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-surface safe-area-inset-bottom lg:hidden">
-        <div className="mx-auto flex h-16 max-w-[480px] items-center justify-around px-4">
-          {navItems.map(({ to, icon: Icon, label }) => (
+        <div className="mx-auto flex h-16 max-w-[560px] items-center justify-around px-2">
+          {navItems.map(({ to, icon: Icon, mobileLabel }) => (
             <NavLink
               key={to}
               to={to}
               className={({ isActive }) =>
-                `flex flex-col items-center justify-center gap-1 rounded-[16px] px-4 py-2 transition-all duration-200 ${
+                `flex flex-col items-center justify-center gap-1 rounded-[16px] px-2 py-2 transition-all duration-200 ${
                   isActive ? 'text-brand' : 'text-text-muted hover:text-text'
                 }`
               }
@@ -59,7 +61,7 @@ export function BottomNav() {
                     strokeWidth={isActive ? 2.5 : 2}
                     className={isActive ? 'scale-110' : ''}
                   />
-                  <span className="text-xs font-medium">{label}</span>
+                  <span className="text-xs font-medium">{mobileLabel}</span>
                 </>
               )}
             </NavLink>

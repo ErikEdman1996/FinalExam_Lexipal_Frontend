@@ -97,7 +97,7 @@ export function QuestionCard({
 
           return (
             <button
-              key={`${option.codexEntryId}-${index}`}
+              key={`${option.wordLookupId}-${index}`}
               type="button"
               disabled={locked}
               onClick={() => onPick(index)}

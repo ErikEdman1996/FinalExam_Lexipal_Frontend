@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, Clock, FileText, Pencil, Play, Trash2 } from 'lucide-react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Archive, ArrowLeft, Clock, FileText, Pencil, Play, RotateCcw, Trash2 } from 'lucide-react';
 import { motion } from 'motion/react';
+import { BookCover } from '../components/BookCover';
 import { BottomNav } from '../components/BottomNav';
 import { Button } from '../components/Button';
 import { ConfirmModal } from '../components/ConfirmModal';
@@ -15,13 +16,14 @@ import {
   getBook,
   getNotesByBook,
   getSessionsByBook,
+  updateBook,
   updateNote,
   type ApiBook,
   type ApiNote,
   type ApiSession,
 } from '../api/api';
 
-type BookDetailsTab = 'sessions' | 'notes';
+type BookDetailsTab = 'overview' | 'sessions' | 'notes';
 
 interface SessionData {
   id: string;
@@ -96,6 +98,7 @@ function BookDetailsTabs({
   onChange,
 }: BookDetailsTabsProps) {
   const tabs: Array<{ key: BookDetailsTab; label: string; count: number }> = [
+    { key: 'overview', label: 'Overview', count: 0 },
     { key: 'sessions', label: 'Sessions', count: sessionCount },
     { key: 'notes', label: 'Notes', count: notesCount },
   ];
@@ -117,9 +120,11 @@ function BookDetailsTabs({
             }`}
           >
             <span>{tab.label}</span>
-            <span className={`text-xs ${isActive ? 'text-text-on-brand/80' : 'text-text-subtle'}`}>
-              {tab.count}
-            </span>
+            {tab.key === 'overview' ? null : (
+              <span className={`text-xs ${isActive ? 'text-text-on-brand/80' : 'text-text-subtle'}`}>
+                {tab.count}
+              </span>
+            )}
           </button>
         );
       })}
@@ -130,25 +135,28 @@ function BookDetailsTabs({
 export default function BookDetails() {
   const { bookId } = useParams();
   const navigate = useNavigate();
-  const { refreshBooks, removeBook } = useBooks();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { refreshBooks, removeBook, upsertBook } = useBooks();
   const [book, setBook] = useState<ApiBook | null>(null);
   const [activeDraft, setActiveDraft] = useState<ApiSession | null>(null);
   const [sessions, setSessions] = useState<SessionData[]>([]);
   const [notes, setNotes] = useState<ApiNote[]>([]);
-  const [activeTab, setActiveTab] = useState<BookDetailsTab>('sessions');
-  const [selectedSession, setSelectedSession] = useState<SessionData | null>(null);
   const [editingNote, setEditingNote] = useState<ApiNote | null>(null);
   const [pendingDeleteNote, setPendingDeleteNote] = useState<ApiNote | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isNotesLoading, setIsNotesLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [notesError, setNotesError] = useState<string | null>(null);
+  const [isUpdatingArchiveStatus, setIsUpdatingArchiveStatus] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deletingNoteId, setDeletingNoteId] = useState<number | null>(null);
+  const activeTab: BookDetailsTab = searchParams.get('tab') === 'sessions'
+    ? 'sessions'
+    : searchParams.get('tab') === 'notes'
+      ? 'notes'
+      : 'overview';
 
   useEffect(() => {
-    setActiveTab('sessions');
-    setSelectedSession(null);
     setEditingNote(null);
     setPendingDeleteNote(null);
     setDeletingNoteId(null);
@@ -250,6 +258,35 @@ export default function BookDetails() {
     }
   };
 
+  const handleArchiveStatusToggle = async () => {
+    if (!book || isUpdatingArchiveStatus) {
+      return;
+    }
+
+    const isArchived = book.status === 'ARCHIVED';
+
+    try {
+      setIsUpdatingArchiveStatus(true);
+      const updatedBook = await updateBook(book.id, {
+        status: isArchived ? 'ACTIVE' : 'ARCHIVED',
+      });
+      setBook(updatedBook);
+      upsertBook(updatedBook);
+      void refreshBooks({ silent: true }).catch((error) => {
+        console.error('Error refreshing books after archive status update:', error);
+      });
+
+      if (!isArchived) {
+        void navigate('/library');
+      }
+    } catch (error) {
+      console.error('Error updating archive status:', error);
+      setErrorMessage('Could not update this book right now.');
+    } finally {
+      setIsUpdatingArchiveStatus(false);
+    }
+  };
+
   const handleUpdateNote = async ({
     quotedText,
     pageNumber,
@@ -297,13 +334,17 @@ export default function BookDetails() {
     }
   };
 
+  const handleTabChange = (nextTab: BookDetailsTab) => {
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set('tab', nextTab);
+    setSearchParams(nextParams);
+  };
+
   const completionPercentage = useMemo(
     () => (book ? calculateCompletionPercentage(book) : 0),
     [book],
   );
 
-  const latestSession = sessions[0] ?? null;
-  const highlightedSession = selectedSession ?? latestSession;
   const pagesRemaining = Math.max((book?.totalPages ?? 0) - (book?.readPages ?? 0), 0);
   const activeDraftCurrentPage = activeDraft
     ? Math.max(activeDraft.endPage, activeDraft.startPage)
@@ -353,14 +394,35 @@ export default function BookDetails() {
           Back to library
         </Link>
 
-        <div className={`mt-5 grid gap-6 ${activeTab === 'notes' ? '' : 'lg:grid-cols-[minmax(0,1.15fr)_minmax(20rem,0.85fr)]'}`}>
-          <div className="space-y-6">
+        <div className="mt-5 flex justify-start">
+          <BookDetailsTabs
+            active={activeTab}
+            notesCount={notes.length}
+            sessionCount={sessions.length}
+            onChange={handleTabChange}
+          />
+        </div>
+
+        <div className="mt-6 space-y-6">
+          {activeTab === 'overview' ? (
+            <>
             <section className="rounded-[32px] border border-border bg-surface p-6 shadow-[0_18px_36px_rgba(31,41,55,0.07)] sm:p-7">
               <p className="text-[0.72rem] uppercase tracking-[0.3em] text-text-subtle">Book details</p>
-              <h1 className="mt-3 text-3xl font-semibold tracking-[-0.04em] text-text sm:text-4xl">
-                {book.title}
-              </h1>
-              <p className="mt-2 text-base text-text-muted">{book.author}</p>
+              <div className="mt-3 flex items-start gap-4 sm:gap-5">
+                <BookCover
+                  title={book.title}
+                  author={book.author}
+                  coverImageUrl={book.coverImageUrl}
+                  size="md"
+                  className="shrink-0"
+                />
+                <div className="min-w-0 flex-1">
+                  <h1 className="text-3xl font-semibold tracking-[-0.04em] text-text sm:text-4xl">
+                    {book.title}
+                  </h1>
+                  <p className="mt-2 text-base text-text-muted">{book.author}</p>
+                </div>
+              </div>
 
               <div className="mt-5 grid gap-3 sm:grid-cols-3">
                 <div className="rounded-[22px] bg-surface-muted p-4">
@@ -402,6 +464,20 @@ export default function BookDetails() {
                     {activeDraft ? 'Resume Session' : 'Start Session'}
                   </span>
                 </Button>
+                <button
+                  onClick={() => void handleArchiveStatusToggle()}
+                  disabled={isUpdatingArchiveStatus}
+                  className="inline-flex h-11 items-center gap-2 rounded-full border border-border-strong bg-surface px-4 text-sm font-medium text-text transition-colors hover:bg-surface-alt disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {book.status === 'ARCHIVED' ? <RotateCcw size={16} /> : <Archive size={16} />}
+                  <span>
+                    {isUpdatingArchiveStatus
+                      ? 'Saving...'
+                      : book.status === 'ARCHIVED'
+                        ? 'Restore'
+                        : 'Archive'}
+                  </span>
+                </button>
                 <button
                   onClick={() => void handleDeleteBook()}
                   disabled={isDeleting}
@@ -454,65 +530,75 @@ export default function BookDetails() {
                 </div>
               </section>
             ) : null}
+            </>
+          ) : null}
 
-            <div className="flex justify-start">
-              <BookDetailsTabs
-                active={activeTab}
-                notesCount={notes.length}
-                sessionCount={sessions.length}
-                onChange={setActiveTab}
-              />
-            </div>
+          {activeTab === 'sessions' ? (
+            <section className="rounded-[28px] border border-border bg-surface p-5 shadow-[0_16px_32px_rgba(31,41,55,0.06)] sm:p-6">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                <div>
+                  <p className="text-[0.72rem] uppercase tracking-[0.24em] text-text-subtle">Sessions</p>
+                  <h2 className="mt-2 text-2xl font-semibold text-text">Reading sessions</h2>
+                  <p className="mt-2 text-sm text-text-muted">
+                    Prior reading sessions for this book, newest first.
+                  </p>
+                </div>
+                <span className="w-fit rounded-full bg-surface-muted px-3 py-1 text-sm font-medium text-text-muted">
+                  {sessions.length}
+                </span>
+              </div>
 
-            {activeTab === 'sessions' ? (
-              highlightedSession ? (
-                <section className={`rounded-[28px] border border-border bg-surface p-5 shadow-[0_16px_32px_rgba(31,41,55,0.06)] ${selectedSession ? '' : 'hidden lg:block'}`}>
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <p className="text-[0.72rem] uppercase tracking-[0.24em] text-text-subtle">
-                        {selectedSession ? 'Session Details' : 'Latest Session'}
-                      </p>
-                      <h2 className="mt-2 text-2xl font-semibold text-text">{highlightedSession.date}</h2>
-                    </div>
-                    {selectedSession ? (
-                      <button
-                        onClick={() => setSelectedSession(null)}
-                        className="inline-flex items-center gap-2 text-sm text-text-muted transition-colors hover:text-text lg:hidden"
-                      >
-                        <ArrowLeft size={14} />
-                        All sessions
-                      </button>
-                    ) : null}
-                  </div>
+              {sessions.length === 0 ? (
+                <div className="mt-5 rounded-[24px] border border-border bg-surface-alt px-4 py-8 text-center text-sm text-text-muted">
+                  No sessions yet. Start reading from Overview to build your history.
+                </div>
+              ) : (
+                <div className="mt-5 space-y-4">
+                  {sessions.map((session) => (
+                    <article
+                      key={session.id}
+                      className="rounded-[24px] border border-border bg-surface-alt p-5 shadow-[0_10px_22px_rgba(31,41,55,0.05)]"
+                    >
+                      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <p className="text-xs uppercase tracking-[0.22em] text-text-subtle">Session</p>
+                          <h3 className="mt-2 text-2xl font-semibold text-text">{session.date}</h3>
+                        </div>
+                      </div>
 
-                  <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                    <div className="rounded-[20px] bg-accent-soft p-4 text-center">
-                      <Clock size={16} className="mx-auto mb-2 text-accent-strong" />
-                      <p className="text-base font-semibold text-text">{formatDuration(highlightedSession.durationSeconds)}</p>
-                      <p className="mt-1 text-xs text-text-muted">Duration</p>
-                    </div>
-                    <div className="rounded-[20px] bg-brand-soft p-4 text-center">
-                      <FileText size={16} className="mx-auto mb-2 text-brand-strong" />
-                      <p className="text-base font-semibold text-text">{highlightedSession.pagesRead}</p>
-                      <p className="mt-1 text-xs text-text-muted">Pages read</p>
-                    </div>
-                    <div className="rounded-[20px] bg-surface-muted p-4 text-center">
-                      <p className="text-xs uppercase tracking-[0.18em] text-text-subtle">Page range</p>
-                      <p className="mt-2 text-base font-semibold text-text">
-                        {highlightedSession.startPage} - {highlightedSession.endPage}
-                      </p>
-                    </div>
-                  </div>
+                      <div className="mt-5 grid gap-3 sm:grid-cols-3">
+                        <div className="rounded-[20px] bg-accent-soft p-4 text-center">
+                          <Clock size={16} className="mx-auto mb-2 text-accent-strong" />
+                          <p className="text-base font-semibold text-text">{formatDuration(session.durationSeconds)}</p>
+                          <p className="mt-1 text-xs text-text-muted">Duration</p>
+                        </div>
+                        <div className="rounded-[20px] bg-brand-soft p-4 text-center">
+                          <FileText size={16} className="mx-auto mb-2 text-brand-strong" />
+                          <p className="text-base font-semibold text-text">{session.pagesRead}</p>
+                          <p className="mt-1 text-xs text-text-muted">Pages read</p>
+                        </div>
+                        <div className="rounded-[20px] bg-surface-muted p-4 text-center">
+                          <p className="text-xs uppercase tracking-[0.18em] text-text-subtle">Page range</p>
+                          <p className="mt-2 text-base font-semibold text-text">
+                            {session.startPage} - {session.endPage}
+                          </p>
+                        </div>
+                      </div>
 
-                  <div className="mt-4 rounded-[22px] bg-surface-muted p-4">
-                    <p className="text-xs uppercase tracking-[0.22em] text-text-subtle">Reflection</p>
-                    <p className="mt-3 text-sm leading-relaxed text-text-muted">
-                      {highlightedSession.reflection || 'No reflection recorded.'}
-                    </p>
-                  </div>
-                </section>
-              ) : null
-            ) : (
+                      <div className="mt-4 rounded-[22px] bg-surface-muted p-4">
+                        <p className="text-xs uppercase tracking-[0.22em] text-text-subtle">Reflection</p>
+                        <p className="mt-3 text-sm leading-relaxed text-text-muted">
+                          {session.reflection || 'No reflection recorded.'}
+                        </p>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+          ) : null}
+
+          {activeTab === 'notes' ? (
               <section className="rounded-[28px] border border-border bg-surface p-5 shadow-[0_16px_32px_rgba(31,41,55,0.06)]">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                   <div>
@@ -592,59 +678,6 @@ export default function BookDetails() {
                   </div>
                 )}
               </section>
-            )}
-          </div>
-
-          {activeTab === 'sessions' ? (
-            <aside className={`${selectedSession ? 'hidden lg:block' : ''}`}>
-              <section className="rounded-[30px] border border-border bg-surface p-5 shadow-[0_16px_32px_rgba(31,41,55,0.06)] lg:sticky lg:top-8">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <p className="text-[0.72rem] uppercase tracking-[0.24em] text-text-subtle">Reading history</p>
-                    <h2 className="mt-2 text-2xl font-semibold text-text">Sessions</h2>
-                  </div>
-                  <span className="rounded-full bg-surface-muted px-3 py-1 text-sm font-medium text-text-muted">
-                    {sessions.length}
-                  </span>
-                </div>
-
-                {sessions.length === 0 ? (
-                  <div className="mt-5 rounded-[24px] border border-border bg-surface-alt px-4 py-8 text-center text-sm text-text-muted">
-                    No sessions yet. Start reading to build your history.
-                  </div>
-                ) : (
-                  <div className="mt-5 space-y-3">
-                    {sessions.map((session) => {
-                      const isActive = highlightedSession?.id === session.id;
-
-                      return (
-                        <button
-                          key={session.id}
-                          onClick={() => setSelectedSession(session)}
-                          className={`flex w-full items-center gap-4 rounded-[24px] border p-4 text-left transition-all duration-200 ${
-                            isActive
-                              ? 'border-brand bg-brand-soft shadow-[0_12px_24px_rgba(154,74,66,0.12)]'
-                              : 'border-border bg-surface hover:-translate-y-0.5 hover:bg-surface-alt'
-                          }`}
-                        >
-                          <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-sm font-semibold ${
-                            isActive ? 'bg-brand text-text-on-brand' : 'bg-surface-muted text-text'
-                          }`}>
-                            {session.date.split(' ')[1] ?? session.date}
-                          </div>
-                          <div className="min-w-0 flex-1">
-                            <p className="text-sm font-medium text-text">
-                              {formatDuration(session.durationSeconds)} - {session.pagesRead} pages
-                            </p>
-                            <p className="mt-1 text-xs text-text-muted">{session.date}</p>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </section>
-            </aside>
           ) : null}
         </div>
       </div>

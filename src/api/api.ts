@@ -38,6 +38,18 @@ export interface ApiBook {
     sessions: ApiSession[];
     sessionCount?: number;
     progressPercentage?: number;
+    coverImageUrl: string | null;
+    coverSource: string | null;
+    externalBookId: string | null;
+}
+
+export interface CoverCandidateDTO {
+    coverImageUrl: string;
+    coverSource: string | null;
+    externalBookId: string | null;
+    matchedTitle: string | null;
+    matchedAuthor: string | null;
+    confidence: number;
 }
 
 type ApiBookCollectionResponse =
@@ -329,8 +341,20 @@ export type RarityTier = 'COMMON' | 'UNCOMMON' | 'RARE' | 'MYTHIC';
 
 export const rarityOrder: RarityTier[] = ['COMMON', 'UNCOMMON', 'RARE', 'MYTHIC'];
 
-export interface CodexEntryCreateRequestDTO {
+export interface WordLookupCreateRequestDTO {
     lemma: string;
+}
+
+export interface WordLookupReadResponseDTO {
+    id: number;
+    wordId: number;
+    lemma: string;
+    source: string | null;
+    definitions: unknown;
+    phonetics: unknown;
+    firstLookedUpAt: string;
+    lastLookedUpAt: string;
+    lookupCount: number;
 }
 
 export interface CodexEntryReadResponseDTO {
@@ -461,18 +485,20 @@ export interface DictionarySense {
     examples: string[];
 }
 
-export interface CodexEntryCreateResponseDTO {
+export interface WordLookupCreateResponseDTO {
+    wordLookup: WordLookupReadResponseDTO;
+    codexEntry: CodexEntryReadResponseDTO | null;
     lookupSucceeded: boolean;
     isCollectible: boolean;
+    isNewLookup: boolean;
     isNewCapture: boolean;
     alreadyCaptured: boolean;
-    codexEntry: CodexEntryReadResponseDTO;
-    rarityTier: RarityTier | string;
-    xpUpdate: XpUpdateResponseDTO | null;
     pageNumber: number | null;
     slotNumber: number | null;
     pageProgress: CodexPageProgressDTO | null;
     overallProgress: CodexOverallProgressDTO | null;
+    rarityTier: RarityTier | string | null;
+    xpUpdate: XpUpdateResponseDTO | null;
 }
 
 export type ChallengeType = 'FLASHCARD' | string;
@@ -491,8 +517,7 @@ export interface Challenge {
 export interface ChallengeAttemptCreateRequest {
     userAnswer?: string;
     result: ChallengeAttemptResult;
-    codexEntryId?: number;
-    wordId?: number;
+    wordLookupId: number;
 }
 
 export interface ChallengeAttempt {
@@ -503,8 +528,7 @@ export interface ChallengeAttempt {
     attemptedAt: string;
     challengeId: number;
     challengeType: ChallengeType;
-    codexEntryId: number | null;
-    wordId: number | null;
+    wordLookupId: number | null;
     lemma: string | null;
     definitionPreview: string | null;
     xpUpdate?: XpUpdateResponseDTO | null;
@@ -607,6 +631,14 @@ const isCodexEntryLikeRecord = (value: unknown): value is Record<string, unknown
     return typeof value.lemma === 'string' && toFiniteNumber(value.id) !== null;
 };
 
+const isWordLookupLikeRecord = (value: unknown): value is Record<string, unknown> => {
+    if (!isRecord(value)) {
+        return false;
+    }
+
+    return typeof value.lemma === 'string' && toFiniteNumber(value.id) !== null;
+};
+
 const isChallengeLikeRecord = (value: unknown): value is Record<string, unknown> => {
     if (!isRecord(value)) {
         return false;
@@ -652,6 +684,13 @@ const toApiBook = (value: Record<string, unknown>): ApiBook => {
         ? value.sessions.filter(isApiSession)
         : [];
 
+    const rawCoverImageUrl = typeof value.coverImageUrl === 'string' ? value.coverImageUrl.trim() : '';
+    const coverImageUrl = rawCoverImageUrl.length > 0 ? rawCoverImageUrl : null;
+    const rawCoverSource = typeof value.coverSource === 'string' ? value.coverSource.trim() : '';
+    const coverSource = rawCoverSource.length > 0 ? rawCoverSource : null;
+    const rawExternalBookId = typeof value.externalBookId === 'string' ? value.externalBookId.trim() : '';
+    const externalBookId = rawExternalBookId.length > 0 ? rawExternalBookId : null;
+
     return {
         id,
         title: String(value.title ?? ''),
@@ -663,6 +702,9 @@ const toApiBook = (value: Record<string, unknown>): ApiBook => {
         sessions,
         sessionCount,
         progressPercentage,
+        coverImageUrl,
+        coverSource,
+        externalBookId,
     };
 };
 
@@ -677,6 +719,20 @@ const toApiNote = (value: Record<string, unknown>): ApiNote => {
         chapterLabel: rawChapterLabel ? rawChapterLabel : null,
         quotedText: typeof value.quotedText === 'string' ? value.quotedText : '',
         createdAt: typeof value.createdAt === 'string' ? value.createdAt : '',
+    };
+};
+
+const toWordLookup = (value: Record<string, unknown>): WordLookupReadResponseDTO => {
+    return {
+        id: toFiniteNumber(value.id) ?? 0,
+        wordId: toFiniteNumber(value.wordId) ?? 0,
+        lemma: typeof value.lemma === 'string' ? value.lemma : '',
+        source: typeof value.source === 'string' ? value.source : null,
+        definitions: value.definitions ?? null,
+        phonetics: value.phonetics ?? null,
+        firstLookedUpAt: typeof value.firstLookedUpAt === 'string' ? value.firstLookedUpAt : '',
+        lastLookedUpAt: typeof value.lastLookedUpAt === 'string' ? value.lastLookedUpAt : '',
+        lookupCount: Math.max(0, toFiniteNumber(value.lookupCount) ?? 0),
     };
 };
 
@@ -772,8 +828,7 @@ const toChallengeAttempt = (value: Record<string, unknown>): ChallengeAttempt =>
         attemptedAt: typeof value.attemptedAt === 'string' ? value.attemptedAt : '',
         challengeId: toFiniteNumber(value.challengeId) ?? 0,
         challengeType: typeof value.challengeType === 'string' ? value.challengeType : 'FLASHCARD',
-        codexEntryId: value.codexEntryId == null ? null : (toFiniteNumber(value.codexEntryId) ?? null),
-        wordId: value.wordId == null ? null : (toFiniteNumber(value.wordId) ?? null),
+        wordLookupId: value.wordLookupId == null ? null : (toFiniteNumber(value.wordLookupId) ?? null),
         lemma: typeof value.lemma === 'string' ? value.lemma : null,
         definitionPreview: typeof value.definitionPreview === 'string' ? value.definitionPreview : null,
         xpUpdate: toXpUpdate(value.xpUpdate),
@@ -1175,6 +1230,56 @@ const normalizeCodexEntriesResponse = (value: unknown): CodexEntryReadResponseDT
     }
 
     return [];
+};
+
+const normalizeWordLookupsResponse = (value: unknown): WordLookupReadResponseDTO[] => {
+    if (Array.isArray(value)) {
+        return value
+            .filter(isWordLookupLikeRecord)
+            .map(toWordLookup);
+    }
+
+    if (!isRecord(value)) {
+        return [];
+    }
+
+    const collections = [value.wordLookups, value.lookups, value.content, value.data, value.items];
+
+    for (const collection of collections) {
+        if (Array.isArray(collection)) {
+            return collection
+                .filter(isWordLookupLikeRecord)
+                .map(toWordLookup);
+        }
+    }
+
+    return isWordLookupLikeRecord(value) ? [toWordLookup(value)] : [];
+};
+
+const normalizeWordLookupCreateResponse = (value: unknown): WordLookupCreateResponseDTO => {
+    const outerRecord = isRecord(value) ? value : {};
+    const record = isRecord(outerRecord.data) && isRecord(outerRecord.data.wordLookup)
+        ? outerRecord.data
+        : outerRecord;
+    const wordLookupRecord = [record.wordLookup, record.lookup, record.item]
+        .find(isWordLookupLikeRecord);
+    const codexEntryRecord = isRecord(record.codexEntry) ? record.codexEntry : null;
+
+    return {
+        wordLookup: toWordLookup(wordLookupRecord ?? {}),
+        codexEntry: codexEntryRecord ? toCodexEntry(codexEntryRecord) : null,
+        lookupSucceeded: record.lookupSucceeded !== false,
+        isCollectible: record.isCollectible === true,
+        isNewLookup: record.isNewLookup === true,
+        isNewCapture: record.isNewCapture === true || record.newCapture === true,
+        alreadyCaptured: record.alreadyCaptured === true,
+        pageNumber: toFiniteNumber(record.pageNumber),
+        slotNumber: toFiniteNumber(record.slotNumber),
+        pageProgress: toCodexPageProgress(record.pageProgress),
+        overallProgress: toCodexOverallProgress(record.overallProgress),
+        rarityTier: typeof record.rarityTier === 'string' ? record.rarityTier : null,
+        xpUpdate: toXpUpdate(record.xpUpdate),
+    };
 };
 
 const normalizeCodexBoardResponse = (value: unknown): CodexBoardResponseDTO => {
@@ -2133,9 +2238,25 @@ export const getCodexEntries = async () => {
     }
 };
 
+export const getWordLookups = async () => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/word-lookups`, {
+            headers: await buildAuthHeaders(),
+        });
+        if (!res.ok) {
+            throw new Error(await getErrorMessage(res, 'Failed to fetch looked-up words'));
+        }
+        const data = await res.json();
+        return normalizeWordLookupsResponse(data);
+    } catch (error) {
+        console.error('Error fetching word lookups:', error);
+        throw error;
+    }
+};
+
 export const getCodexBoard = async () => {
     try {
-        const res = await fetch(`${API_BASE_URL}/codexBoard`, {
+        const res = await fetch(`${API_BASE_URL}/codex-board`, {
             headers: await buildAuthHeaders(),
         });
         if (!res.ok) {
@@ -2684,6 +2805,50 @@ export const updateBook = async (bookId: string | number, request: UpdateBookReq
         return normalizeBookResponse(data);
     } catch (error) {
         console.error('Error updating book:', error);
+        throw error;
+    }
+};
+
+export const fetchCoverCandidates = async (
+    request: { title: string; author: string },
+): Promise<CoverCandidateDTO[]> => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/books/cover-candidates`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(await buildAuthHeaders()),
+            },
+            body: JSON.stringify(request),
+        });
+        if (!res.ok) {
+            throw new Error(await getErrorMessage(res, 'Failed to fetch cover candidates'));
+        }
+        const data = await res.json();
+
+        if (!Array.isArray(data)) {
+            return [];
+        }
+
+        return data
+            .filter(isRecord)
+            .map((entry): CoverCandidateDTO | null => {
+                const url = typeof entry.coverImageUrl === 'string' ? entry.coverImageUrl.trim() : '';
+                if (!url) {
+                    return null;
+                }
+                return {
+                    coverImageUrl: url,
+                    coverSource: typeof entry.coverSource === 'string' ? entry.coverSource : null,
+                    externalBookId: typeof entry.externalBookId === 'string' ? entry.externalBookId : null,
+                    matchedTitle: typeof entry.matchedTitle === 'string' ? entry.matchedTitle : null,
+                    matchedAuthor: typeof entry.matchedAuthor === 'string' ? entry.matchedAuthor : null,
+                    confidence: toFiniteNumber(entry.confidence) ?? 0,
+                };
+            })
+            .filter((candidate): candidate is CoverCandidateDTO => candidate !== null);
+    } catch (error) {
+        console.error('Error fetching cover candidates:', error);
         throw error;
     }
 };
@@ -3337,9 +3502,12 @@ export const extractDictionarySenses = (definitions: unknown): DictionarySense[]
 };
 
 
-export const createCodexEntry = async (sessionId: number, payload: CodexEntryCreateRequestDTO) => {
+export const createWordLookup = async (
+    sessionId: number,
+    payload: WordLookupCreateRequestDTO,
+) => {
     try {
-        const res = await fetch(`${API_BASE_URL}/codexEntries/${sessionId}`, {
+        const res = await fetch(`${API_BASE_URL}/word-lookups/${sessionId}`, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
@@ -3347,24 +3515,13 @@ export const createCodexEntry = async (sessionId: number, payload: CodexEntryCre
             },
             body: JSON.stringify(payload),
         });
-        if (!res.ok) throw new Error('Failed to create codex entry');
-        const data = await res.json() as Record<string, unknown>;
-
-        return {
-            lookupSucceeded: data.lookupSucceeded !== false,
-            isCollectible: data.isCollectible === true,
-            isNewCapture: data.isNewCapture === true || data.newCapture === true,
-            alreadyCaptured: data.alreadyCaptured === true,
-            codexEntry: toCodexEntry(isRecord(data.codexEntry) ? data.codexEntry : {}),
-            rarityTier: typeof data.rarityTier === 'string' ? data.rarityTier : 'COMMON',
-            xpUpdate: toXpUpdate(data.xpUpdate),
-            pageNumber: toFiniteNumber(data.pageNumber),
-            slotNumber: toFiniteNumber(data.slotNumber),
-            pageProgress: toCodexPageProgress(data.pageProgress),
-            overallProgress: toCodexOverallProgress(data.overallProgress),
-        } satisfies CodexEntryCreateResponseDTO;
+        if (!res.ok) {
+            throw new Error(await getErrorMessage(res, 'Failed to look up word'));
+        }
+        const data: unknown = await res.json();
+        return normalizeWordLookupCreateResponse(data);
     } catch (error) {
-        console.error('Error creating codex entry:', error);
+        console.error('Error creating word lookup:', error);
         throw error;
     }
 };
@@ -3448,11 +3605,14 @@ export interface ReadingListSubscriptionResponseDTO {
     slotsCompleted: number;
 }
 
+export type ReadingListSort = 'POPULAR' | 'RECENT' | 'OLDEST' | 'TITLE_ASC';
+
 export interface BrowseReadingListsOptions {
     q?: string;
     minStars?: number;
     page?: number;
     size?: number;
+    sort?: ReadingListSort;
 }
 
 export type AdminAnalyticsRange = 'TODAY' | 'LAST_7_DAYS' | 'THIS_MONTH' | 'LAST_30_DAYS' | 'ALL_TIME';
@@ -3877,6 +4037,10 @@ export const browseReadingLists = async (options: BrowseReadingListsOptions = {}
 
         if (typeof options.size === 'number' && options.size > 0) {
             params.set('size', String(Math.min(100, Math.floor(options.size))));
+        }
+
+        if (options.sort) {
+            params.set('sort', options.sort);
         }
 
         const query = params.toString();

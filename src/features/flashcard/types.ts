@@ -1,20 +1,20 @@
 import {
   extractDefinitionFromDefinitions,
   extractPartsOfSpeechFromDefinitions,
-  type CodexEntryReadResponseDTO,
+  type WordLookupReadResponseDTO,
 } from '../../api/api';
 
 export interface FlashcardCandidate {
-  codexEntryId: number;
+  wordLookupId: number;
   lemma: string;
   definition: string;
   source: string | null;
-  createdAt: string;
+  lastLookedUpAt: string;
   partsOfSpeech: string[];
 }
 
 export interface QuizOption {
-  codexEntryId: number;
+  wordLookupId: number;
   text: string;
 }
 
@@ -25,7 +25,7 @@ export interface QuizCard {
 }
 
 export interface AttemptResult {
-  codexEntryId: number;
+  wordLookupId: number;
   lemma: string;
   correct: boolean;
   timedOut: boolean;
@@ -38,20 +38,20 @@ export type GamePhase = 'idle' | 'question' | 'locked' | 'ended';
 export type FeedbackState = 'none' | 'correct' | 'wrong' | 'timeout';
 
 export const toFlashcardCandidate = (
-  entry: CodexEntryReadResponseDTO,
+  entry: WordLookupReadResponseDTO,
 ): FlashcardCandidate | null => {
-  const definition = entry.specificDefinition || extractDefinitionFromDefinitions(entry.definitions);
+  const definition = extractDefinitionFromDefinitions(entry.definitions);
 
   if (!definition) {
     return null;
   }
 
   return {
-    codexEntryId: entry.id,
+    wordLookupId: entry.id,
     lemma: entry.lemma,
     definition,
     source: entry.source,
-    createdAt: entry.createdAt,
+    lastLookedUpAt: entry.lastLookedUpAt,
     partsOfSpeech: extractPartsOfSpeechFromDefinitions(entry.definitions),
   };
 };

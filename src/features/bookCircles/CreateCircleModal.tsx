@@ -8,6 +8,7 @@ import {
   type BookCircleCreateResponseDTO,
   type BookCircleVisibility,
 } from '../../api/api';
+import { BookCover } from '../../components/BookCover';
 import { Button } from '../../components/Button';
 import { AppDialog, AppDialogClose, AppDialogTitle } from '../../components/dialog/AppDialog';
 import {
@@ -400,23 +401,34 @@ export function CreateCircleModal({
                                 : 'border-border bg-surface hover:bg-surface-alt'
                             }`}
                           >
-                            <div className="flex items-start justify-between gap-4">
-                              <div className="min-w-0">
-                                <p className="truncate text-lg font-semibold text-text">{book.title}</p>
-                                <p className="mt-1 truncate text-sm text-text-muted">{book.author}</p>
+                            <div className="flex items-start gap-3">
+                              <BookCover
+                                title={book.title}
+                                author={book.author}
+                                coverImageUrl={book.coverImageUrl}
+                                size="sm"
+                                className="shrink-0"
+                              />
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <p className="truncate text-base font-semibold text-text">{book.title}</p>
+                                    <p className="mt-1 truncate text-sm text-text-muted">{book.author}</p>
+                                  </div>
+                                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] bg-surface text-xs font-semibold text-text">
+                                    {percentage}%
+                                  </div>
+                                </div>
+                                <div className="mt-3">
+                                  <ProgressBar current={book.readPages} total={book.totalPages} height="md" />
+                                </div>
+                                <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-text-muted">
+                                  <span>{book.readPages} / {book.totalPages} pages</span>
+                                  <span className="rounded-full bg-surface-muted px-2.5 py-0.5">
+                                    {book.sessionCount ?? book.sessions.length} sessions
+                                  </span>
+                                </div>
                               </div>
-                              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-surface text-sm font-semibold text-text">
-                                {percentage}%
-                              </div>
-                            </div>
-                            <div className="mt-4">
-                              <ProgressBar current={book.readPages} total={book.totalPages} height="md" />
-                            </div>
-                            <div className="mt-3 flex flex-wrap items-center gap-3 text-sm text-text-muted">
-                              <span>{book.readPages} / {book.totalPages} pages</span>
-                              <span className="rounded-full bg-surface-muted px-3 py-1">
-                                {book.sessionCount ?? book.sessions.length} sessions
-                              </span>
                             </div>
                           </button>
                         );

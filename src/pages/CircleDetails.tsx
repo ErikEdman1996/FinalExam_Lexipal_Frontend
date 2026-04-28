@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, CalendarDays, Copy, Lock, UsersRound } from 'lucide-react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import {
   ApiResponseError,
@@ -35,6 +35,8 @@ import { useAuth } from '../features/auth/useAuth';
 
 const POLL_INTERVAL_MS = 30_000;
 
+type CircleDetailsTab = 'overview' | 'chat';
+
 type CirclePendingAction =
   | { type: 'close' }
   | { type: 'leave' }
@@ -62,9 +64,54 @@ function CircleChip({
   );
 }
 
+function CircleDetailsTabs({
+  active,
+  membersLabel,
+  chatLabel,
+  onChange,
+}: {
+  active: CircleDetailsTab;
+  membersLabel: string;
+  chatLabel: string;
+  onChange: (nextTab: CircleDetailsTab) => void;
+}) {
+  const tabs: Array<{ key: CircleDetailsTab; label: string; meta: string }> = [
+    { key: 'overview', label: 'Overview', meta: membersLabel },
+    { key: 'chat', label: 'Chat', meta: chatLabel },
+  ];
+
+  return (
+    <div className="flex w-full gap-1 overflow-x-auto rounded-full border border-border bg-surface p-1 shadow-[0_8px_18px_rgba(31,41,55,0.04)] sm:w-fit">
+      {tabs.map((tab) => {
+        const isActive = tab.key === active;
+
+        return (
+          <button
+            key={tab.key}
+            type="button"
+            aria-pressed={isActive}
+            onClick={() => onChange(tab.key)}
+            className={`inline-flex items-center gap-2 whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition-all duration-200 ${
+              isActive
+                ? 'bg-brand text-text-on-brand shadow-[0_6px_14px_rgba(154,74,66,0.24)]'
+                : 'text-text-muted hover:text-text'
+            }`}
+          >
+            <span>{tab.label}</span>
+            <span className={`text-xs ${isActive ? 'text-text-on-brand/80' : 'text-text-subtle'}`}>
+              {tab.meta}
+            </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function CircleDetails() {
   const navigate = useNavigate();
   const { circleId } = useParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { profile } = useAuth();
   const [circle, setCircle] = useState<BookCircleReadResponseDTO | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -77,6 +124,7 @@ export default function CircleDetails() {
   const isRefreshingRef = useRef(false);
   const isActionSubmittingRef = useRef(false);
   const isMountedRef = useRef(false);
+  const activeTab: CircleDetailsTab = searchParams.get('tab') === 'chat' ? 'chat' : 'overview';
 
   useEffect(() => {
     isActionSubmittingRef.current = isActionSubmitting;
@@ -243,6 +291,12 @@ export default function CircleDetails() {
       console.error('Error copying invite code:', error);
       toast.error('Could not copy the invite code.');
     }
+  };
+
+  const handleTabChange = (nextTab: CircleDetailsTab) => {
+    const nextParams = new URLSearchParams(searchParams);
+    nextParams.set('tab', nextTab);
+    setSearchParams(nextParams);
   };
 
   const handleMeetingSaved = (updatedCircle: BookCircleReadResponseDTO) => {
@@ -544,147 +598,156 @@ export default function CircleDetails() {
           </aside>
 
           <div className="space-y-4">
-            <CircleChatPanel
-              circle={circle}
-              currentUserId={currentUserId}
-              onChatClosed={handleChatClosed}
-              onAccessRevoked={handleChatAccessRevoked}
+            <CircleDetailsTabs
+              active={activeTab}
+              membersLabel={`${circle.currentMemberCount}/${circle.memberCap}`}
+              chatLabel={circle.status === 'ACTIVE' ? 'Live' : 'Closed'}
+              onChange={handleTabChange}
             />
 
-            <section className="rounded-[28px] border border-border bg-surface p-4 shadow-[0_16px_34px_rgba(31,41,55,0.06)] sm:p-6">
-              <div className="flex items-start justify-between gap-3">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.24em] text-text-subtle">Members</p>
-                  <h2 className="mt-1 text-xl font-semibold text-text sm:text-2xl">Circle roster</h2>
-                  <p className="mt-1 text-xs text-text-muted sm:text-sm">
-                    {circle.currentMemberCount} of {circle.memberCap} seats filled
-                  </p>
+            {activeTab === 'chat' ? (
+              <CircleChatPanel
+                circle={circle}
+                currentUserId={currentUserId}
+                onChatClosed={handleChatClosed}
+                onAccessRevoked={handleChatAccessRevoked}
+              />
+            ) : (
+              <section className="rounded-[28px] border border-border bg-surface p-4 shadow-[0_16px_34px_rgba(31,41,55,0.06)] sm:p-6">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-xs uppercase tracking-[0.24em] text-text-subtle">Members</p>
+                    <h2 className="mt-1 text-xl font-semibold text-text sm:text-2xl">Circle roster</h2>
+                    <p className="mt-1 text-xs text-text-muted sm:text-sm">
+                      {circle.currentMemberCount} of {circle.memberCap} seats filled
+                    </p>
+                  </div>
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[16px] bg-accent-soft">
+                    <UsersRound size={18} className="text-accent-strong" />
+                  </div>
                 </div>
-                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[16px] bg-accent-soft">
-                  <UsersRound size={18} className="text-accent-strong" />
-                </div>
-              </div>
 
-              <ul className="mt-4 flex flex-col gap-1">
-                {sortedMembers.map((member) => {
-                  const isCurrentUser = currentUserId != null && currentUserId === member.userId;
-                  const canRemoveMember = circle.callerIsOwner && member.role !== 'OWNER';
-                  const canOpenDetails = canDrillIntoMember({
-                    callerIsOwner: circle.callerIsOwner,
-                    currentUserId,
-                    targetUserId: member.userId,
-                    visibility: circle.visibility,
-                  });
+                <ul className="mt-4 flex flex-col gap-1">
+                  {sortedMembers.map((member) => {
+                    const isCurrentUser = currentUserId != null && currentUserId === member.userId;
+                    const canRemoveMember = circle.callerIsOwner && member.role !== 'OWNER';
+                    const canOpenDetails = canDrillIntoMember({
+                      callerIsOwner: circle.callerIsOwner,
+                      currentUserId,
+                      targetUserId: member.userId,
+                      visibility: circle.visibility,
+                    });
 
-                  const memberName = getMemberDisplayName({
-                    currentUserId,
-                    fallbackNickname: member.userNickname,
-                    targetUserId: member.userId,
-                  });
+                    const memberName = getMemberDisplayName({
+                      currentUserId,
+                      fallbackNickname: member.userNickname,
+                      targetUserId: member.userId,
+                    });
 
-                  const memberPortrait = member.selectedPortrait
-                    ?? (isCurrentUser ? profile?.selectedPortrait : null);
-                  const isHidden = member.progressPercentage == null;
+                    const memberPortrait = member.selectedPortrait
+                      ?? (isCurrentUser ? profile?.selectedPortrait : null);
+                    const isHidden = member.progressPercentage == null;
 
-                  const progressContent = isHidden ? (
-                    <div className="inline-flex items-center gap-1.5 rounded-full bg-surface-muted px-2.5 py-1 text-[0.7rem] font-medium uppercase tracking-[0.14em] text-text-subtle">
-                      <Lock size={12} />
-                      Hidden
-                    </div>
-                  ) : (
-                    <div>
-                      <div className="flex items-center justify-between gap-3 text-xs text-text-muted">
-                        <span>
-                          {member.readPages ?? 0} / {member.totalPages ?? 0} pages
-                        </span>
-                        <span className="text-sm font-semibold text-text">
-                          {formatProgressLabel(member.progressPercentage)}
-                        </span>
+                    const progressContent = isHidden ? (
+                      <div className="inline-flex items-center gap-1.5 rounded-full bg-surface-muted px-2.5 py-1 text-[0.7rem] font-medium uppercase tracking-[0.14em] text-text-subtle">
+                        <Lock size={12} />
+                        Hidden
                       </div>
-                      <div className="mt-1.5">
-                        <ProgressBar
-                          current={member.readPages ?? 0}
-                          total={member.totalPages ?? 1}
-                          height="sm"
-                        />
-                      </div>
-                    </div>
-                  );
-
-                  const rowContent = (
-                    <div className="flex items-start gap-3 sm:items-center sm:gap-4">
-                      <PortraitImage
-                        assetKey={memberPortrait?.assetKey}
-                        name={memberPortrait?.name ?? memberName}
-                        className="h-10 w-10 shrink-0 shadow-[0_8px_18px_rgba(31,41,55,0.12)] ring-2 ring-surface sm:h-11 sm:w-11"
-                      />
-
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="truncate text-sm font-semibold text-text sm:text-base">
-                            {memberName}
-                          </p>
-                          {member.role === 'OWNER' ? <CircleChip label="Owner" tone="brand" /> : null}
-                          {isCurrentUser ? <CircleChip label="You" tone="accent" /> : null}
+                    ) : (
+                      <div>
+                        <div className="flex items-center justify-between gap-3 text-xs text-text-muted">
+                          <span>
+                            {member.readPages ?? 0} / {member.totalPages ?? 0} pages
+                          </span>
+                          <span className="text-sm font-semibold text-text">
+                            {formatProgressLabel(member.progressPercentage)}
+                          </span>
                         </div>
-                        <p className="mt-1 text-[0.72rem] text-text-subtle sm:text-xs">
-                          Joined {formatCircleDateTime(member.joinedAt)}
-                        </p>
-
-                        <div className="mt-3 sm:hidden">{progressContent}</div>
+                        <div className="mt-1.5">
+                          <ProgressBar
+                            current={member.readPages ?? 0}
+                            total={member.totalPages ?? 1}
+                            height="sm"
+                          />
+                        </div>
                       </div>
+                    );
 
-                      <div className="ml-auto hidden w-[200px] shrink-0 sm:block lg:w-[220px]">
-                        {progressContent}
+                    const rowContent = (
+                      <div className="flex items-start gap-3 sm:items-center sm:gap-4">
+                        <PortraitImage
+                          assetKey={memberPortrait?.assetKey}
+                          name={memberPortrait?.name ?? memberName}
+                          className="h-10 w-10 shrink-0 shadow-[0_8px_18px_rgba(31,41,55,0.12)] ring-2 ring-surface sm:h-11 sm:w-11"
+                        />
+
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="truncate text-sm font-semibold text-text sm:text-base">
+                              {memberName}
+                            </p>
+                            {member.role === 'OWNER' ? <CircleChip label="Owner" tone="brand" /> : null}
+                            {isCurrentUser ? <CircleChip label="You" tone="accent" /> : null}
+                          </div>
+                          <p className="mt-1 text-[0.72rem] text-text-subtle sm:text-xs">
+                            Joined {formatCircleDateTime(member.joinedAt)}
+                          </p>
+
+                          <div className="mt-3 sm:hidden">{progressContent}</div>
+                        </div>
+
+                        <div className="ml-auto hidden w-[200px] shrink-0 sm:block lg:w-[220px]">
+                          {progressContent}
+                        </div>
                       </div>
-                    </div>
-                  );
+                    );
 
-                  if (!canOpenDetails) {
+                    if (!canOpenDetails) {
+                      return (
+                        <li key={member.userId}>
+                          <div
+                            title="Progress hidden by circle owner."
+                            className="rounded-[20px] px-3 py-3 sm:px-4 sm:py-3.5"
+                          >
+                            {rowContent}
+                          </div>
+                        </li>
+                      );
+                    }
+
                     return (
                       <li key={member.userId}>
-                        <div
-                          title="Progress hidden by circle owner."
-                          className="rounded-[20px] px-3 py-3 sm:px-4 sm:py-3.5"
-                        >
-                          {rowContent}
+                        <div className="sm:flex sm:items-center sm:gap-3">
+                          <button
+                            type="button"
+                            onClick={() => setSelectedMember(member)}
+                            className="w-full flex-1 rounded-[20px] px-3 py-3 text-left transition-colors hover:bg-surface-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand sm:px-4 sm:py-3.5"
+                          >
+                            {rowContent}
+                          </button>
+
+                          {canRemoveMember ? (
+                            <div className="px-3 pb-3 sm:px-0 sm:pb-0 sm:pr-4">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="w-full rounded-full border-danger/35 text-danger hover:bg-danger-soft sm:w-auto sm:min-w-[112px]"
+                                onClick={() => setPendingAction({
+                                  type: 'remove-member',
+                                  member,
+                                })}
+                              >
+                                Remove
+                              </Button>
+                            </div>
+                          ) : null}
                         </div>
                       </li>
                     );
-                  }
-
-                  return (
-                    <li key={member.userId}>
-                      <div className="sm:flex sm:items-center sm:gap-3">
-                        <button
-                          type="button"
-                          onClick={() => setSelectedMember(member)}
-                          className="w-full flex-1 rounded-[20px] px-3 py-3 text-left transition-colors hover:bg-surface-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand sm:px-4 sm:py-3.5"
-                        >
-                          {rowContent}
-                        </button>
-
-                        {canRemoveMember ? (
-                          <div className="px-3 pb-3 sm:px-0 sm:pb-0 sm:pr-4">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              className="w-full rounded-full border-danger/35 text-danger hover:bg-danger-soft sm:w-auto sm:min-w-[112px]"
-                              onClick={() => setPendingAction({
-                                type: 'remove-member',
-                                member,
-                              })}
-                            >
-                              Remove
-                            </Button>
-                          </div>
-                        ) : null}
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            </section>
+                  })}
+                </ul>
+              </section>
+            )}
           </div>
         </div>
       </div>

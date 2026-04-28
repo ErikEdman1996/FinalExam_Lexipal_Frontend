@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { BookOpen, ChevronLeft, ChevronRight, LockKeyhole, Star, X } from 'lucide-react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
+import { BookOpen, ChevronLeft, ChevronRight, LockKeyhole, Play, Star, X } from 'lucide-react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { BottomNav } from '../components/BottomNav';
 import { Button } from '../components/Button';
 import { AppDialog, AppDialogClose, AppDialogTitle } from '../components/dialog/AppDialog';
@@ -13,11 +14,12 @@ import {
   extractPhoneticText,
   extractSynonymsFromDefinitions,
   getCodexBoard,
-  getDictionaryWord,
+  getCodexEntries,
   normalizeRarityTier,
   type CodexBoardPageDTO,
   type CodexBoardResponseDTO,
   type CodexBoardSlotDTO,
+  type CodexEntryReadResponseDTO,
   type DictionarySense,
   type RarityTier,
 } from '../api/api';
@@ -51,6 +53,22 @@ const rarityMarkerClassNames: Record<RarityTier, string> = {
 interface CapturedSlotDetails {
   pageNumber: number;
   slot: CodexBoardSlotDTO;
+}
+
+interface RevealSlotInfo {
+  pageNumber: number;
+  slotNumber: number;
+  lemma: string;
+  rarityTier: RarityTier;
+}
+
+interface ReturnToSessionInfo {
+  bookId: string | number;
+}
+
+interface CodexLocationState {
+  revealSlot?: RevealSlotInfo;
+  returnToSession?: ReturnToSessionInfo | null;
 }
 
 interface CodexDictionaryEntry {
@@ -208,69 +226,42 @@ function PageStrip({
   );
 }
 
-function CapturedSlotModal({ details, onClose }: { details: CapturedSlotDetails | null; onClose: () => void }) {
-  const [entry, setEntry] = useState<CodexDictionaryEntry | null>(null);
-  const [isLoadingEntry, setIsLoadingEntry] = useState(false);
-  const [entryError, setEntryError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    const loadEntry = async () => {
-      if (!details) {
-        setEntry(null);
-        setEntryError(null);
-        setIsLoadingEntry(false);
-        return;
-      }
-
-      if (!details.slot.lemma) {
-        setEntry(null);
-        setEntryError('No dictionary details are available for this word yet.');
-        return;
-      }
-
-      try {
-        setIsLoadingEntry(true);
-        setEntryError(null);
-        const word = await getDictionaryWord(details.slot.lemma);
-
-        if (!isMounted) {
-          return;
-        }
-
-        const senses = extractDictionarySenses(word.definitions);
-        const fallbackDefinition = extractDefinitionFromDefinitions(word.definitions);
-
-        setEntry({
-          lemma: word.lemma ?? details.slot.lemma,
-          phoneticText: extractPhoneticText(word.phonetics),
-          partsOfSpeech: extractPartsOfSpeechFromDefinitions(word.definitions),
-          senses: senses.length > 0
-            ? senses
-            : fallbackDefinition
-              ? [{ definition: fallbackDefinition, examples: [] }]
-              : [],
-          synonyms: extractSynonymsFromDefinitions(word.definitions),
-        });
-      } catch {
-        if (isMounted) {
-          setEntry(null);
-          setEntryError('Could not load dictionary details for this word right now.');
-        }
-      } finally {
-        if (isMounted) {
-          setIsLoadingEntry(false);
-        }
-      }
+function CapturedSlotModal({
+  details,
+  onClose,
+  entriesByLemma,
+}: {
+  details: CapturedSlotDetails | null;
+  onClose: () => void;
+  entriesByLemma: Map<string, CodexEntryReadResponseDTO>;
+}) {
+  const entry = useMemo<CodexDictionaryEntry | null>(() => {
+    if (!details?.slot.lemma) {
+      return null;
+    }
+    const raw = entriesByLemma.get(details.slot.lemma.toLowerCase());
+    if (!raw) {
+      return null;
+    }
+    const senses = extractDictionarySenses(raw.definitions);
+    const fallbackDefinition = extractDefinitionFromDefinitions(raw.definitions);
+    return {
+      lemma: raw.lemma || details.slot.lemma,
+      phoneticText: extractPhoneticText(raw.phonetics),
+      partsOfSpeech: extractPartsOfSpeechFromDefinitions(raw.definitions),
+      senses: senses.length > 0
+        ? senses
+        : fallbackDefinition
+          ? [{ definition: fallbackDefinition, examples: [] }]
+          : [],
+      synonyms: extractSynonymsFromDefinitions(raw.definitions),
     };
+  }, [details, entriesByLemma]);
 
-    void loadEntry();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [details]);
+  const entryError = !entry && details?.slot.lemma
+    ? 'No dictionary details are available for this word yet.'
+    : null;
+  const isLoadingEntry = false;
 
   if (!details) {
     return null;
@@ -354,7 +345,7 @@ function CapturedSlotModal({ details, onClose }: { details: CapturedSlotDetails 
             <p className="mt-3 text-sm leading-relaxed text-text-muted">{entryError}</p>
           ) : entry && entry.senses.length > 0 ? (
             <div className="mt-4 space-y-4">
-              {entry.senses.map((sense, index) => (
+              {entry.senses.slice(0, 3).map((sense, index) => (
                 <div key={`${sense.definition}-${index}`} className="flex gap-3">
                   <span className="pt-0.5 text-sm font-semibold text-accent-strong">{index + 1}.</span>
                   <div className="min-w-0 flex-1">
@@ -402,14 +393,23 @@ function CodexSlotCard({
   pageNumber,
   slot,
   onSelect,
+  registerRef,
+  hideContent,
 }: {
   pageNumber: number;
   slot: CodexBoardSlotDTO;
   onSelect: (details: CapturedSlotDetails) => void;
+  registerRef?: (el: HTMLElement | null) => void;
+  hideContent?: boolean;
 }) {
+  const hiddenClass = hideContent ? 'invisible' : '';
+
   if (!slot.isCaptured) {
     return (
-      <div className="relative aspect-square overflow-hidden rounded-[16px] border border-dashed border-border bg-surface-muted p-1.5 sm:rounded-[22px] sm:p-2.5">
+      <div
+        ref={registerRef ?? undefined}
+        className={`relative aspect-square overflow-hidden rounded-[16px] border border-dashed border-border bg-surface-muted p-1.5 sm:rounded-[22px] sm:p-2.5 ${hiddenClass}`}
+      >
         <div className="flex h-full items-center justify-center rounded-[13px] bg-surface/45 sm:rounded-[18px]">
           <div className="flex h-8 w-8 items-center justify-center rounded-full border border-border bg-surface/80 text-text-subtle shadow-[0_8px_18px_rgba(31,41,55,0.04)] sm:h-10 sm:w-10">
             <LockKeyhole size={15} aria-hidden="true" />
@@ -427,8 +427,9 @@ function CodexSlotCard({
   return (
     <button
       type="button"
+      ref={registerRef ?? undefined}
       onClick={() => onSelect({ pageNumber, slot })}
-      className={`group relative aspect-square overflow-hidden rounded-[16px] border p-1.5 text-left shadow-[0_12px_24px_rgba(31,41,55,0.06)] transition-[transform,box-shadow,background-color] duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_30px_rgba(31,41,55,0.10)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface sm:rounded-[22px] sm:p-2.5 ${rarityTileClassNames[rarity]}`}
+      className={`group relative aspect-square overflow-hidden rounded-[16px] border p-1.5 text-left shadow-[0_12px_24px_rgba(31,41,55,0.06)] transition-[transform,box-shadow,background-color] duration-200 hover:-translate-y-0.5 hover:shadow-[0_16px_30px_rgba(31,41,55,0.10)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-surface sm:rounded-[22px] sm:p-2.5 ${rarityTileClassNames[rarity]} ${hiddenClass}`}
     >
       <span className={`absolute left-2 top-2 h-2 w-2 rounded-full sm:left-3 sm:top-3 ${rarityMarkerClassNames[rarity]}`} />
       <span className="flex h-full flex-col justify-between rounded-[13px] border border-border bg-surface/86 px-2.5 py-3 shadow-[inset_0_1px_0_rgba(255,255,255,0.16)] sm:rounded-[18px] sm:px-3.5 sm:py-4">
@@ -476,12 +477,16 @@ function BoardAlbum({
   shouldReduceMotion,
   onPageChange,
   onSelectSlot,
+  revealTargetSlotNumber,
+  registerRevealTargetRef,
 }: {
   selectedPage: CodexBoardPageDTO;
   navigationDirection: 1 | -1;
   shouldReduceMotion: boolean;
   onPageChange: (pageNumber: number) => void;
   onSelectSlot: (details: CapturedSlotDetails) => void;
+  revealTargetSlotNumber?: number | null;
+  registerRevealTargetRef?: (el: HTMLElement | null) => void;
 }) {
   const pageEnterState = shouldReduceMotion
     ? { opacity: 0 }
@@ -511,14 +516,19 @@ function BoardAlbum({
           transition={shouldReduceMotion ? { duration: 0.01 } : { duration: 0.28, ease: [0.22, 1, 0.36, 1] }}
         >
           <div className="grid grid-cols-5 gap-2.5 sm:gap-4">
-            {selectedPage.slots.slice(0, SLOTS_PER_PAGE).map((slot) => (
-              <CodexSlotCard
-                key={slot.slotNumber}
-                pageNumber={selectedPage.pageNumber}
-                slot={slot}
-                onSelect={onSelectSlot}
-              />
-            ))}
+            {selectedPage.slots.slice(0, SLOTS_PER_PAGE).map((slot) => {
+              const isRevealTarget = revealTargetSlotNumber != null && slot.slotNumber === revealTargetSlotNumber;
+              return (
+                <CodexSlotCard
+                  key={slot.slotNumber}
+                  pageNumber={selectedPage.pageNumber}
+                  slot={slot}
+                  onSelect={onSelectSlot}
+                  registerRef={isRevealTarget ? registerRevealTargetRef : undefined}
+                  hideContent={isRevealTarget}
+                />
+              );
+            })}
           </div>
         </motion.div>
       </AnimatePresence>
@@ -544,14 +554,35 @@ function BoardAlbum({
 
 export default function Codex() {
   const navigate = useNavigate();
+  const location = useLocation();
   const { pageNumber: pageNumberParam } = useParams();
   const prefersReducedMotion = useReducedMotion();
   const [board, setBoard] = useState<CodexBoardResponseDTO | null>(null);
+  const [entriesByLemma, setEntriesByLemma] = useState<Map<string, CodexEntryReadResponseDTO>>(() => new Map());
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [selectedSlot, setSelectedSlot] = useState<CapturedSlotDetails | null>(null);
   const [navigationDirection, setNavigationDirection] = useState<1 | -1>(1);
   const previousPageNumberRef = useRef<number>(1);
+
+  const initialLocationStateRef = useRef<CodexLocationState | null>(
+    (location.state as CodexLocationState | null) ?? null,
+  );
+  const [revealSlot, setRevealSlot] = useState<RevealSlotInfo | null>(
+    () => initialLocationStateRef.current?.revealSlot ?? null,
+  );
+  const [returnToSession, setReturnToSession] = useState<ReturnToSessionInfo | null>(
+    () => initialLocationStateRef.current?.returnToSession ?? null,
+  );
+  const [revealSlotRect, setRevealSlotRect] = useState<DOMRect | null>(null);
+  const [revealOverlayPhase, setRevealOverlayPhase] = useState<'hidden' | 'animating'>(
+    initialLocationStateRef.current?.revealSlot ? 'animating' : 'hidden',
+  );
+  const revealTargetRef = useRef<HTMLElement | null>(null);
+
+  const registerRevealTargetRef = useCallback((el: HTMLElement | null) => {
+    revealTargetRef.current = el;
+  }, []);
 
   useEffect(() => {
     let isMounted = true;
@@ -560,10 +591,20 @@ export default function Codex() {
       try {
         setIsLoading(true);
         setErrorMessage(null);
-        const nextBoard = await getCodexBoard();
+        const [nextBoard, entries] = await Promise.all([
+          getCodexBoard(),
+          getCodexEntries().catch(() => [] as CodexEntryReadResponseDTO[]),
+        ]);
 
         if (isMounted) {
           setBoard(nextBoard);
+          const nextMap = new Map<string, CodexEntryReadResponseDTO>();
+          for (const entry of entries) {
+            if (entry.lemma) {
+              nextMap.set(entry.lemma.toLowerCase(), entry);
+            }
+          }
+          setEntriesByLemma(nextMap);
         }
       } catch {
         if (isMounted) {
@@ -602,6 +643,73 @@ export default function Codex() {
       void navigate('/codex/page/1', { replace: true });
     }
   }, [isValidRoutePage, navigate, pageNumberParam]);
+
+  useEffect(() => {
+    const incoming = location.state as CodexLocationState | null;
+    if (incoming?.revealSlot && incoming.revealSlot.pageNumber === currentPageNumber) {
+      void navigate(location.pathname, {
+        replace: true,
+        state: { returnToSession: incoming.returnToSession ?? null } satisfies CodexLocationState,
+      });
+    }
+    // run only on mount: strip revealSlot once we've landed on its page
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (revealSlot && revealSlot.pageNumber !== currentPageNumber) {
+      void navigate(`/codex/page/${revealSlot.pageNumber}`, {
+        replace: true,
+        state: { revealSlot, returnToSession } satisfies CodexLocationState,
+      });
+    }
+  }, [revealSlot, currentPageNumber, navigate, returnToSession]);
+
+  const finishReveal = () => {
+    setRevealSlot(null);
+    setRevealOverlayPhase('hidden');
+    setRevealSlotRect(null);
+    revealTargetRef.current = null;
+  };
+
+  useLayoutEffect(() => {
+    if (!revealSlot || revealOverlayPhase !== 'animating') {
+      return;
+    }
+    if (revealSlot.pageNumber !== currentPageNumber) {
+      return;
+    }
+    if (shouldReduceMotion) {
+      finishReveal();
+      return;
+    }
+
+    const measure = () => {
+      const node = revealTargetRef.current;
+      if (node) {
+        setRevealSlotRect(node.getBoundingClientRect());
+      }
+    };
+
+    measure();
+    window.addEventListener('resize', measure);
+    window.addEventListener('scroll', measure, true);
+    return () => {
+      window.removeEventListener('resize', measure);
+      window.removeEventListener('scroll', measure, true);
+    };
+  }, [revealSlot, revealOverlayPhase, currentPageNumber, shouldReduceMotion, isLoading, selectedPage]);
+
+  useEffect(() => {
+    if (revealOverlayPhase !== 'animating' || shouldReduceMotion) {
+      return;
+    }
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [revealOverlayPhase, shouldReduceMotion]);
 
   useEffect(() => {
     const previousPageNumber = previousPageNumberRef.current;
@@ -731,14 +839,116 @@ export default function Codex() {
                 shouldReduceMotion={shouldReduceMotion}
                 onPageChange={handlePageChange}
                 onSelectSlot={setSelectedSlot}
+                revealTargetSlotNumber={
+                  revealSlot && revealSlot.pageNumber === selectedPage.pageNumber
+                    ? revealSlot.slotNumber
+                    : null
+                }
+                registerRevealTargetRef={registerRevealTargetRef}
               />
             </section>
           ) : null}
         </main>
       </div>
 
-      <CapturedSlotModal details={selectedSlot} onClose={() => setSelectedSlot(null)} />
+      <CapturedSlotModal
+        details={selectedSlot}
+        onClose={() => setSelectedSlot(null)}
+        entriesByLemma={entriesByLemma}
+      />
+
+      {returnToSession ? (
+        <div className="pointer-events-none fixed bottom-24 right-4 z-30 flex justify-end sm:right-6 lg:bottom-6">
+          <Button
+            className="pointer-events-auto rounded-full px-5 shadow-[0_18px_36px_rgba(31,41,55,0.18)]"
+            onClick={() => {
+              const target = returnToSession;
+              setReturnToSession(null);
+              void navigate(`/book/${target.bookId}/session/new`);
+            }}
+          >
+            <span className="inline-flex items-center gap-2">
+              <Play size={16} aria-hidden="true" />
+              Continue reading
+            </span>
+          </Button>
+        </div>
+      ) : null}
+
+      <RevealOverlay
+        revealSlot={revealSlot}
+        slotRect={revealSlotRect}
+        active={revealOverlayPhase === 'animating' && !shouldReduceMotion}
+        onComplete={finishReveal}
+      />
+
       <BottomNav />
     </div>
+  );
+}
+
+function RevealOverlay({
+  revealSlot,
+  slotRect,
+  active,
+  onComplete,
+}: {
+  revealSlot: RevealSlotInfo | null;
+  slotRect: DOMRect | null;
+  active: boolean;
+  onComplete: () => void;
+}) {
+  if (!active || !revealSlot || !slotRect || typeof document === 'undefined') {
+    return null;
+  }
+
+  const viewportWidth = typeof window !== 'undefined' ? window.innerWidth : 360;
+  const viewportHeight = typeof window !== 'undefined' ? window.innerHeight : 640;
+  const startSize = Math.min(viewportWidth * 0.78, viewportHeight * 0.6, 360);
+  const startTop = (viewportHeight - startSize) / 2;
+  const startLeft = (viewportWidth - startSize) / 2;
+  const rarity = revealSlot.rarityTier;
+
+  return createPortal(
+    <div className="pointer-events-none fixed inset-0 z-[60]">
+      <motion.div
+        className="absolute"
+        initial={{
+          top: startTop,
+          left: startLeft,
+          width: startSize,
+          height: startSize,
+        }}
+        animate={{
+          top: [startTop, startTop, slotRect.top],
+          left: [startLeft, startLeft, slotRect.left],
+          width: [startSize, startSize, slotRect.width],
+          height: [startSize, startSize, slotRect.height],
+        }}
+        transition={{
+          duration: 1.15,
+          times: [0, 0.42, 1],
+          ease: [0.22, 1, 0.36, 1],
+        }}
+        onAnimationComplete={onComplete}
+      >
+        <div
+          className={`group relative h-full w-full overflow-hidden rounded-[22px] border p-2.5 text-left shadow-[0_28px_60px_rgba(31,41,55,0.32)] ${rarityTileClassNames[rarity]}`}
+        >
+          <span className={`absolute left-3 top-3 h-2 w-2 rounded-full ${rarityMarkerClassNames[rarity]}`} />
+          <span className="flex h-full flex-col justify-between rounded-[18px] border border-border bg-surface/86 px-3.5 py-4 shadow-[inset_0_1px_0_rgba(255,255,255,0.16)]">
+            <span className="min-w-0 pt-3">
+              <span className="line-clamp-3 break-words text-[clamp(0.78rem,3.4vw,1.35rem)] font-semibold leading-tight tracking-[-0.02em] text-text">
+                {revealSlot.lemma}
+              </span>
+            </span>
+            <span className="text-[clamp(0.55rem,1.6vw,0.7rem)] font-medium uppercase tracking-[0.16em] text-text-subtle">
+              Slot {revealSlot.slotNumber}
+            </span>
+          </span>
+        </div>
+      </motion.div>
+    </div>,
+    document.body,
   );
 }
