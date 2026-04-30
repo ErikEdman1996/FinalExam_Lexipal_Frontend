@@ -1,10 +1,9 @@
-import { NavLink } from 'react-router-dom';
+import { NavLink, useLocation } from 'react-router-dom';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import {
   BookMarked,
   BookOpen,
   Ellipsis,
-  History,
   Library,
   LogOut,
   Moon,
@@ -13,53 +12,66 @@ import {
   Trophy,
   User,
   UsersRound,
+  type LucideIcon,
 } from 'lucide-react';
 import { useAuth } from '../features/auth/useAuth';
 import { useTheme } from '../features/theme/useTheme';
 import { PortraitImage } from '../features/portraits/portraitAssets';
 import mothIcon from '../assets/moth_icon.png';
 
-const NAV_ITEMS = [
+interface NavItem {
+  to: string;
+  icon: LucideIcon;
+  label: string;
+  mobileLabel: string;
+  matchPaths?: readonly string[];
+}
+
+const NAV_ITEMS: NavItem[] = [
   { to: '/library', icon: Library, label: 'Library', mobileLabel: 'Library' },
   { to: '/reading-lists', icon: BookMarked, label: 'Lists', mobileLabel: 'Lists' },
   { to: '/circles', icon: UsersRound, label: 'Circles', mobileLabel: 'Circles' },
-  { to: '/codex', icon: BookOpen, label: 'Codex', mobileLabel: 'Codex' },
-  { to: '/word-lookups', icon: History, label: 'Word History', mobileLabel: 'History' },
+  { to: '/codex', icon: BookOpen, label: 'Codex', mobileLabel: 'Codex', matchPaths: ['/word-lookups'] },
   { to: '/challenges', icon: Trophy, label: 'Challenges', mobileLabel: 'Play' },
   { to: '/profile', icon: User, label: 'Profile', mobileLabel: 'Profile' },
-] as const;
+];
 
 export function BottomNav() {
   const { isAdmin, logout, profile, username } = useAuth();
   const { theme, toggle } = useTheme();
-  const navItems = isAdmin
+  const location = useLocation();
+  const navItems: NavItem[] = isAdmin
     ? [...NAV_ITEMS, { to: '/admin', icon: ShieldCheck, label: 'Admin', mobileLabel: 'Admin' }]
     : NAV_ITEMS;
   const nickname = profile?.nickname?.trim() || username || 'Reader';
   const handle = username ? `@${username}` : 'Lexipal profile';
   const isDark = theme === 'dark';
   const ThemeIcon = isDark ? Sun : Moon;
+  const isMatchedPath = (paths?: readonly string[]) => (
+    paths?.some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`)) ?? false
+  );
 
   return (
     <>
       <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-surface safe-area-inset-bottom lg:hidden">
         <div className="mx-auto flex h-16 max-w-[560px] items-center justify-around px-2">
-          {navItems.map(({ to, icon: Icon, mobileLabel }) => (
+          {navItems.map(({ to, icon: Icon, mobileLabel, matchPaths }) => (
             <NavLink
               key={to}
               to={to}
-              className={({ isActive }) =>
-                `flex flex-col items-center justify-center gap-1 rounded-[16px] px-2 py-2 transition-all duration-200 ${
-                  isActive ? 'text-brand' : 'text-text-muted hover:text-text'
-                }`
-              }
+              className={({ isActive }) => {
+                const active = isActive || isMatchedPath(matchPaths);
+                return `flex flex-col items-center justify-center gap-1 rounded-[16px] px-2 py-2 transition-all duration-200 ${
+                  active ? 'text-brand-strong' : 'text-text-muted hover:text-text'
+                }`;
+              }}
             >
               {({ isActive }) => (
                 <>
                   <Icon
                     size={24}
-                    strokeWidth={isActive ? 2.5 : 2}
-                    className={isActive ? 'scale-110' : ''}
+                    strokeWidth={isActive || isMatchedPath(matchPaths) ? 2.5 : 2}
+                    className={isActive || isMatchedPath(matchPaths) ? 'scale-110' : ''}
                   />
                   <span className="text-xs font-medium">{mobileLabel}</span>
                 </>
@@ -69,47 +81,48 @@ export function BottomNav() {
         </div>
       </nav>
 
-      <aside className="fixed left-0 top-0 bottom-0 z-40 hidden w-60 flex-col border-r border-border bg-surface px-5 py-7 shadow-[0_20px_48px_rgba(15,23,42,0.04)] lg:flex">
+      <aside className="fixed left-0 top-0 bottom-0 z-40 hidden w-60 flex-col border-r border-sidebar-border bg-sidebar px-5 py-7 shadow-[0_20px_48px_rgba(15,23,42,0.16)] lg:flex">
         <div className="flex items-center gap-3 px-2">
           <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-[16px] bg-brand text-text-on-brand shadow-[0_10px_22px_rgba(154,74,66,0.22)]">
             <img src={mothIcon} alt="Lexipal" className="h-7 w-7 object-contain" />
           </div>
           <div className="min-w-0">
-            <p className="text-[0.66rem] font-medium uppercase tracking-[0.28em] text-text-subtle">
+            <p className="text-[0.66rem] font-medium uppercase tracking-[0.28em] text-sidebar-muted">
               Reading app
             </p>
-            <p className="mt-0.5 text-base font-semibold tracking-[-0.02em] text-text">
+            <p className="mt-0.5 text-base font-semibold tracking-[-0.02em] text-sidebar-text">
               Lexipal
             </p>
           </div>
         </div>
 
         <div className="mt-8 flex flex-col gap-1">
-          <p className="px-3 pb-2 text-[0.66rem] font-medium uppercase tracking-[0.28em] text-text-subtle">
+          <p className="px-3 pb-2 text-[0.66rem] font-medium uppercase tracking-[0.28em] text-sidebar-muted">
             Menu
           </p>
-          {navItems.map(({ to, icon: Icon, label }) => (
+          {navItems.map(({ to, icon: Icon, label, matchPaths }) => (
             <NavLink
               key={to}
               to={to}
-              className={({ isActive }) =>
-                `group flex items-center gap-3 rounded-[16px] px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
-                  isActive
+              className={({ isActive }) => {
+                const active = isActive || isMatchedPath(matchPaths);
+                return `group flex items-center gap-3 rounded-[16px] px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+                  active
                     ? 'bg-brand text-text-on-brand shadow-[0_10px_22px_rgba(154,74,66,0.22)]'
-                    : 'text-text-muted hover:bg-surface-alt hover:text-text'
-                }`
-              }
+                    : 'text-sidebar-muted hover:bg-sidebar-hover hover:text-sidebar-text'
+                }`;
+              }}
             >
               {({ isActive }) => (
                 <>
                   <span
                     className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-[12px] transition-colors ${
-                      isActive
+                      isActive || isMatchedPath(matchPaths)
                         ? 'bg-white/25 text-text-on-brand'
-                        : 'bg-surface-muted text-text group-hover:bg-surface'
+                        : 'bg-sidebar-hover text-sidebar-text'
                     }`}
                   >
-                    <Icon size={18} strokeWidth={isActive ? 2.4 : 2} />
+                    <Icon size={18} strokeWidth={isActive || isMatchedPath(matchPaths) ? 2.4 : 2} />
                   </span>
                   <span>{label}</span>
                 </>
@@ -119,7 +132,7 @@ export function BottomNav() {
         </div>
 
         <div className="mt-auto">
-          <div className="flex items-center gap-3 rounded-[22px] px-2 py-2.5 transition-colors hover:bg-surface-alt">
+          <div className="flex items-center gap-3 rounded-[22px] px-2 py-2.5 transition-colors hover:bg-sidebar-hover">
             <NavLink
               to="/profile"
               className="flex min-w-0 flex-1 items-center gap-3 rounded-[18px] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
@@ -130,8 +143,8 @@ export function BottomNav() {
                 className="h-12 w-12 shrink-0 shadow-[0_10px_22px_rgba(31,41,55,0.12)]"
               />
               <span className="min-w-0">
-                <span className="block truncate text-sm font-semibold text-text">{nickname}</span>
-                <span className="mt-0.5 block truncate text-sm text-text-muted">{handle}</span>
+                <span className="block truncate text-sm font-semibold text-sidebar-text">{nickname}</span>
+                <span className="mt-0.5 block truncate text-sm text-sidebar-muted">{handle}</span>
               </span>
             </NavLink>
 
@@ -139,7 +152,7 @@ export function BottomNav() {
               <DropdownMenu.Trigger asChild>
                 <button
                   type="button"
-                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-text transition-colors hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                  className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sidebar-text transition-colors hover:bg-sidebar-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
                   aria-label="Open profile menu"
                 >
                   <Ellipsis size={22} />

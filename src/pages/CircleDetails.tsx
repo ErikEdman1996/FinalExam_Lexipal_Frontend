@@ -119,7 +119,7 @@ export default function CircleDetails() {
   const [isLoading, setIsLoading] = useState(true);
   const [isMeetingModalOpen, setIsMeetingModalOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<CirclePendingAction>(null);
-  const [selectedMember, setSelectedMember] = useState<BookCircleMemberSummaryDTO | null>(null);
+  const [selectedMemberId, setSelectedMemberId] = useState<number | null>(null);
   const intervalRef = useRef<number | null>(null);
   const isRefreshingRef = useRef(false);
   const isActionSubmittingRef = useRef(false);
@@ -246,20 +246,21 @@ export default function CircleDetails() {
     };
   }, [loadCircle]);
 
-  useEffect(() => {
-    if (!circle || !selectedMember) {
-      return;
-    }
-
-    const stillPresent = circle.members.some((member) => member.userId === selectedMember.userId);
-    if (!stillPresent) {
-      setSelectedMember(null);
-    }
-  }, [circle, selectedMember]);
-
   const currentUserId = useMemo(() => {
     return circle ? getCurrentCircleUserId(circle, profile) : null;
   }, [circle, profile]);
+
+  const selectedMember = useMemo(() => {
+    if (!circle || selectedMemberId == null) {
+      return null;
+    }
+
+    return circle.members.find((member) => member.userId === selectedMemberId) ?? null;
+  }, [circle, selectedMemberId]);
+
+  if (circle && selectedMemberId != null && !selectedMember) {
+    setSelectedMemberId(null);
+  }
 
   const sortedMembers = useMemo(() => {
     if (!circle) {
@@ -720,7 +721,7 @@ export default function CircleDetails() {
                         <div className="sm:flex sm:items-center sm:gap-3">
                           <button
                             type="button"
-                            onClick={() => setSelectedMember(member)}
+                            onClick={() => setSelectedMemberId(member.userId)}
                             className="w-full flex-1 rounded-[20px] px-3 py-3 text-left transition-colors hover:bg-surface-muted/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand sm:px-4 sm:py-3.5"
                           >
                             {rowContent}
@@ -765,7 +766,7 @@ export default function CircleDetails() {
           })
           : 'Member'}
         targetUserId={selectedMember?.userId ?? null}
-        onClose={() => setSelectedMember(null)}
+        onClose={() => setSelectedMemberId(null)}
       />
 
       <NextMeetingModal

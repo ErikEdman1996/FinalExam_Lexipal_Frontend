@@ -134,9 +134,14 @@ function BookDetailsTabs({
 
 export default function BookDetails() {
   const { bookId } = useParams();
+
+  return <BookDetailsContent key={bookId ?? 'missing-book'} bookId={bookId} />;
+}
+
+function BookDetailsContent({ bookId }: { bookId?: string }) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { refreshBooks, removeBook, upsertBook } = useBooks();
+  const { refreshBooks, refreshLibraryItems, removeBook, upsertBook } = useBooks();
   const [book, setBook] = useState<ApiBook | null>(null);
   const [activeDraft, setActiveDraft] = useState<ApiSession | null>(null);
   const [sessions, setSessions] = useState<SessionData[]>([]);
@@ -155,12 +160,6 @@ export default function BookDetails() {
     : searchParams.get('tab') === 'notes'
       ? 'notes'
       : 'overview';
-
-  useEffect(() => {
-    setEditingNote(null);
-    setPendingDeleteNote(null);
-    setDeletingNoteId(null);
-  }, [bookId]);
 
   useEffect(() => {
     let isMounted = true;
@@ -250,6 +249,9 @@ export default function BookDetails() {
       void refreshBooks({ silent: true }).catch((error) => {
         console.error('Error refreshing books after delete:', error);
       });
+      void refreshLibraryItems({ silent: true }).catch((error) => {
+        console.error('Error refreshing library items after delete:', error);
+      });
       void navigate('/library');
     } catch (error) {
       console.error('Error deleting book:', error);
@@ -274,6 +276,9 @@ export default function BookDetails() {
       upsertBook(updatedBook);
       void refreshBooks({ silent: true }).catch((error) => {
         console.error('Error refreshing books after archive status update:', error);
+      });
+      void refreshLibraryItems({ silent: true }).catch((error) => {
+        console.error('Error refreshing library items after archive status update:', error);
       });
 
       if (!isArchived) {

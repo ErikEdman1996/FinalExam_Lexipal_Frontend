@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { BookPlus, X } from 'lucide-react';
 import { Button } from '../../components/Button';
 import { AppDialog, AppDialogClose, AppDialogTitle } from '../../components/dialog/AppDialog';
@@ -23,19 +23,27 @@ export function AddSlotToLibraryModal({
   onClose,
   onSubmit,
 }: AddSlotToLibraryModalProps) {
+  if (!isOpen) return null;
+
+  return (
+    <AddSlotToLibraryModalContent
+      slotTitle={slotTitle}
+      slotAuthor={slotAuthor}
+      onClose={onClose}
+      onSubmit={onSubmit}
+    />
+  );
+}
+
+function AddSlotToLibraryModalContent({
+  slotTitle,
+  slotAuthor,
+  onClose,
+  onSubmit,
+}: Omit<AddSlotToLibraryModalProps, 'isOpen'>) {
   const [totalPages, setTotalPages] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!isOpen) {
-      setTotalPages('');
-      setIsSubmitting(false);
-      setSubmitError(null);
-    }
-  }, [isOpen]);
-
-  if (!isOpen) return null;
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -61,7 +69,7 @@ export function AddSlotToLibraryModal({
 
   return (
     <AppDialog
-      isOpen={isOpen}
+      isOpen
       onClose={onClose}
       canClose={!isSubmitting}
       contentClassName="w-full max-w-md rounded-[28px] border border-border bg-surface p-6 shadow-[0_8px_32px_rgba(0,0,0,0.12)] animate-in fade-in zoom-in duration-200"

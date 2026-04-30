@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { ArrowRight, Hash, X } from 'lucide-react';
 import { toast } from 'sonner';
 import { ApiResponseError, joinBookCircle, type BookCircleReadResponseDTO } from '../../api/api';
@@ -22,22 +22,21 @@ export function JoinCircleModal({
   onClose,
   onJoined,
 }: JoinCircleModalProps) {
-  const { refreshBooks } = useBooks();
-  const [inviteCode, setInviteCode] = useState('');
-  const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  useEffect(() => {
-    if (!isOpen) {
-      setInviteCode('');
-      setErrorMessage(null);
-      setIsSubmitting(false);
-    }
-  }, [isOpen]);
-
   if (!isOpen) {
     return null;
   }
+
+  return <JoinCircleModalContent onClose={onClose} onJoined={onJoined} />;
+}
+
+function JoinCircleModalContent({
+  onClose,
+  onJoined,
+}: Omit<JoinCircleModalProps, 'isOpen'>) {
+  const { refreshBooks, refreshLibraryItems } = useBooks();
+  const [inviteCode, setInviteCode] = useState('');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -58,6 +57,9 @@ export function JoinCircleModal({
 
       void refreshBooks({ silent: true }).catch((error) => {
         console.error('Error refreshing books after joining circle:', error);
+      });
+      void refreshLibraryItems({ silent: true }).catch((error) => {
+        console.error('Error refreshing library items after joining circle:', error);
       });
 
       toast.success('Book added to your library.');
@@ -81,7 +83,7 @@ export function JoinCircleModal({
 
   return (
     <AppDialog
-      isOpen={isOpen}
+      isOpen
       onClose={onClose}
       canClose={!isSubmitting}
       contentClassName="w-full max-w-lg rounded-t-[32px] border border-border bg-surface shadow-[0_20px_56px_rgba(15,23,42,0.18)] animate-in slide-in-from-bottom duration-300 sm:rounded-[32px] sm:slide-in-from-bottom-0"

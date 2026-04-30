@@ -43,6 +43,24 @@ export interface ApiBook {
     externalBookId: string | null;
 }
 
+export type LibraryItemType = 'BOOK';
+
+export type LibraryProgressUnit = 'PAGE';
+
+export interface LibraryItemResponseDTO {
+    itemType: LibraryItemType;
+    itemId: number;
+    title: string;
+    creatorName: string | null;
+    completedUnits: number;
+    totalUnits: number;
+    progressPercentage: number;
+    progressUnit: LibraryProgressUnit;
+    status: string;
+    coverImageUrl: string | null;
+    addedAt: string;
+}
+
 export interface CoverCandidateDTO {
     coverImageUrl: string;
     coverSource: string | null;
@@ -55,6 +73,12 @@ export interface CoverCandidateDTO {
 type ApiBookCollectionResponse =
     | unknown[]
     | { books?: unknown[]; content?: unknown[]; data?: unknown[]; items?: unknown[] }
+    | null
+    | undefined;
+
+type LibraryItemCollectionResponse =
+    | unknown[]
+    | { libraryItems?: unknown[]; content?: unknown[]; data?: unknown[]; items?: unknown[] }
     | null
     | undefined;
 
@@ -501,7 +525,7 @@ export interface WordLookupCreateResponseDTO {
     xpUpdate: XpUpdateResponseDTO | null;
 }
 
-export type ChallengeType = 'FLASHCARD' | string;
+export type ChallengeType = 'FLASHCARD' | 'CROSSWORD' | string;
 
 export type ChallengeDifficulty = 'EASY' | 'MEDIUM' | 'HARD' | string;
 
@@ -532,6 +556,62 @@ export interface ChallengeAttempt {
     lemma: string | null;
     definitionPreview: string | null;
     xpUpdate?: XpUpdateResponseDTO | null;
+}
+
+export type CrosswordDirection = 'ACROSS' | 'DOWN';
+
+export type CrosswordPuzzleStatus = 'ACTIVE' | 'SUBMITTED' | string;
+
+export interface CrosswordCellDTO {
+    row: number;
+    column: number;
+    number: number | null;
+    entryIds: string[];
+}
+
+export interface CrosswordEntryDTO {
+    id: string;
+    number: number;
+    direction: CrosswordDirection;
+    row: number;
+    column: number;
+    length: number;
+    clue: string;
+}
+
+export interface CrosswordGridDTO {
+    rows: number;
+    columns: number;
+    cells: CrosswordCellDTO[];
+}
+
+export interface CrosswordPuzzleDTO {
+    wordCount: number;
+    grid: CrosswordGridDTO;
+    entries: CrosswordEntryDTO[];
+}
+
+export interface CrosswordPuzzleResponse {
+    id: number;
+    challengeId: number;
+    status: CrosswordPuzzleStatus;
+    createdAt: string;
+    submittedAt: string | null;
+    puzzle: CrosswordPuzzleDTO;
+}
+
+export interface CrosswordAnswerResult {
+    entryId: string;
+    correct: boolean;
+}
+
+export interface CrosswordSubmitResponse {
+    puzzle: CrosswordPuzzleDTO;
+    attempt: ChallengeAttempt;
+    result: ChallengeAttemptResult;
+    correctCount: number;
+    totalEntries: number;
+    answerResults: CrosswordAnswerResult[];
 }
 
 export class ApiValidationError<FieldName extends string = string> extends Error {
@@ -623,6 +703,22 @@ const isBookLikeRecord = (value: unknown): value is Record<string, unknown> => {
     );
 };
 
+const isLibraryItemType = (value: unknown): value is LibraryItemType => {
+    return value === 'BOOK';
+};
+
+const isLibraryProgressUnit = (value: unknown): value is LibraryProgressUnit => {
+    return value === 'PAGE';
+};
+
+const isLibraryItemLikeRecord = (value: unknown): value is Record<string, unknown> => {
+    if (!isRecord(value)) {
+        return false;
+    }
+
+    return isLibraryItemType(value.itemType) && toFiniteNumber(value.itemId) !== null;
+};
+
 const isCodexEntryLikeRecord = (value: unknown): value is Record<string, unknown> => {
     if (!isRecord(value)) {
         return false;
@@ -705,6 +801,52 @@ const toApiBook = (value: Record<string, unknown>): ApiBook => {
         coverImageUrl,
         coverSource,
         externalBookId,
+    };
+};
+
+const toLibraryItem = (value: Record<string, unknown>): LibraryItemResponseDTO => {
+    const itemType: LibraryItemType = 'BOOK';
+    const rawCoverImageUrl = typeof value.coverImageUrl === 'string' ? value.coverImageUrl.trim() : '';
+    const totalUnits = Math.max(0, toFiniteNumber(value.totalUnits) ?? 0);
+    const completedUnits = Math.max(0, Math.min(toFiniteNumber(value.completedUnits) ?? 0, totalUnits));
+    const derivedProgressPercentage = totalUnits > 0 ? (completedUnits / totalUnits) * 100 : 0;
+
+    return {
+        itemType,
+        itemId: toFiniteNumber(value.itemId) ?? 0,
+        title: typeof value.title === 'string' ? value.title : '',
+        creatorName: typeof value.creatorName === 'string' ? value.creatorName : null,
+        completedUnits,
+        totalUnits,
+        progressPercentage: Math.max(0, Math.min(100, toFiniteNumber(value.progressPercentage) ?? derivedProgressPercentage)),
+        progressUnit: isLibraryProgressUnit(value.progressUnit) ? value.progressUnit : 'PAGE',
+        status: typeof value.status === 'string' ? value.status : '',
+        coverImageUrl: rawCoverImageUrl.length > 0 ? rawCoverImageUrl : null,
+        addedAt: typeof value.addedAt === 'string' ? value.addedAt : '',
+    };
+};
+
+const toBookLibraryItem = (book: ApiBook): LibraryItemResponseDTO => {
+    const totalUnits = Math.max(0, book.totalPages);
+    const completedUnits = Math.max(0, Math.min(book.readPages, totalUnits));
+    const progressPercentage = typeof book.progressPercentage === 'number'
+        ? book.progressPercentage
+        : totalUnits > 0
+            ? (completedUnits / totalUnits) * 100
+            : 0;
+
+    return {
+        itemType: 'BOOK',
+        itemId: book.id,
+        title: book.title,
+        creatorName: book.author,
+        completedUnits,
+        totalUnits,
+        progressPercentage: Math.max(0, Math.min(100, progressPercentage)),
+        progressUnit: 'PAGE',
+        status: book.status,
+        coverImageUrl: book.coverImageUrl,
+        addedAt: book.createdAt,
     };
 };
 
@@ -1030,6 +1172,30 @@ const normalizeBooksResponse = (value: ApiBookCollectionResponse): ApiBook[] => 
             return collection
                 .filter(isBookLikeRecord)
                 .map(toApiBook);
+        }
+    }
+
+    return [];
+};
+
+const normalizeLibraryItemsResponse = (value: LibraryItemCollectionResponse): LibraryItemResponseDTO[] => {
+    if (Array.isArray(value)) {
+        return value
+            .filter(isLibraryItemLikeRecord)
+            .map(toLibraryItem);
+    }
+
+    if (!isRecord(value)) {
+        return [];
+    }
+
+    const collections = [value.libraryItems, value.content, value.data, value.items];
+
+    for (const collection of collections) {
+        if (Array.isArray(collection)) {
+            return collection
+                .filter(isLibraryItemLikeRecord)
+                .map(toLibraryItem);
         }
     }
 
@@ -1443,6 +1609,111 @@ const normalizeChallengeAttemptResponse = (value: unknown): ChallengeAttempt => 
 
     console.error('Unexpected challenge attempt response shape. Raw payload:', value);
     throw new Error('Unexpected challenge attempt response shape.');
+};
+
+const toCrosswordDirection = (value: unknown): CrosswordDirection => {
+    return value === 'DOWN' ? 'DOWN' : 'ACROSS';
+};
+
+const toCrosswordCell = (value: Record<string, unknown>): CrosswordCellDTO => {
+    const entryIdsRaw = Array.isArray(value.entryIds) ? value.entryIds : [];
+    const entryIds = entryIdsRaw.filter((id): id is string => typeof id === 'string');
+    const numberValue = typeof value.number === 'number' ? value.number : null;
+
+    return {
+        row: typeof value.row === 'number' ? value.row : 0,
+        column: typeof value.column === 'number' ? value.column : 0,
+        number: numberValue,
+        entryIds,
+    };
+};
+
+const toCrosswordEntry = (value: Record<string, unknown>): CrosswordEntryDTO => {
+    return {
+        id: typeof value.id === 'string' ? value.id : '',
+        number: typeof value.number === 'number' ? value.number : 0,
+        direction: toCrosswordDirection(value.direction),
+        row: typeof value.row === 'number' ? value.row : 0,
+        column: typeof value.column === 'number' ? value.column : 0,
+        length: typeof value.length === 'number' ? value.length : 0,
+        clue: typeof value.clue === 'string' ? value.clue : '',
+    };
+};
+
+const toCrosswordPuzzle = (value: Record<string, unknown>): CrosswordPuzzleDTO => {
+    const grid = isRecord(value.grid) ? value.grid : {};
+    const cellsRaw = Array.isArray(grid.cells) ? grid.cells : [];
+    const entriesRaw = Array.isArray(value.entries) ? value.entries : [];
+
+    return {
+        wordCount: typeof value.wordCount === 'number' ? value.wordCount : entriesRaw.length,
+        grid: {
+            rows: typeof grid.rows === 'number' ? grid.rows : 0,
+            columns: typeof grid.columns === 'number' ? grid.columns : 0,
+            cells: cellsRaw.filter(isRecord).map(toCrosswordCell),
+        },
+        entries: entriesRaw.filter(isRecord).map(toCrosswordEntry),
+    };
+};
+
+const toCrosswordPuzzleResponse = (value: Record<string, unknown>): CrosswordPuzzleResponse => {
+    const puzzleRaw = isRecord(value.puzzle) ? value.puzzle : {};
+
+    return {
+        id: typeof value.id === 'number' ? value.id : 0,
+        challengeId: typeof value.challengeId === 'number' ? value.challengeId : 0,
+        status: typeof value.status === 'string' ? value.status : 'ACTIVE',
+        createdAt: typeof value.createdAt === 'string' ? value.createdAt : '',
+        submittedAt: typeof value.submittedAt === 'string' ? value.submittedAt : null,
+        puzzle: toCrosswordPuzzle(puzzleRaw),
+    };
+};
+
+const normalizeCrosswordPuzzleResponse = (value: unknown): CrosswordPuzzleResponse => {
+    if (isRecord(value) && isRecord(value.puzzle)) {
+        return toCrosswordPuzzleResponse(value);
+    }
+
+    if (isRecord(value)) {
+        const nested = [value.data, value.item].find((candidate) => isRecord(candidate) && isRecord((candidate as Record<string, unknown>).puzzle));
+
+        if (isRecord(nested)) {
+            return toCrosswordPuzzleResponse(nested);
+        }
+    }
+
+    console.error('Unexpected crossword puzzle response shape. Raw payload:', value);
+    throw new Error('Unexpected crossword puzzle response shape.');
+};
+
+const toCrosswordAnswerResult = (value: Record<string, unknown>): CrosswordAnswerResult => {
+    return {
+        entryId: typeof value.entryId === 'string' ? value.entryId : '',
+        correct: value.correct === true,
+    };
+};
+
+const normalizeCrosswordSubmitResponse = (value: unknown): CrosswordSubmitResponse => {
+    if (!isRecord(value)) {
+        console.error('Unexpected crossword submit response shape. Raw payload:', value);
+        throw new Error('Unexpected crossword submit response shape.');
+    }
+
+    const puzzleRaw = isRecord(value.puzzle) ? value.puzzle : {};
+    const attemptRaw = isRecord(value.attempt) ? value.attempt : {};
+    const answerResultsRaw = Array.isArray(value.answerResults) ? value.answerResults : [];
+    const result: ChallengeAttemptResult = value.result === 'PASS' ? 'PASS' : 'FAIL';
+
+    return {
+        puzzle: toCrosswordPuzzle(puzzleRaw),
+        attempt: isChallengeAttemptLikeRecord(attemptRaw)
+            ? toChallengeAttempt(attemptRaw)
+            : normalizeChallengeAttemptResponse(attemptRaw),
+        result,
+        correctCount: typeof value.correctCount === 'number' ? value.correctCount : 0,
+        totalEntries: typeof value.totalEntries === 'number' ? value.totalEntries : 0,
+        answerResults: answerResultsRaw.filter(isRecord).map(toCrosswordAnswerResult),
+    };
 };
 
 const normalizeSessionResponse = (value: ApiSessionResponse): ApiSession => {
@@ -2132,6 +2403,29 @@ export const getBooks = async () => {
     }
 };
 
+export const getLibraryItems = async () => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/library/items`, {
+            headers: await buildAuthHeaders(),
+        });
+        if (res.status === 204) {
+            return [];
+        }
+        if (res.status === 404) {
+            const fallbackBooks = await getBooks();
+            return fallbackBooks.map(toBookLibraryItem);
+        }
+        if (!res.ok) {
+            throw toApiResponseError(await readErrorPayload(res), 'Could not load library items.', res.status);
+        }
+        const data = await res.json();
+        return normalizeLibraryItemsResponse(data);
+    } catch (error) {
+        console.error('Error fetching library items:', error);
+        throw error;
+    }
+};
+
 
 export const getBook = async (bookId: string | number) => {
     try {
@@ -2785,6 +3079,77 @@ export const createChallengeAttempt = async (
         return normalizeChallengeAttemptResponse(data);
     } catch (error) {
         console.error('Error creating challenge attempt:', error);
+        throw error;
+    }
+};
+
+export const createCrosswordPuzzle = async (): Promise<CrosswordPuzzleResponse> => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/challenges/crossword/puzzles`, {
+            method: 'POST',
+            headers: await buildAuthHeaders(),
+        });
+        if (!res.ok) {
+            throw toApiResponseError(
+                await readErrorPayload(res),
+                'Failed to create crossword puzzle',
+                res.status,
+            );
+        }
+        const data = await res.json();
+        return normalizeCrosswordPuzzleResponse(data);
+    } catch (error) {
+        console.error('Error creating crossword puzzle:', error);
+        throw error;
+    }
+};
+
+export const getCrosswordPuzzle = async (
+    puzzleId: string | number,
+): Promise<CrosswordPuzzleResponse> => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/challenges/crossword/puzzles/${puzzleId}`, {
+            headers: await buildAuthHeaders(),
+        });
+        if (!res.ok) {
+            throw toApiResponseError(
+                await readErrorPayload(res),
+                'Failed to fetch crossword puzzle',
+                res.status,
+            );
+        }
+        const data = await res.json();
+        return normalizeCrosswordPuzzleResponse(data);
+    } catch (error) {
+        console.error('Error fetching crossword puzzle:', error);
+        throw error;
+    }
+};
+
+export const submitCrosswordPuzzle = async (
+    puzzleId: string | number,
+    answers: Record<string, string>,
+): Promise<CrosswordSubmitResponse> => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/challenges/crossword/puzzles/${puzzleId}/submit`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(await buildAuthHeaders()),
+            },
+            body: JSON.stringify({ answers }),
+        });
+        if (!res.ok) {
+            throw toApiResponseError(
+                await readErrorPayload(res),
+                'Failed to submit crossword puzzle',
+                res.status,
+            );
+        }
+        const data = await res.json();
+        return normalizeCrosswordSubmitResponse(data);
+    } catch (error) {
+        console.error('Error submitting crossword puzzle:', error);
         throw error;
     }
 };

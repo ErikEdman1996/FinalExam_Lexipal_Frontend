@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 import { BookOpenText, CalendarDays, FileText, X } from 'lucide-react';
 import {
   ApiResponseError,
@@ -119,45 +119,33 @@ export function NextMeetingModal({
   onClose,
   onSaved,
 }: NextMeetingModalProps) {
-  const [meetingDate, setMeetingDate] = useState('');
-  const [mode, setMode] = useState<MeetingMode>('chapter');
-  const [chapterLabel, setChapterLabel] = useState('');
-  const [pageStart, setPageStart] = useState('');
-  const [pageEnd, setPageEnd] = useState('');
+  if (!isOpen) {
+    return null;
+  }
+
+  return (
+    <NextMeetingModalContent
+      key={`${circle.id}:${circle.nextMeetingDate ?? ''}:${circle.meetingChapterLabel ?? ''}:${circle.meetingPageStart ?? ''}:${circle.meetingPageEnd ?? ''}`}
+      circle={circle}
+      onClose={onClose}
+      onSaved={onSaved}
+    />
+  );
+}
+
+function NextMeetingModalContent({
+  circle,
+  onClose,
+  onSaved,
+}: Omit<NextMeetingModalProps, 'isOpen'>) {
+  const [meetingDate, setMeetingDate] = useState(() => formatCircleDateTimeLocalInputValue(circle.nextMeetingDate));
+  const [mode, setMode] = useState<MeetingMode>(() => getInitialMeetingMode(circle));
+  const [chapterLabel, setChapterLabel] = useState(circle.meetingChapterLabel ?? '');
+  const [pageStart, setPageStart] = useState(circle.meetingPageStart?.toString() ?? '');
+  const [pageEnd, setPageEnd] = useState(circle.meetingPageEnd?.toString() ?? '');
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<NextMeetingFieldName, string>>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  useEffect(() => {
-    if (!isOpen) {
-      setMeetingDate('');
-      setMode('chapter');
-      setChapterLabel('');
-      setPageStart('');
-      setPageEnd('');
-      setFieldErrors({});
-      setSubmitError(null);
-      setIsSubmitting(false);
-      return;
-    }
-
-    setMeetingDate(formatCircleDateTimeLocalInputValue(circle.nextMeetingDate));
-    setMode(getInitialMeetingMode(circle));
-    setChapterLabel(circle.meetingChapterLabel ?? '');
-    setPageStart(circle.meetingPageStart?.toString() ?? '');
-    setPageEnd(circle.meetingPageEnd?.toString() ?? '');
-    setFieldErrors({});
-    setSubmitError(null);
-    setIsSubmitting(false);
-  }, [
-    circle.id,
-    circle.meetingChapterLabel,
-    circle.meetingPageEnd,
-    circle.meetingPageStart,
-    circle.nextMeetingDate,
-    circle.totalPages,
-    isOpen,
-  ]);
 
   const validationErrors = useMemo(() => {
     return validateNextMeetingForm({
@@ -172,10 +160,6 @@ export function NextMeetingModal({
 
   const isEditing = circle.nextMeetingDate != null;
   const isFormValid = Object.keys(validationErrors).length === 0;
-
-  if (!isOpen) {
-    return null;
-  }
 
   const clearFieldError = (fieldName: NextMeetingFieldName) => {
     setFieldErrors((current) => ({ ...current, [fieldName]: undefined }));
@@ -252,7 +236,7 @@ export function NextMeetingModal({
 
   return (
     <AppDialog
-      isOpen={isOpen}
+      isOpen
       onClose={onClose}
       canClose={!isSubmitting}
       contentClassName="w-full max-w-2xl rounded-t-[32px] border border-border bg-surface shadow-[0_20px_56px_rgba(15,23,42,0.18)] animate-in slide-in-from-bottom duration-300 sm:rounded-[32px] sm:slide-in-from-bottom-0"

@@ -144,7 +144,7 @@ function SlotRow({
 export default function ReadingListDetails() {
   const { listId } = useParams();
   const navigate = useNavigate();
-  const { books, refreshBooks, upsertBook } = useBooks();
+  const { books, refreshBooks, refreshLibraryItems, upsertBook } = useBooks();
 
   const [list, setList] = useState<ReadingListDetailResponseDTO | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -250,7 +250,12 @@ export default function ReadingListDetails() {
         totalPages,
       });
       upsertBook(createdBook);
-      void refreshBooks({ silent: true });
+      void refreshBooks({ silent: true }).catch((error) => {
+        console.error('Error refreshing books after adding list slot:', error);
+      });
+      void refreshLibraryItems({ silent: true }).catch((error) => {
+        console.error('Error refreshing library items after adding list slot:', error);
+      });
       setPendingSlot(null);
       toast.success(`Added "${createdBook.title}" to your library.`);
       await loadList();

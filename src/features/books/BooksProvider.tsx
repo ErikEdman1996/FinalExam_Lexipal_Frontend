@@ -7,18 +7,28 @@ import {
   useState,
   type PropsWithChildren,
 } from 'react';
-import { getBooks, type ApiBook } from '../../api/api';
+import {
+  getBooks,
+  getLibraryItems,
+  type ApiBook,
+  type LibraryItemResponseDTO,
+} from '../../api/api';
 import {
   BooksContext,
   type BooksContextValue,
   type RefreshBooksOptions,
+  type RefreshLibraryItemsOptions,
 } from './BooksContext';
 
 export function BooksProvider({ children }: PropsWithChildren) {
   const [books, setBooks] = useState<ApiBook[]>([]);
+  const [libraryItems, setLibraryItems] = useState<LibraryItemResponseDTO[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLibraryItemsLoading, setIsLibraryItemsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [libraryItemsErrorMessage, setLibraryItemsErrorMessage] = useState<string | null>(null);
   const latestRequestRef = useRef(0);
+  const latestLibraryItemsRequestRef = useRef(0);
 
   const refreshBooks = useCallback(async (options?: RefreshBooksOptions) => {
     const requestId = latestRequestRef.current + 1;
@@ -53,15 +63,57 @@ export function BooksProvider({ children }: PropsWithChildren) {
     }
   }, []);
 
+  const refreshLibraryItems = useCallback(async (options?: RefreshLibraryItemsOptions) => {
+    const requestId = latestLibraryItemsRequestRef.current + 1;
+    latestLibraryItemsRequestRef.current = requestId;
+
+    if (!options?.silent) {
+      setIsLibraryItemsLoading(true);
+      setLibraryItemsErrorMessage(null);
+    }
+
+    try {
+      const nextLibraryItems = await getLibraryItems();
+
+      if (latestLibraryItemsRequestRef.current === requestId) {
+        startTransition(() => {
+          setLibraryItems(nextLibraryItems);
+        });
+        setLibraryItemsErrorMessage(null);
+      }
+
+      return nextLibraryItems;
+    } catch (error) {
+      if (latestLibraryItemsRequestRef.current === requestId && !options?.silent) {
+        setLibraryItemsErrorMessage('Could not load your library from backend.');
+      }
+
+      throw error;
+    } finally {
+      if (latestLibraryItemsRequestRef.current === requestId && !options?.silent) {
+        setIsLibraryItemsLoading(false);
+      }
+    }
+  }, []);
+
   useEffect(() => {
-    void refreshBooks();
-  }, [refreshBooks]);
+    void refreshBooks().catch((error) => {
+      console.error('Error loading initial books:', error);
+    });
+    void refreshLibraryItems().catch((error) => {
+      console.error('Error loading initial library items:', error);
+    });
+  }, [refreshBooks, refreshLibraryItems]);
 
   const value = useMemo<BooksContextValue>(() => ({
     books,
+    libraryItems,
     isLoading,
+    isLibraryItemsLoading,
     errorMessage,
+    libraryItemsErrorMessage,
     refreshBooks,
+    refreshLibraryItems,
     upsertBook: (book) => {
       startTransition(() => {
         setBooks((currentBooks) => {
@@ -82,9 +134,21 @@ export function BooksProvider({ children }: PropsWithChildren) {
 
       startTransition(() => {
         setBooks((currentBooks) => currentBooks.filter((book) => book.id !== normalizedBookId));
+        setLibraryItems((currentItems) => {
+          return currentItems.filter((item) => item.itemType !== 'BOOK' || item.itemId !== normalizedBookId);
+        });
       });
     },
-  }), [books, errorMessage, isLoading, refreshBooks]);
+  }), [
+    books,
+    errorMessage,
+    isLibraryItemsLoading,
+    isLoading,
+    libraryItems,
+    libraryItemsErrorMessage,
+    refreshBooks,
+    refreshLibraryItems,
+  ]);
 
   return <BooksContext.Provider value={value}>{children}</BooksContext.Provider>;
 }

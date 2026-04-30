@@ -5,6 +5,7 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { BottomNav } from '../components/BottomNav';
 import { Button } from '../components/Button';
+import { CodexNavTabs } from '../components/CodexNavTabs';
 import { AppDialog, AppDialogClose, AppDialogTitle } from '../components/dialog/AppDialog';
 import { formatShortDate } from '../utils/formatting';
 import {
@@ -53,6 +54,11 @@ const rarityMarkerClassNames: Record<RarityTier, string> = {
 interface CapturedSlotDetails {
   pageNumber: number;
   slot: CodexBoardSlotDTO;
+}
+
+interface SelectedSlotKey {
+  pageNumber: number;
+  slotNumber: number;
 }
 
 interface RevealSlotInfo {
@@ -561,7 +567,7 @@ export default function Codex() {
   const [entriesByLemma, setEntriesByLemma] = useState<Map<string, CodexEntryReadResponseDTO>>(() => new Map());
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const [selectedSlot, setSelectedSlot] = useState<CapturedSlotDetails | null>(null);
+  const [selectedSlotKey, setSelectedSlotKey] = useState<SelectedSlotKey | null>(null);
   const [navigationDirection, setNavigationDirection] = useState<1 | -1>(1);
   const previousPageNumberRef = useRef<number>(1);
 
@@ -629,6 +635,21 @@ export default function Codex() {
   const isValidRoutePage = Number.isInteger(parsedPageNumber) && parsedPageNumber >= 1 && parsedPageNumber <= PAGE_COUNT;
   const currentPageNumber = isValidRoutePage ? parsedPageNumber : 1;
   const selectedPage = pages.find((page) => page.pageNumber === currentPageNumber) ?? pages[0];
+  if (selectedSlotKey && selectedSlotKey.pageNumber !== currentPageNumber) {
+    setSelectedSlotKey(null);
+  }
+
+  const selectedSlot = useMemo<CapturedSlotDetails | null>(() => {
+    if (!selectedSlotKey || selectedSlotKey.pageNumber !== currentPageNumber || !selectedPage) {
+      return null;
+    }
+
+    const slot = selectedPage.slots.find((candidate) => (
+      candidate.slotNumber === selectedSlotKey.slotNumber && candidate.isCaptured
+    ));
+
+    return slot ? { pageNumber: selectedSlotKey.pageNumber, slot } : null;
+  }, [currentPageNumber, selectedPage, selectedSlotKey]);
   const totalWords = board?.totalWords ?? PAGE_COUNT * SLOTS_PER_PAGE;
   const capturedWords = board?.capturedWords ?? pages.reduce((sum, page) => sum + page.capturedCount, 0);
   const completionPercentage = board?.completionPercentage ?? (totalWords > 0 ? (capturedWords / totalWords) * 100 : 0);
@@ -720,10 +741,6 @@ export default function Codex() {
     }
   }, [currentPageNumber]);
 
-  useEffect(() => {
-    setSelectedSlot(null);
-  }, [currentPageNumber]);
-
   const handlePageChange = (pageNumber: number) => {
     if (pageNumber < 1 || pageNumber > PAGE_COUNT) {
       return;
@@ -753,6 +770,8 @@ export default function Codex() {
             <BookOpen size={25} className="text-brand-strong" aria-hidden="true" />
           </div>
         </header>
+
+        <CodexNavTabs className="mt-6" />
 
         <section className="mt-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
           <CodexStatTile
@@ -838,7 +857,10 @@ export default function Codex() {
                 navigationDirection={navigationDirection}
                 shouldReduceMotion={shouldReduceMotion}
                 onPageChange={handlePageChange}
-                onSelectSlot={setSelectedSlot}
+                onSelectSlot={(details) => setSelectedSlotKey({
+                  pageNumber: details.pageNumber,
+                  slotNumber: details.slot.slotNumber,
+                })}
                 revealTargetSlotNumber={
                   revealSlot && revealSlot.pageNumber === selectedPage.pageNumber
                     ? revealSlot.slotNumber
@@ -853,7 +875,7 @@ export default function Codex() {
 
       <CapturedSlotModal
         details={selectedSlot}
-        onClose={() => setSelectedSlot(null)}
+        onClose={() => setSelectedSlotKey(null)}
         entriesByLemma={entriesByLemma}
       />
 

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useMemo, useState, type FormEvent } from 'react';
 import { ArrowDown, ArrowUp, BookPlus, Plus, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -63,6 +63,17 @@ export function CreateReadingListModal({
   onClose,
   onCreated,
 }: CreateReadingListModalProps) {
+  if (!isOpen) {
+    return null;
+  }
+
+  return <CreateReadingListModalContent onClose={onClose} onCreated={onCreated} />;
+}
+
+function CreateReadingListModalContent({
+  onClose,
+  onCreated,
+}: Omit<CreateReadingListModalProps, 'isOpen'>) {
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [status, setStatus] = useState<ReadingListStatus>('PUBLISHED');
@@ -72,22 +83,6 @@ export function CreateReadingListModal({
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<FormField, string>>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  useEffect(() => {
-    if (isOpen) {
-      return;
-    }
-
-    setTitle('');
-    setDescription('');
-    setStatus('PUBLISHED');
-    setGenres([]);
-    setSlots([makeEmptySlot()]);
-    setSlotErrors({});
-    setFieldErrors({});
-    setSubmitError(null);
-    setIsSubmitting(false);
-  }, [isOpen]);
 
   const duplicateKeys = useMemo(() => {
     const counts = new Map<string, number>();
@@ -106,10 +101,6 @@ export function CreateReadingListModal({
         .map(([key]) => key),
     );
   }, [slots]);
-
-  if (!isOpen) {
-    return null;
-  }
 
   const updateSlot = (key: string, patch: Partial<SlotDraft>) => {
     setSlots((current) => current.map((slot) => (slot.key === key ? { ...slot, ...patch } : slot)));
@@ -245,7 +236,7 @@ export function CreateReadingListModal({
 
   return (
     <AppDialog
-      isOpen={isOpen}
+      isOpen
       onClose={onClose}
       canClose={!isSubmitting}
       contentClassName="w-full max-w-3xl rounded-t-[32px] border border-border bg-surface shadow-[0_20px_56px_rgba(15,23,42,0.18)] animate-in slide-in-from-bottom duration-300 sm:rounded-[32px] sm:slide-in-from-bottom-0"

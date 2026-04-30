@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Sparkles } from 'lucide-react';
+import { useReducedMotion } from 'motion/react';
 import { getXpProgressMetaWithStep } from '../features/xp/xp';
 
 export interface XpGainPresentation {
@@ -38,7 +39,7 @@ function XpGainBarItem({
   item: XpGainPresentation;
   onComplete: () => void;
 }) {
-  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+  const prefersReducedMotion = useReducedMotion() === true;
   const [phase, setPhase] = useState<'enter' | 'visible' | 'exit'>('enter');
   const [displayTotalXp, setDisplayTotalXp] = useState(() => item.fromTotalXp);
   const safeXpPerLevel = item.xpPerLevel;
@@ -46,22 +47,6 @@ function XpGainBarItem({
   const safeLevel = item.level;
   const safeXpIntoLevel = item.xpIntoLevel;
   const safeLeveledUp = item.leveledUp;
-
-  useEffect(() => {
-    if (typeof window === 'undefined') {
-      return;
-    }
-
-    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const updatePreference = () => setPrefersReducedMotion(mediaQuery.matches);
-
-    updatePreference();
-    mediaQuery.addEventListener('change', updatePreference);
-
-    return () => {
-      mediaQuery.removeEventListener('change', updatePreference);
-    };
-  }, []);
 
   useEffect(() => {
     const animationDurationMs = prefersReducedMotion ? 0 : 1200;

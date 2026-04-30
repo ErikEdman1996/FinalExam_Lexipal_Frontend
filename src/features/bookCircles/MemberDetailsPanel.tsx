@@ -41,20 +41,33 @@ export function MemberDetailsPanel({
   targetUserId,
   onClose,
 }: MemberDetailsPanelProps) {
+  if (!isOpen || targetUserId == null) {
+    return null;
+  }
+
+  return (
+    <MemberDetailsPanelContent
+      key={`${circleId}:${targetUserId}`}
+      circleId={circleId}
+      memberLabel={memberLabel}
+      targetUserId={targetUserId}
+      onClose={onClose}
+    />
+  );
+}
+
+function MemberDetailsPanelContent({
+  circleId,
+  memberLabel,
+  targetUserId,
+  onClose,
+}: Omit<MemberDetailsPanelProps, 'isOpen'> & { targetUserId: number }) {
   const [details, setDetails] = useState<CircleMemberDetailResponseDTO | null>(null);
   const [activeTab, setActiveTab] = useState<DetailTab>('sessions');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    if (!isOpen || targetUserId == null) {
-      setDetails(null);
-      setErrorMessage(null);
-      setActiveTab('sessions');
-      setIsLoading(false);
-      return;
-    }
-
     let isMounted = true;
 
     const loadDetails = async () => {
@@ -89,15 +102,11 @@ export function MemberDetailsPanel({
     return () => {
       isMounted = false;
     };
-  }, [circleId, isOpen, targetUserId]);
-
-  if (!isOpen || targetUserId == null) {
-    return null;
-  }
+  }, [circleId, targetUserId]);
 
   return (
     <AppDialog
-      isOpen={isOpen}
+      isOpen
       onClose={onClose}
       variant="sheet"
       contentClassName="relative ml-auto flex h-[92vh] w-full max-w-2xl flex-col rounded-t-[32px] border border-border bg-surface shadow-[0_24px_64px_rgba(15,23,42,0.18)] animate-in slide-in-from-bottom duration-300 sm:h-full sm:rounded-none sm:rounded-l-[32px] sm:slide-in-from-right"

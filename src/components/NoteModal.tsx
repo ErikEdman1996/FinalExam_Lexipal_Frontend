@@ -1,4 +1,4 @@
-import { useEffect, useId, useState, type FormEvent } from 'react';
+import { useId, useState, type FormEvent } from 'react';
 import { FileText, X } from 'lucide-react';
 import { ApiValidationError, type NoteFieldErrors } from '../api/api';
 import { Button } from './Button';
@@ -40,36 +40,52 @@ export function NoteModal({
   onClose,
   onSubmit,
 }: NoteModalProps) {
-  const titleId = useId();
-  const [quotedText, setQuotedText] = useState('');
-  const [pageNumber, setPageNumber] = useState('');
-  const [chapterLabel, setChapterLabel] = useState('');
-  const [fieldErrors, setFieldErrors] = useState<NoteFieldErrors>({});
-  const [submitError, setSubmitError] = useState<string | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  useEffect(() => {
-    if (!isOpen) {
-      setQuotedText('');
-      setPageNumber('');
-      setChapterLabel('');
-      setFieldErrors({});
-      setSubmitError(null);
-      setIsSubmitting(false);
-      return;
-    }
-
-    setQuotedText(initialQuotedText);
-    setPageNumber(initialPageNumber != null && initialPageNumber > 0 ? String(initialPageNumber) : '');
-    setChapterLabel(initialChapterLabel ?? '');
-    setFieldErrors({});
-    setSubmitError(null);
-    setIsSubmitting(false);
-  }, [initialChapterLabel, initialPageNumber, initialQuotedText, isOpen]);
-
   if (!isOpen) {
     return null;
   }
+
+  const contentKey = [
+    heading,
+    submitLabel,
+    initialQuotedText,
+    initialPageNumber ?? '',
+    initialChapterLabel ?? '',
+  ].join('|');
+
+  return (
+    <NoteModalContent
+      key={contentKey}
+      heading={heading}
+      submitLabel={submitLabel}
+      bookTotalPages={bookTotalPages}
+      initialQuotedText={initialQuotedText}
+      initialPageNumber={initialPageNumber}
+      initialChapterLabel={initialChapterLabel}
+      onClose={onClose}
+      onSubmit={onSubmit}
+    />
+  );
+}
+
+function NoteModalContent({
+  heading,
+  submitLabel,
+  bookTotalPages,
+  initialQuotedText = '',
+  initialPageNumber = null,
+  initialChapterLabel = '',
+  onClose,
+  onSubmit,
+}: Omit<NoteModalProps, 'isOpen'>) {
+  const titleId = useId();
+  const [quotedText, setQuotedText] = useState(initialQuotedText);
+  const [pageNumber, setPageNumber] = useState(
+    initialPageNumber != null && initialPageNumber > 0 ? String(initialPageNumber) : '',
+  );
+  const [chapterLabel, setChapterLabel] = useState(initialChapterLabel ?? '');
+  const [fieldErrors, setFieldErrors] = useState<NoteFieldErrors>({});
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   const clearFieldError = (fieldName: keyof NoteFieldErrors) => {
     setFieldErrors((previousErrors) => {
@@ -141,7 +157,7 @@ export function NoteModal({
 
   return (
     <AppDialog
-      isOpen={isOpen}
+      isOpen
       onClose={onClose}
       canClose={!isSubmitting}
       contentClassName="w-full max-w-lg max-h-[94vh] overflow-y-auto rounded-t-[32px] border border-border bg-surface shadow-[0_8px_32px_rgba(0,0,0,0.12)] animate-in slide-in-from-bottom duration-300 sm:rounded-[32px] sm:slide-in-from-bottom-0"

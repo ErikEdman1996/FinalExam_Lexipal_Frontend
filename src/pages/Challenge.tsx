@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Brain, ChevronRight, LockKeyhole, Swords, type LucideIcon } from 'lucide-react';
+import { Brain, ChevronRight, Grid3x3, LockKeyhole, Swords, type LucideIcon } from 'lucide-react';
 import { BottomNav } from '../components/BottomNav';
 
 interface MinigameTile {
@@ -21,12 +21,12 @@ const MINIGAMES: MinigameTile[] = [
     locked: false,
   },
   {
-    id: 'soon-1',
-    title: 'Coming Soon',
-    description: 'A new minigame is on the way.',
-    icon: LockKeyhole,
-    route: null,
-    locked: true,
+    id: 'crossword',
+    title: 'Crossword',
+    description: 'Fill a 5-word crossword built from your captured vocabulary.',
+    icon: Grid3x3,
+    route: '/challenges/crossword',
+    locked: false,
   },
   {
     id: 'soon-2',

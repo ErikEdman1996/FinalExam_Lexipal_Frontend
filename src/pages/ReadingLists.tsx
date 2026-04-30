@@ -439,19 +439,13 @@ export default function ReadingLists() {
     return () => window.clearTimeout(handle);
   }, [searchInput]);
 
-  const visibleMyLists = useMemo(() => getClientPageItems(myLists, myPage), [myLists, myPage]);
+  const normalizedMyPage = Math.min(myPage, getLastClientPage(myLists.length));
+  const normalizedSubsPage = Math.min(subsPage, getLastClientPage(subscriptions.length));
+  const visibleMyLists = useMemo(() => getClientPageItems(myLists, normalizedMyPage), [myLists, normalizedMyPage]);
   const visibleSubscriptions = useMemo(
-    () => getClientPageItems(subscriptions, subsPage),
-    [subscriptions, subsPage],
+    () => getClientPageItems(subscriptions, normalizedSubsPage),
+    [subscriptions, normalizedSubsPage],
   );
-
-  useEffect(() => {
-    setMyPage((current) => Math.min(current, getLastClientPage(myLists.length)));
-  }, [myLists.length]);
-
-  useEffect(() => {
-    setSubsPage((current) => Math.min(current, getLastClientPage(subscriptions.length)));
-  }, [subscriptions.length]);
 
   const loadExplore = useCallback(async () => {
     const requestId = latestExploreRequestRef.current + 1;
@@ -703,11 +697,11 @@ export default function ReadingLists() {
           />
         ))}
         <PaginationFooter
-          page={myPage}
-          hasNext={(myPage + 1) * PAGE_SIZE < myLists.length}
-          onPrevious={() => setMyPage((current) => Math.max(0, current - 1))}
-          onNext={() => setMyPage((current) => current + 1)}
-          label={getRangeLabel(myPage, myLists.length)}
+          page={normalizedMyPage}
+          hasNext={(normalizedMyPage + 1) * PAGE_SIZE < myLists.length}
+          onPrevious={() => setMyPage(Math.max(0, normalizedMyPage - 1))}
+          onNext={() => setMyPage(normalizedMyPage + 1)}
+          label={getRangeLabel(normalizedMyPage, myLists.length)}
         />
       </div>
     );
@@ -757,11 +751,11 @@ export default function ReadingLists() {
           <SubscriptionRow key={subscription.listId} subscription={subscription} onOpen={openList} />
         ))}
         <PaginationFooter
-          page={subsPage}
-          hasNext={(subsPage + 1) * PAGE_SIZE < subscriptions.length}
-          onPrevious={() => setSubsPage((current) => Math.max(0, current - 1))}
-          onNext={() => setSubsPage((current) => current + 1)}
-          label={getRangeLabel(subsPage, subscriptions.length)}
+          page={normalizedSubsPage}
+          hasNext={(normalizedSubsPage + 1) * PAGE_SIZE < subscriptions.length}
+          onPrevious={() => setSubsPage(Math.max(0, normalizedSubsPage - 1))}
+          onNext={() => setSubsPage(normalizedSubsPage + 1)}
+          label={getRangeLabel(normalizedSubsPage, subscriptions.length)}
         />
       </div>
     );

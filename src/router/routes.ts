@@ -5,6 +5,7 @@ import ReadingSession from '../pages/ReadingSession.tsx';
 import Codex from '../pages/Codex.tsx';
 import Challenge from '../pages/Challenge.tsx';
 import Flashcard from '../pages/Flashcard.tsx';
+import Crossword from '../pages/Crossword.tsx';
 import WordLookups from '../pages/WordLookups.tsx';
 import Profile from '../pages/Profile.tsx';
 import Landing from '../pages/Landing.tsx';
@@ -36,6 +37,8 @@ export const router = createBrowserRouter([
       { path: '/admin', Component: AdminDashboard },
       { path: '/challenges', Component: Challenge },
       { path: '/challenges/flashcard', Component: Flashcard },
+      { path: '/challenges/crossword', Component: Crossword },
+      { path: '/challenges/crossword/:puzzleId', Component: Crossword },
       { path: '/profile', Component: Profile },
       { path: '*', Component: Library },
     ],

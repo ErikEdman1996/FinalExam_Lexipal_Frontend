@@ -16,15 +16,19 @@ interface AddBookModalProps {
 }
 
 export function AddBookModal({ isOpen, onClose, onAdd }: AddBookModalProps) {
+  if (!isOpen) {
+    return null;
+  }
+
+  return <AddBookModalContent onClose={onClose} onAdd={onAdd} />;
+}
+
+function AddBookModalContent({ onClose, onAdd }: Omit<AddBookModalProps, 'isOpen'>) {
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
   const [totalPages, setTotalPages] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-
-  if (!isOpen) {
-    return null;
-  }
 
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -59,7 +63,7 @@ export function AddBookModal({ isOpen, onClose, onAdd }: AddBookModalProps) {
 
   return (
     <AppDialog
-      isOpen={isOpen}
+      isOpen
       onClose={onClose}
       canClose={!isSubmitting}
       contentClassName="w-full max-w-md rounded-[28px] border border-border bg-surface p-6 shadow-[0_8px_32px_rgba(0,0,0,0.12)] animate-in fade-in zoom-in duration-200"

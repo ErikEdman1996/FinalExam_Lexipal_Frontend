@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { BookOpen, History, Search, X } from 'lucide-react';
 import { BottomNav } from '../components/BottomNav';
 import { Button } from '../components/Button';
+import { CodexNavTabs } from '../components/CodexNavTabs';
 import { AppDialog, AppDialogClose, AppDialogTitle } from '../components/dialog/AppDialog';
 import { inputClassName } from '../components/form/inputStyles';
 import { formatShortDate, formatShortDateTime } from '../utils/formatting';
@@ -262,6 +263,8 @@ export default function WordLookups() {
             <History size={25} className="text-brand-strong" aria-hidden="true" />
           </div>
         </header>
+
+        <CodexNavTabs className="mt-6" />
 
         <section className="mt-6 rounded-[30px] border border-border bg-surface p-4 shadow-[0_16px_34px_rgba(31,41,55,0.06)] sm:p-5">
           <label htmlFor="word-history-search" className="sr-only">

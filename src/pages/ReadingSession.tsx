@@ -13,6 +13,7 @@ import {
 } from '../components/form/inputStyles';
 import { NoteModal } from '../components/NoteModal';
 import { WordLookupModal } from '../components/WordLookupModal';
+import { useBooks } from '../features/books/useBooks';
 import { useXpGain } from '../features/xp/useXpGain';
 import {
   completeSession,
@@ -68,6 +69,7 @@ export default function ReadingSession() {
   const [isRunning, setIsRunning] = useState(false);
   const [codexEntries, setCodexEntries] = useState<SessionCodexEntry[]>([]);
   const [activeSession, setActiveSession] = useState<ApiSession | null>(null);
+  const { refreshBooks, refreshLibraryItems } = useBooks();
   const { showXpGain } = useXpGain();
   const intervalRef = useRef<number | null>(null);
   const shouldResumeAfterActionModalRef = useRef(false);
@@ -311,6 +313,12 @@ export default function ReadingSession() {
 
     activeSessionRef.current = null;
     setActiveSession(null);
+    void refreshBooks({ silent: true }).catch((error) => {
+      console.error('Error refreshing books after session completion:', error);
+    });
+    void refreshLibraryItems({ silent: true }).catch((error) => {
+      console.error('Error refreshing library items after session completion:', error);
+    });
     void navigate(`/book/${bookId}`);
   };
 
@@ -629,6 +637,7 @@ export default function ReadingSession() {
 
       {showReflectionModal ? (
         <ReflectionModal
+          key={`${activeSession?.id ?? 'new'}:${draftStartPage}:${draftEndPage}:${draftReflection}`}
           durationSeconds={seconds}
           book={book}
           startPage={draftStartPage}
@@ -677,12 +686,6 @@ function ReflectionModal({
   const [endPage, setEndPage] = useState(String(initialEndPage));
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setReflection(initialReflection);
-    setEndPage(String(initialEndPage));
-    setSubmitError(null);
-  }, [initialEndPage, initialReflection, startPage]);
 
   const trimmedReflectionLength = reflection.trim().length;
   const isValidReflection = trimmedReflectionLength >= 50 && trimmedReflectionLength <= 2000;

@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { Check, X } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -35,37 +35,33 @@ export function EditReadingListModal({
   onClose,
   onUpdated,
 }: EditReadingListModalProps) {
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [status, setStatus] = useState<ReadingListStatus>('PUBLISHED');
-  const [genres, setGenres] = useState<string[]>([]);
+  if (!isOpen || !list) {
+    return null;
+  }
+
+  return (
+    <EditReadingListModalContent
+      key={list.id}
+      list={list}
+      onClose={onClose}
+      onUpdated={onUpdated}
+    />
+  );
+}
+
+function EditReadingListModalContent({
+  list,
+  onClose,
+  onUpdated,
+}: Omit<EditReadingListModalProps, 'isOpen'> & { list: ReadingListDetailResponseDTO }) {
+  const [title, setTitle] = useState(list.title);
+  const [description, setDescription] = useState(list.description ?? '');
+  const [status, setStatus] = useState<ReadingListStatus>(list.status);
+  const [genres, setGenres] = useState<string[]>(() => [...list.genres]);
   const [genresEdited, setGenresEdited] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<EditField, string>>>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  useEffect(() => {
-    if (!isOpen || !list) {
-      setFieldErrors({});
-      setSubmitError(null);
-      setIsSubmitting(false);
-      setGenres([]);
-      setGenresEdited(false);
-      return;
-    }
-
-    setTitle(list.title);
-    setDescription(list.description ?? '');
-    setStatus(list.status);
-    setGenres(list.genres);
-    setGenresEdited(false);
-    setFieldErrors({});
-    setSubmitError(null);
-  }, [isOpen, list]);
-
-  if (!isOpen || !list) {
-    return null;
-  }
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -127,7 +123,7 @@ export function EditReadingListModal({
 
   return (
     <AppDialog
-      isOpen={isOpen}
+      isOpen
       onClose={onClose}
       canClose={!isSubmitting}
       contentClassName="w-full max-w-xl rounded-t-[32px] border border-border bg-surface shadow-[0_20px_56px_rgba(15,23,42,0.18)] animate-in slide-in-from-bottom duration-300 sm:rounded-[32px] sm:slide-in-from-bottom-0"

@@ -67,7 +67,18 @@ export function CreateCircleModal({
   onClose,
   onCreated,
 }: CreateCircleModalProps) {
-  const { books, isLoading: isBooksLoading, refreshBooks } = useBooks();
+  if (!isOpen) {
+    return null;
+  }
+
+  return <CreateCircleModalContent onClose={onClose} onCreated={onCreated} />;
+}
+
+function CreateCircleModalContent({
+  onClose,
+  onCreated,
+}: Omit<CreateCircleModalProps, 'isOpen'>) {
+  const { books, isLoading: isBooksLoading, refreshBooks, refreshLibraryItems } = useBooks();
   const [sourceMode, setSourceMode] = useState<SourceMode>('existing');
   const [selectedBookId, setSelectedBookId] = useState<number | null>(null);
   const [bookTitle, setBookTitle] = useState('');
@@ -85,31 +96,12 @@ export function CreateCircleModal({
   }, [books]);
 
   useEffect(() => {
-    if (!isOpen) {
-      setSourceMode('existing');
-      setSelectedBookId(null);
-      setBookTitle('');
-      setBookAuthor('');
-      setTotalPages('');
-      setMemberCap(DEFAULT_MEMBER_CAP);
-      setVisibility('ALL_MEMBERS');
-      setCreatedCircle(null);
-      setFieldErrors({});
-      setSubmitError(null);
-      setIsSubmitting(false);
-      return;
-    }
-
     if (books.length === 0 && !isBooksLoading) {
       void refreshBooks({ silent: true }).catch((error) => {
         console.error('Error refreshing books for circle creation:', error);
       });
     }
-  }, [books.length, isBooksLoading, isOpen, refreshBooks]);
-
-  if (!isOpen) {
-    return null;
-  }
+  }, [books.length, isBooksLoading, refreshBooks]);
 
   const handleCopyCode = async () => {
     if (!createdCircle) {
@@ -209,6 +201,9 @@ export function CreateCircleModal({
       void refreshBooks({ silent: true }).catch((error) => {
         console.error('Error refreshing books after circle creation:', error);
       });
+      void refreshLibraryItems({ silent: true }).catch((error) => {
+        console.error('Error refreshing library items after circle creation:', error);
+      });
     } catch (error) {
       if (error instanceof ApiValidationError) {
         setFieldErrors(error.fieldErrors);
@@ -229,7 +224,7 @@ export function CreateCircleModal({
 
   return (
     <AppDialog
-      isOpen={isOpen}
+      isOpen
       onClose={onClose}
       canClose={!isSubmitting}
       contentClassName="w-full max-w-3xl rounded-t-[32px] border border-border bg-surface shadow-[0_20px_56px_rgba(15,23,42,0.18)] animate-in slide-in-from-bottom duration-300 sm:rounded-[32px] sm:slide-in-from-bottom-0"

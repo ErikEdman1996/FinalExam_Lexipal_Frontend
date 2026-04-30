@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Sparkles, X } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion, useReducedMotion } from 'motion/react';
 import { Button } from './Button';
 import { AppDialog, AppDialogClose } from './dialog/AppDialog';
 import { inputClassName } from './form/inputStyles';
@@ -230,7 +230,26 @@ export function WordLookupModal({
   sessionId,
   bookId,
 }: WordLookupModalProps) {
+  if (!isOpen) return null;
+
+  return (
+    <WordLookupModalContent
+      onClose={onClose}
+      onCapture={onCapture}
+      sessionId={sessionId}
+      bookId={bookId}
+    />
+  );
+}
+
+function WordLookupModalContent({
+  onClose,
+  onCapture,
+  sessionId,
+  bookId,
+}: Omit<WordLookupModalProps, 'isOpen'>) {
   const navigate = useNavigate();
+  const prefersReducedMotion = useReducedMotion() === true;
   const [word, setWord] = useState('');
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState(false);
@@ -239,7 +258,6 @@ export function WordLookupModal({
   const [showParticles, setShowParticles] = useState(false);
   const [isRevealing, setIsRevealing] = useState(false);
   const [mysteryRevealPhase, setMysteryRevealPhase] = useState<MysteryRevealPhase>('idle');
-  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
   const searchInFlightRef = useRef(false);
   const revealTimeoutRef = useRef<number | null>(null);
   const pendingCapturePayloadRef = useRef<CapturePayload | null>(null);
@@ -247,20 +265,16 @@ export function WordLookupModal({
   const shouldShowCaptureParticles = !!result?.isNewCapture && !!result?.isCollectible && result.rarityTier !== 'COMMON';
 
   useEffect(() => {
-    if (!isOpen || typeof window === 'undefined') {
-      return;
-    }
-
-    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
-    const handleChange = () => setPrefersReducedMotion(mediaQuery.matches);
-
-    handleChange();
-    mediaQuery.addEventListener('change', handleChange);
-
     return () => {
-      mediaQuery.removeEventListener('change', handleChange);
+      if (revealTimeoutRef.current != null) {
+        window.clearTimeout(revealTimeoutRef.current);
+        revealTimeoutRef.current = null;
+      }
+
+      pendingCapturePayloadRef.current = null;
+      captureCommittedRef.current = false;
     };
-  }, [isOpen]);
+  }, []);
 
   useEffect(() => {
     if (!isFlipped || !shouldShowCaptureParticles || prefersReducedMotion) {
@@ -276,28 +290,6 @@ export function WordLookupModal({
       window.clearTimeout(timeoutId);
     };
   }, [isFlipped, prefersReducedMotion, shouldShowCaptureParticles]);
-
-  useEffect(() => {
-    if (!isOpen) {
-      if (revealTimeoutRef.current != null) {
-        window.clearTimeout(revealTimeoutRef.current);
-        revealTimeoutRef.current = null;
-      }
-
-      pendingCapturePayloadRef.current = null;
-      captureCommittedRef.current = false;
-      setWord('');
-      setLookupError(null);
-      setIsSearching(false);
-      setIsFlipped(false);
-      setResult(null);
-      setShowParticles(false);
-      setIsRevealing(false);
-      setMysteryRevealPhase('idle');
-    }
-  }, [isOpen]);
-  
-  if (!isOpen) return null;
 
   const handleSearch = async () => {
     if (searchInFlightRef.current) {
@@ -483,7 +475,7 @@ export function WordLookupModal({
   
   return (
     <AppDialog
-      isOpen={isOpen}
+      isOpen
       onClose={onClose}
       contentClassName="w-full max-w-lg max-h-[94vh] overflow-y-auto rounded-t-[32px] border border-border bg-surface shadow-[0_8px_32px_rgba(0,0,0,0.12)] animate-in slide-in-from-bottom duration-300 sm:rounded-[32px] sm:slide-in-from-bottom-0"
     >
