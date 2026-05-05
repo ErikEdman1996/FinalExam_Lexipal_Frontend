@@ -77,6 +77,11 @@ export function XpGainProvider({ children }: PropsWithChildren) {
           level: Math.max(1, xpUpdate.level),
           xpIntoLevel: Math.max(0, xpUpdate.xpIntoLevel),
           xpPerLevel: Math.max(1, xpUpdate.xpPerLevel),
+          maxLevel: Math.max(1, xpUpdate.maxLevel),
+          currentLevelMinXp: Math.max(0, xpUpdate.currentLevelMinXp),
+          nextLevelMinXp: xpUpdate.nextLevelMinXp,
+          xpToNextLevel: Math.max(0, xpUpdate.xpToNextLevel),
+          previousTotalXp: fromTotalXp,
           leveledUp: xpUpdate.leveledUp,
           source: nextItem.source,
         });

@@ -439,6 +439,13 @@ export interface ProfileStatsResponseDTO {
     totalCapturedWords: number;
     totalXpEarned: number;
     totalMinutesRead: number;
+    level: number;
+    xpIntoLevel: number;
+    xpPerLevel: number;
+    maxLevel: number;
+    currentLevelMinXp: number;
+    nextLevelMinXp: number | null;
+    xpToNextLevel: number;
 }
 
 export interface StreakMetaDataReadResponseDTO {
@@ -501,6 +508,10 @@ export interface XpUpdateResponseDTO {
     level: number;
     xpIntoLevel: number;
     xpPerLevel: number;
+    maxLevel: number;
+    currentLevelMinXp: number;
+    nextLevelMinXp: number | null;
+    xpToNextLevel: number;
     leveledUp: boolean;
 }
 
@@ -984,17 +995,28 @@ const toXpUpdate = (value: unknown): XpUpdateResponseDTO | null => {
 
     const previousTotalXp = toFiniteNumber(value.previousTotalXp) ?? 0;
     const newTotalXp = toFiniteNumber(value.newTotalXp) ?? previousTotalXp;
-    const xpPerLevel = Math.max(1, toFiniteNumber(value.xpPerLevel) ?? 100);
-    const xpIntoLevel = toFiniteNumber(value.xpIntoLevel) ?? Math.max(0, newTotalXp % xpPerLevel);
-    const derivedLevel = Math.floor(Math.max(0, newTotalXp) / xpPerLevel) + 1;
+    const level = Math.max(1, toFiniteNumber(value.level) ?? 1);
+    const xpPerLevel = Math.max(1, toFiniteNumber(value.xpPerLevel) ?? 1);
+    const xpIntoLevel = Math.max(0, toFiniteNumber(value.xpIntoLevel) ?? 0);
+    const maxLevel = Math.max(1, toFiniteNumber(value.maxLevel) ?? level);
+    const currentLevelMinXp = Math.max(0, toFiniteNumber(value.currentLevelMinXp) ?? 0);
+    const rawNextLevelMinXp = toFiniteNumber(value.nextLevelMinXp);
+    const nextLevelMinXp = value.nextLevelMinXp == null || rawNextLevelMinXp == null
+        ? null
+        : Math.max(0, rawNextLevelMinXp);
+    const xpToNextLevel = Math.max(0, toFiniteNumber(value.xpToNextLevel) ?? 0);
 
     return {
         xpAwarded: toFiniteNumber(value.xpAwarded) ?? Math.max(0, newTotalXp - previousTotalXp),
         previousTotalXp,
         newTotalXp,
-        level: toFiniteNumber(value.level) ?? derivedLevel,
-        xpIntoLevel: Math.max(0, xpIntoLevel),
+        level,
+        xpIntoLevel,
         xpPerLevel,
+        maxLevel,
+        currentLevelMinXp,
+        nextLevelMinXp,
+        xpToNextLevel,
         leveledUp: value.leveledUp === true,
     };
 };
@@ -1031,6 +1053,16 @@ const toCodexOverallProgress = (value: unknown): CodexOverallProgressDTO | null 
 
 const toProfileStats = (value: unknown): ProfileStatsResponseDTO => {
     const record = isRecord(value) ? value : {};
+    const level = Math.max(1, toFiniteNumber(record.level) ?? 1);
+    const xpPerLevel = Math.max(1, toFiniteNumber(record.xpPerLevel) ?? 1);
+    const xpIntoLevel = Math.max(0, toFiniteNumber(record.xpIntoLevel) ?? 0);
+    const maxLevel = Math.max(1, toFiniteNumber(record.maxLevel) ?? level);
+    const currentLevelMinXp = Math.max(0, toFiniteNumber(record.currentLevelMinXp) ?? 0);
+    const rawNextLevelMinXp = toFiniteNumber(record.nextLevelMinXp);
+    const nextLevelMinXp = record.nextLevelMinXp == null || rawNextLevelMinXp == null
+        ? null
+        : Math.max(0, rawNextLevelMinXp);
+    const xpToNextLevel = Math.max(0, toFiniteNumber(record.xpToNextLevel) ?? 0);
 
     return {
         totalPagesRead: toFiniteNumber(record.totalPagesRead) ?? 0,
@@ -1039,6 +1071,13 @@ const toProfileStats = (value: unknown): ProfileStatsResponseDTO => {
         totalCapturedWords: toFiniteNumber(record.totalCapturedWords) ?? 0,
         totalXpEarned: toFiniteNumber(record.totalXpEarned) ?? 0,
         totalMinutesRead: toFiniteNumber(record.totalMinutesRead) ?? 0,
+        level,
+        xpIntoLevel,
+        xpPerLevel,
+        maxLevel,
+        currentLevelMinXp,
+        nextLevelMinXp,
+        xpToNextLevel,
     };
 };
 

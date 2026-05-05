@@ -1,198 +1,24 @@
 import { useEffect, useMemo, useState } from 'react';
-import { BookOpen, History, Search, X } from 'lucide-react';
+import { BookOpen, History, Search } from 'lucide-react';
 import { BottomNav } from '../components/BottomNav';
 import { Button } from '../components/Button';
 import { CodexNavTabs } from '../components/CodexNavTabs';
-import { AppDialog, AppDialogClose, AppDialogTitle } from '../components/dialog/AppDialog';
 import { inputClassName } from '../components/form/inputStyles';
-import { formatShortDate, formatShortDateTime } from '../utils/formatting';
+import { WordLookupDetailsDialog } from '../components/WordLookupDetailsDialog';
+import { formatShortDate } from '../utils/formatting';
 import {
   extractDefinitionFromDefinitions,
-  extractDictionarySenses,
   extractPartsOfSpeechFromDefinitions,
   extractPhoneticText,
   getWordLookups,
-  type DictionarySense,
   type WordLookupReadResponseDTO,
 } from '../api/api';
 
 const searchInputClassName = `${inputClassName} pl-11 placeholder:text-text-subtle`;
 
-const isRecord = (value: unknown): value is Record<string, unknown> => {
-  return value !== null && typeof value === 'object';
-};
-
-const collectPhoneticValues = (value: unknown, collected: string[]) => {
-  if (Array.isArray(value)) {
-    value.forEach((entry) => collectPhoneticValues(entry, collected));
-    return;
-  }
-
-  if (!isRecord(value)) {
-    return;
-  }
-
-  Object.entries(value).forEach(([key, nestedValue]) => {
-    const normalizedKey = key.toLowerCase();
-
-    if (
-      (normalizedKey === 'text' || normalizedKey === 'phonetic')
-      && typeof nestedValue === 'string'
-      && nestedValue.trim()
-    ) {
-      collected.push(nestedValue.trim());
-    }
-
-    collectPhoneticValues(nestedValue, collected);
-  });
-};
-
-const getPhoneticValues = (phonetics: unknown) => {
-  const values: string[] = [];
-  collectPhoneticValues(phonetics, values);
-  return Array.from(new Set(values));
-};
-
 const getDefinitionPreview = (lookup: WordLookupReadResponseDTO) => {
   return extractDefinitionFromDefinitions(lookup.definitions) || 'No definition available right now.';
 };
-
-const getSenses = (lookup: WordLookupReadResponseDTO): DictionarySense[] => {
-  const senses = extractDictionarySenses(lookup.definitions);
-
-  if (senses.length > 0) {
-    return senses;
-  }
-
-  const fallbackDefinition = extractDefinitionFromDefinitions(lookup.definitions);
-  return fallbackDefinition ? [{ definition: fallbackDefinition, examples: [] }] : [];
-};
-
-function LookupDetailsDialog({
-  lookup,
-  onClose,
-}: {
-  lookup: WordLookupReadResponseDTO | null;
-  onClose: () => void;
-}) {
-  const senses = lookup ? getSenses(lookup) : [];
-  const partsOfSpeech = lookup ? extractPartsOfSpeechFromDefinitions(lookup.definitions) : [];
-  const phonetics = lookup ? getPhoneticValues(lookup.phonetics) : [];
-
-  if (!lookup) {
-    return null;
-  }
-
-  return (
-    <AppDialog
-      isOpen={lookup != null}
-      onClose={onClose}
-      contentClassName="w-full max-w-2xl overflow-hidden rounded-t-[32px] border border-border bg-surface shadow-[0_26px_60px_rgba(15,23,42,0.22)] sm:rounded-[32px]"
-    >
-      <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4 sm:px-6">
-        <div className="min-w-0">
-          <p className="text-[0.68rem] font-medium uppercase tracking-[0.24em] text-text-subtle">
-            Looked-up word
-          </p>
-          <AppDialogTitle className="mt-2 truncate text-3xl font-semibold tracking-normal text-text">
-            {lookup.lemma}
-          </AppDialogTitle>
-        </div>
-        <AppDialogClose asChild>
-          <button
-            type="button"
-            onClick={onClose}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-text-muted transition-colors duration-200 hover:bg-surface-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-            aria-label="Close word details"
-          >
-            <X size={18} />
-          </button>
-        </AppDialogClose>
-      </div>
-
-      <div className="max-h-[78vh] overflow-y-auto px-5 py-5 sm:px-6">
-        <div className="flex flex-wrap items-center gap-2 text-sm text-text-muted">
-          {extractPhoneticText(lookup.phonetics) ? (
-            <span className="rounded-full bg-surface-muted px-3 py-1 font-medium italic text-text">
-              /{extractPhoneticText(lookup.phonetics)}/
-            </span>
-          ) : null}
-          {partsOfSpeech.map((partOfSpeech) => (
-            <span
-              key={partOfSpeech}
-              className="rounded-full bg-surface-muted px-3 py-1 text-xs font-semibold uppercase tracking-[0.14em] text-text-muted"
-            >
-              {partOfSpeech}
-            </span>
-          ))}
-        </div>
-
-        <div className="mt-5 grid gap-3 sm:grid-cols-3">
-          <div className="rounded-[20px] border border-border bg-surface-alt p-4">
-            <p className="text-[0.68rem] uppercase tracking-[0.2em] text-text-subtle">Lookups</p>
-            <p className="mt-2 text-lg font-semibold text-text">{lookup.lookupCount}</p>
-          </div>
-          <div className="rounded-[20px] border border-border bg-surface-alt p-4">
-            <p className="text-[0.68rem] uppercase tracking-[0.2em] text-text-subtle">First</p>
-            <p className="mt-2 text-sm font-semibold text-text">{formatShortDate(lookup.firstLookedUpAt)}</p>
-          </div>
-          <div className="rounded-[20px] border border-border bg-surface-alt p-4">
-            <p className="text-[0.68rem] uppercase tracking-[0.2em] text-text-subtle">Last</p>
-            <p className="mt-2 text-sm font-semibold text-text">{formatShortDateTime(lookup.lastLookedUpAt)}</p>
-          </div>
-        </div>
-
-        <section className="mt-5 rounded-[24px] border border-border bg-surface-alt p-4 sm:p-5">
-          <p className="text-[0.72rem] font-medium uppercase tracking-[0.24em] text-text-subtle">Definitions</p>
-          {senses.length > 0 ? (
-            <div className="mt-4 space-y-4">
-              {senses.map((sense, index) => (
-                <div key={`${sense.definition}-${index}`} className="flex gap-3">
-                  <span className="pt-0.5 text-sm font-semibold text-accent-strong">{index + 1}.</span>
-                  <div className="min-w-0 flex-1">
-                    <p className="break-words text-sm leading-relaxed text-text">{sense.definition}</p>
-                    {sense.examples.length > 0 ? (
-                      <ul className="mt-2 space-y-1 text-sm italic text-text-muted">
-                        {sense.examples.map((example) => (
-                          <li key={example} className="break-words leading-relaxed">
-                            {example}
-                          </li>
-                        ))}
-                      </ul>
-                    ) : null}
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="mt-3 text-sm leading-relaxed text-text-muted">No definitions available right now.</p>
-          )}
-        </section>
-
-        <section className="mt-4 rounded-[24px] border border-border bg-surface-alt p-4 sm:p-5">
-          <p className="text-[0.72rem] font-medium uppercase tracking-[0.24em] text-text-subtle">Phonetics</p>
-          {phonetics.length > 0 ? (
-            <div className="mt-3 flex flex-wrap gap-2">
-              {phonetics.map((phonetic) => (
-                <span key={phonetic} className="rounded-full bg-surface px-3 py-1 text-sm font-medium italic text-text">
-                  /{phonetic}/
-                </span>
-              ))}
-            </div>
-          ) : (
-            <p className="mt-3 text-sm leading-relaxed text-text-muted">No phonetics available.</p>
-          )}
-        </section>
-
-        <div className="mt-5">
-          <Button variant="outline" className="w-full rounded-full" onClick={onClose}>
-            Close
-          </Button>
-        </div>
-      </div>
-    </AppDialog>
-  );
-}
 
 export default function WordLookups() {
   const [lookups, setLookups] = useState<WordLookupReadResponseDTO[]>([]);
@@ -369,7 +195,7 @@ export default function WordLookups() {
         </main>
       </div>
 
-      <LookupDetailsDialog lookup={selectedLookup} onClose={() => setSelectedLookup(null)} />
+      <WordLookupDetailsDialog lookup={selectedLookup} onClose={() => setSelectedLookup(null)} />
       <BottomNav />
     </div>
   );

@@ -68,6 +68,16 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
   useEffect(() => {
     const root = document.documentElement;
     root.setAttribute('data-theme', theme);
+
+    let favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
+    if (!favicon) {
+      favicon = document.createElement('link');
+      favicon.rel = 'icon';
+      document.head.appendChild(favicon);
+    }
+
+    favicon.type = theme === 'light' ? 'image/png' : 'image/svg+xml';
+    favicon.href = theme === 'light' ? '/moth_icon_light.png' : '/moth_icon.svg';
   }, [theme]);
 
   const setPreference = useCallback((next: ThemePreference) => {

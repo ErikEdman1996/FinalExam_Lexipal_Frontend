@@ -17,7 +17,8 @@ import {
 import { useAuth } from '../features/auth/useAuth';
 import { useTheme } from '../features/theme/useTheme';
 import { PortraitImage } from '../features/portraits/portraitAssets';
-import mothIcon from '../assets/moth_icon.png';
+import mothIcon from '../assets/moth_icon.svg';
+import mothIconLight from '../assets/moth_icon_light.png';
 
 interface NavItem {
   to: string;
@@ -46,6 +47,7 @@ export function BottomNav() {
   const nickname = profile?.nickname?.trim() || username || 'Reader';
   const handle = username ? `@${username}` : 'Lexipal profile';
   const isDark = theme === 'dark';
+  const themedMothIcon = isDark ? mothIcon : mothIconLight;
   const ThemeIcon = isDark ? Sun : Moon;
   const isMatchedPath = (paths?: readonly string[]) => (
     paths?.some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`)) ?? false
@@ -84,7 +86,7 @@ export function BottomNav() {
       <aside className="fixed left-0 top-0 bottom-0 z-40 hidden w-60 flex-col border-r border-sidebar-border bg-sidebar px-5 py-7 shadow-[0_20px_48px_rgba(15,23,42,0.16)] lg:flex">
         <div className="flex items-center gap-3 px-2">
           <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-[16px] bg-brand text-text-on-brand shadow-[0_10px_22px_rgba(154,74,66,0.22)]">
-            <img src={mothIcon} alt="Lexipal" className="h-7 w-7 object-contain" />
+            <img src={themedMothIcon} alt="Lexipal" className="h-7 w-7 object-contain" />
           </div>
           <div className="min-w-0">
             <p className="text-[0.66rem] font-medium uppercase tracking-[0.28em] text-sidebar-muted">

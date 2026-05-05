@@ -428,22 +428,6 @@ function BookDetailsContent({ bookId }: { bookId?: string }) {
                   <p className="mt-2 text-base text-text-muted">{book.author}</p>
                 </div>
               </div>
-
-              <div className="mt-5 grid gap-3 sm:grid-cols-3">
-                <div className="rounded-[22px] bg-surface-muted p-4">
-                  <p className="text-xs uppercase tracking-[0.18em] text-text-subtle">Sessions</p>
-                  <p className="mt-2 text-2xl font-semibold text-text">{sessions.length}</p>
-                </div>
-                <div className="rounded-[22px] bg-brand-soft p-4">
-                  <p className="text-xs uppercase tracking-[0.18em] text-brand-strong">Pages read</p>
-                  <p className="mt-2 text-2xl font-semibold text-brand-strong">{book.readPages}</p>
-                </div>
-                <div className="rounded-[22px] bg-accent-soft p-4">
-                  <p className="text-xs uppercase tracking-[0.18em] text-accent-strong">Pages left</p>
-                  <p className="mt-2 text-2xl font-semibold text-accent-strong">{pagesRemaining}</p>
-                </div>
-              </div>
-
               <div className="mt-6 rounded-[26px] border border-border bg-surface-alt p-5">
                 <div className="flex items-center justify-between text-sm text-text-muted">
                   <span>{book.readPages} / {book.totalPages} pages</span>
@@ -504,17 +488,6 @@ function BookDetailsContent({ bookId }: { bookId?: string }) {
                       Started {formatSessionDate(activeDraft.sessionDate)}
                     </p>
                   </div>
-                  <Button
-                    onClick={() => {
-                      void navigate(`/book/${book.id}/session/new`);
-                    }}
-                    className="rounded-full px-6 sm:self-center"
-                  >
-                    <span className="inline-flex items-center gap-2">
-                      <Play size={16} />
-                      Resume Session
-                    </span>
-                  </Button>
                 </div>
 
                 <div className="mt-5 grid gap-3 sm:grid-cols-3">
@@ -527,10 +500,6 @@ function BookDetailsContent({ bookId }: { bookId?: string }) {
                     <FileText size={16} className="mx-auto mb-2 text-accent-strong" />
                     <p className="text-base font-semibold text-text">{activeDraftCurrentPage}</p>
                     <p className="mt-1 text-xs text-text-muted">Current page</p>
-                  </div>
-                  <div className="rounded-[20px] bg-surface p-4 text-center">
-                    <p className="text-xs uppercase tracking-[0.18em] text-text-subtle">Captured words</p>
-                    <p className="mt-2 text-base font-semibold text-text">{activeDraft.capturedWordCount}</p>
                   </div>
                 </div>
               </section>

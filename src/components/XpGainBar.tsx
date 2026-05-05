@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Sparkles } from 'lucide-react';
 import { useReducedMotion } from 'motion/react';
-import { getXpProgressMetaWithStep } from '../features/xp/xp';
 
 export interface XpGainPresentation {
   id: number;
@@ -11,6 +10,11 @@ export interface XpGainPresentation {
   level: number;
   xpIntoLevel: number;
   xpPerLevel: number;
+  maxLevel: number;
+  currentLevelMinXp: number;
+  nextLevelMinXp: number | null;
+  xpToNextLevel: number;
+  previousTotalXp: number;
   leveledUp: boolean;
   source?: string;
 }
@@ -32,6 +36,8 @@ const getSourceLabel = (source?: string) => {
   return 'XP gained';
 };
 
+const clampPercent = (value: number) => Math.max(0, Math.min(100, value));
+
 function XpGainBarItem({
   item,
   onComplete,
@@ -41,14 +47,20 @@ function XpGainBarItem({
 }) {
   const prefersReducedMotion = useReducedMotion() === true;
   const [phase, setPhase] = useState<'enter' | 'visible' | 'exit'>('enter');
+  const [progressPercent, setProgressPercent] = useState(0);
   const [displayTotalXp, setDisplayTotalXp] = useState(() => item.fromTotalXp);
-  const safeXpPerLevel = item.xpPerLevel;
-  const safeToTotalXp = item.toTotalXp;
-  const safeLevel = item.level;
-  const safeXpIntoLevel = item.xpIntoLevel;
-  const safeLeveledUp = item.leveledUp;
+
+  const isAtMaxLevel = item.level >= item.maxLevel;
+  const finalProgressPercent = isAtMaxLevel
+    ? 100
+    : clampPercent((item.xpIntoLevel / Math.max(1, item.xpPerLevel)) * 100);
+  const startProgressPercent = item.leveledUp
+    ? 0
+    : clampPercent(((item.previousTotalXp - item.currentLevelMinXp) / Math.max(1, item.xpPerLevel)) * 100);
 
   useEffect(() => {
+    setProgressPercent(startProgressPercent);
+
     const animationDurationMs = prefersReducedMotion ? 0 : 1200;
     const visibleHoldMs = prefersReducedMotion ? 3600 : 3900;
     const exitDurationMs = 260;
@@ -62,6 +74,7 @@ function XpGainBarItem({
 
       if (animationDurationMs === 0 || xpDelta === 0) {
         setDisplayTotalXp(item.toTotalXp);
+        setProgressPercent(finalProgressPercent);
         return;
       }
 
@@ -72,8 +85,10 @@ function XpGainBarItem({
         const progress = Math.min(1, elapsed / animationDurationMs);
         const easedProgress = 1 - Math.pow(1 - progress, 3);
         const nextDisplayedXp = item.fromTotalXp + (xpDelta * easedProgress);
+        const nextPercent = startProgressPercent + (finalProgressPercent - startProgressPercent) * easedProgress;
 
         setDisplayTotalXp(nextDisplayedXp);
+        setProgressPercent(nextPercent);
 
         if (progress < 1) {
           animationFrameId = window.requestAnimationFrame(animate);
@@ -81,6 +96,7 @@ function XpGainBarItem({
         }
 
         setDisplayTotalXp(item.toTotalXp);
+        setProgressPercent(finalProgressPercent);
       };
 
       animationFrameId = window.requestAnimationFrame(animate);
@@ -109,20 +125,10 @@ function XpGainBarItem({
         window.clearTimeout(completeTimeoutId);
       }
     };
-  }, [item, onComplete, prefersReducedMotion]);
+  }, [item, onComplete, prefersReducedMotion, startProgressPercent, finalProgressPercent]);
 
   const roundedDisplayedTotalXp = Math.round(displayTotalXp);
-  const progressMeta = useMemo(
-    () => getXpProgressMetaWithStep(roundedDisplayedTotalXp, safeXpPerLevel),
-    [roundedDisplayedTotalXp, safeXpPerLevel],
-  );
-  const isAnimationComplete = roundedDisplayedTotalXp >= safeToTotalXp;
-  const displayedLevel = isAnimationComplete ? safeLevel : progressMeta.level;
-  const displayedXpIntoLevel = isAnimationComplete ? safeXpIntoLevel : progressMeta.xpIntoLevel;
-  const displayedProgressPercent = isAnimationComplete
-    ? (Math.max(0, safeXpIntoLevel) / Math.max(1, safeXpPerLevel)) * 100
-    : progressMeta.progressPercent;
-  const displayedProgressWidth = `${Math.min(100, Math.max(displayedProgressPercent, 4))}%`;
+  const displayedProgressWidth = `${Math.max(progressPercent, isAtMaxLevel ? 100 : 4)}%`;
 
   return (
     <div className="pointer-events-none fixed inset-x-0 top-0 z-[60] flex justify-center px-4 pt-4 sm:px-6 sm:pt-6">
@@ -141,12 +147,12 @@ function XpGainBarItem({
             <p className="text-xs uppercase tracking-[0.24em] text-text-subtle">{getSourceLabel(item.source)}</p>
             <div className="mt-2 flex items-center gap-2">
               <p className="text-xl font-semibold text-text sm:text-2xl">
-                {displayedXpIntoLevel}/{safeXpPerLevel} XP
+                {isAtMaxLevel ? 'MAX' : `${item.xpIntoLevel}/${item.xpPerLevel} XP`}
               </p>
               <span className="rounded-full bg-brand-soft px-2.5 py-1 text-xs font-semibold text-brand-strong">
-                Level {displayedLevel}
+                Level {item.level}
               </span>
-              {safeLeveledUp && isAnimationComplete ? (
+              {item.leveledUp ? (
                 <span className="rounded-full bg-accent-soft px-2.5 py-1 text-xs font-semibold text-accent-strong">
                   Level up
                 </span>
@@ -173,10 +179,12 @@ function XpGainBarItem({
           />
         </div>
 
-        <div className="mt-2 flex items-center justify-between text-xs text-text-muted">
-          <span>{progressMeta.levelStartXp} XP</span>
-          <span>{progressMeta.levelEndXp} XP</span>
-        </div>
+        {!isAtMaxLevel ? (
+          <div className="mt-2 flex items-center justify-between text-xs text-text-muted">
+            <span>{item.currentLevelMinXp} XP</span>
+            <span>{item.nextLevelMinXp ?? item.currentLevelMinXp + item.xpPerLevel} XP</span>
+          </div>
+        ) : null}
       </div>
     </div>
   );

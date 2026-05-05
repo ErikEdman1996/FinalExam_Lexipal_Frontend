@@ -12,6 +12,7 @@ import {
   textareaClassName,
 } from '../components/form/inputStyles';
 import { NoteModal } from '../components/NoteModal';
+import { WordLookupDetailsDialog } from '../components/WordLookupDetailsDialog';
 import { WordLookupModal } from '../components/WordLookupModal';
 import { useBooks } from '../features/books/useBooks';
 import { useXpGain } from '../features/xp/useXpGain';
@@ -19,6 +20,7 @@ import {
   completeSession,
   createNote,
   createSession,
+  extractPhoneticText,
   getActiveSessionByBook,
   getBook,
   updateSession,
@@ -26,16 +28,75 @@ import {
   type ApiSession,
   type RarityTier,
   type UpdateSessionPayload,
+  type WordLookupReadResponseDTO,
   type XpUpdateResponseDTO,
 } from '../api/api';
 
-interface SessionCodexEntry {
-  lemma: string;
-  definition: string;
-  synonyms: string[];
-}
-
 const AUTOSAVE_INTERVAL_SECONDS = 15;
+const RECENT_WORD_LOOKUPS_STORAGE_PREFIX = 'lexipal:reading-session-recent-word-lookups:';
+
+const isRecord = (value: unknown): value is Record<string, unknown> => {
+  return value !== null && typeof value === 'object';
+};
+
+const isStoredWordLookup = (value: unknown): value is WordLookupReadResponseDTO => {
+  if (!isRecord(value)) {
+    return false;
+  }
+
+  return (
+    typeof value.id === 'number'
+    && typeof value.wordId === 'number'
+    && typeof value.lemma === 'string'
+    && typeof value.firstLookedUpAt === 'string'
+    && typeof value.lastLookedUpAt === 'string'
+    && typeof value.lookupCount === 'number'
+  );
+};
+
+const getRecentWordLookupsStorageKey = (bookId: string | undefined) => {
+  return bookId ? `${RECENT_WORD_LOOKUPS_STORAGE_PREFIX}${bookId}` : null;
+};
+
+const loadStoredRecentWordLookups = (storageKey: string | null): WordLookupReadResponseDTO[] => {
+  if (!storageKey || typeof window === 'undefined') {
+    return [];
+  }
+
+  try {
+    const rawValue = window.sessionStorage.getItem(storageKey);
+
+    if (!rawValue) {
+      return [];
+    }
+
+    const parsedValue: unknown = JSON.parse(rawValue);
+    return Array.isArray(parsedValue) ? parsedValue.filter(isStoredWordLookup) : [];
+  } catch (error) {
+    console.error('Error loading recent word lookups:', error);
+    return [];
+  }
+};
+
+const saveStoredRecentWordLookups = (
+  storageKey: string | null,
+  lookups: WordLookupReadResponseDTO[],
+) => {
+  if (!storageKey || typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    if (lookups.length === 0) {
+      window.sessionStorage.removeItem(storageKey);
+      return;
+    }
+
+    window.sessionStorage.setItem(storageKey, JSON.stringify(lookups));
+  } catch (error) {
+    console.error('Error saving recent word lookups:', error);
+  }
+};
 
 const formatTime = (totalSeconds: number) => {
   const hours = Math.floor(totalSeconds / 3600);
@@ -56,6 +117,7 @@ const getErrorMessage = (error: unknown, fallbackMessage: string) => {
 export default function ReadingSession() {
   const { bookId } = useParams();
   const navigate = useNavigate();
+  const recentWordLookupsStorageKey = getRecentWordLookupsStorageKey(bookId);
   const [book, setBook] = useState<ApiBook | null>(null);
   const [isLoadingBook, setIsLoadingBook] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -67,7 +129,10 @@ export default function ReadingSession() {
   const [noteToastMessage, setNoteToastMessage] = useState<string | null>(null);
   const [seconds, setSeconds] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
-  const [codexEntries, setCodexEntries] = useState<SessionCodexEntry[]>([]);
+  const [recentWordLookups, setRecentWordLookups] = useState<WordLookupReadResponseDTO[]>(
+    () => loadStoredRecentWordLookups(recentWordLookupsStorageKey),
+  );
+  const [selectedLookup, setSelectedLookup] = useState<WordLookupReadResponseDTO | null>(null);
   const [activeSession, setActiveSession] = useState<ApiSession | null>(null);
   const { refreshBooks, refreshLibraryItems } = useBooks();
   const { showXpGain } = useXpGain();
@@ -87,6 +152,10 @@ export default function ReadingSession() {
   useEffect(() => {
     secondsRef.current = seconds;
   }, [seconds]);
+
+  useEffect(() => {
+    saveStoredRecentWordLookups(recentWordLookupsStorageKey, recentWordLookups);
+  }, [recentWordLookups, recentWordLookupsStorageKey]);
 
   const ensureSessionInitialized = useCallback(async (parsedBookId: number) => {
     if (activeSessionRef.current) {
@@ -313,6 +382,7 @@ export default function ReadingSession() {
 
     activeSessionRef.current = null;
     setActiveSession(null);
+    saveStoredRecentWordLookups(recentWordLookupsStorageKey, []);
     void refreshBooks({ silent: true }).catch((error) => {
       console.error('Error refreshing books after session completion:', error);
     });
@@ -322,29 +392,15 @@ export default function ReadingSession() {
     void navigate(`/book/${bookId}`);
   };
 
-  const handleCaptureWord = (captureResult: SessionCodexEntry & {
+  const handleCaptureWord = (captureResult: {
     isCollectible: boolean;
     isNewCapture: boolean;
-    alreadyCaptured: boolean;
-    xpValue: number;
     xpUpdate: XpUpdateResponseDTO | null;
     rarityTier: RarityTier;
   }) => {
     if (!captureResult.isCollectible || !captureResult.isNewCapture) {
       return;
     }
-
-    setCodexEntries((previousEntries) => {
-      if (previousEntries.some((word) => word.lemma.toLowerCase() === captureResult.lemma.toLowerCase())) {
-        return previousEntries;
-      }
-
-      return [...previousEntries, {
-        lemma: captureResult.lemma,
-        definition: captureResult.definition,
-        synonyms: captureResult.synonyms,
-      }];
-    });
 
     if (captureResult.xpUpdate) {
       showXpGain({
@@ -354,6 +410,15 @@ export default function ReadingSession() {
       });
     }
   };
+
+  const handleLookupSaved = useCallback((lookup: WordLookupReadResponseDTO) => {
+    setRecentWordLookups((previousLookups) => [
+      lookup,
+      ...previousLookups.filter((previousLookup) => previousLookup.id !== lookup.id),
+    ]);
+
+    setSelectedLookup((currentLookup) => (currentLookup?.id === lookup.id ? lookup : currentLookup));
+  }, []);
 
   const showNoteSavedToast = useCallback(() => {
     if (noteToastTimeoutRef.current != null) {
@@ -592,30 +657,45 @@ export default function ReadingSession() {
 
         <section className="mt-6 rounded-[28px] border border-border bg-surface p-5 shadow-[0_14px_30px_rgba(31,41,55,0.06)]">
           <div>
-            <p className="text-xs uppercase tracking-[0.22em] text-text-subtle">Captured Words</p>
+            <p className="text-xs uppercase tracking-[0.22em] text-text-subtle">Looked up Words</p>
             <p className="mt-2 text-sm text-text-muted">
-              {codexEntries.length === 0 ? 'No words captured yet' : `${codexEntries.length} words captured this session`}
+              {recentWordLookups.length === 0 ? 'No words looked up yet' : `${recentWordLookups.length} words looked up this session`}
             </p>
           </div>
 
-          {codexEntries.length === 0 ? (
+          {recentWordLookups.length === 0 ? (
             <div className="mt-4 rounded-[22px] bg-surface-muted px-4 py-5 text-sm leading-relaxed text-text-muted">
-              Pause for interesting vocabulary as you read, and your captured words will show up here.
+              Pause when you encounter unfamiliar words to look them up.
             </div>
           ) : (
-            <div className="mt-4 flex flex-wrap gap-2">
-              {codexEntries.map((entry) => (
-                <div
-                  key={entry.lemma}
-                  className="rounded-full border border-accent/25 bg-accent-soft px-3 py-1.5 text-sm font-medium text-accent-strong"
-                >
-                  {entry.lemma}
-                </div>
-              ))}
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {recentWordLookups.map((lookup) => {
+                const phoneticText = extractPhoneticText(lookup.phonetics);
+
+                return (
+                  <button
+                    key={lookup.id}
+                    type="button"
+                    onClick={() => setSelectedLookup(lookup)}
+                    className="rounded-[20px] border border-border bg-surface-alt px-4 py-3 text-left shadow-[0_10px_22px_rgba(31,41,55,0.05)] transition-[background-color,transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:bg-surface-muted hover:shadow-[0_14px_26px_rgba(31,41,55,0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                    aria-label={`Open details for ${lookup.lemma}`}
+                  >
+                    <span className="block truncate text-base font-semibold text-text">{lookup.lemma}</span>
+                    <span className="mt-1 block truncate text-sm font-medium italic text-text-muted">
+                      {phoneticText ? `/${phoneticText}/` : 'No phonetic'}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           )}
         </section>
       </div>
+
+      <WordLookupDetailsDialog
+        lookup={selectedLookup}
+        onClose={() => setSelectedLookup(null)}
+      />
 
       <WordLookupModal
         isOpen={showWordLookupModal}
@@ -623,6 +703,7 @@ export default function ReadingSession() {
         sessionId={activeSession?.id}
         bookId={bookId}
         onCapture={handleCaptureWord}
+        onLookupSaved={handleLookupSaved}
       />
 
       <NoteModal
@@ -643,7 +724,7 @@ export default function ReadingSession() {
           startPage={draftStartPage}
           initialEndPage={draftEndPage}
           initialReflection={draftReflection}
-          wordsCount={codexEntries.length}
+          wordsCount={recentWordLookups.length}
           onClose={() => setShowReflectionModal(false)}
           onSubmit={handleSaveSession}
         />
@@ -749,7 +830,7 @@ function ReflectionModal({
             Session complete
           </AppDialogTitle>
           <p className="mt-2 text-sm text-text-muted">
-            {formatTime(durationSeconds)} - {wordsCount} words captured
+            {formatTime(durationSeconds)} - {wordsCount} words looked up
           </p>
         </div>
         <AppDialogClose asChild>

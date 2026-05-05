@@ -487,14 +487,11 @@ export default function Library() {
         <section className="rounded-[32px] border border-border bg-surface p-5 shadow-[0_20px_48px_rgba(15,23,42,0.07)] sm:p-7 lg:p-8">
           <div className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
             <div className="min-w-0">
-              <p className="text-[0.72rem] font-medium uppercase tracking-[0.32em] text-text-subtle">
-                Your shelf
-              </p>
               <h1 className="mt-2 text-[1.9rem] font-semibold leading-tight tracking-[-0.05em] text-text sm:text-[2.4rem]">
                 My Library
               </h1>
               <p className="mt-2 max-w-xl text-sm leading-relaxed text-text-muted sm:text-base">
-                Keep books tidy, current, and moving.
+                Keep your books tidy and organized.
               </p>
             </div>
             <button

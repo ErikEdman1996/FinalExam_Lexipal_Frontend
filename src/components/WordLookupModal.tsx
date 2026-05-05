@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sparkles, X } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import { motion, useReducedMotion } from 'motion/react';
 import { Button } from './Button';
-import { AppDialog, AppDialogClose } from './dialog/AppDialog';
+import { AppDialog } from './dialog/AppDialog';
 import { inputClassName } from './form/inputStyles';
-import mothIcon from '../assets/moth_icon.png';
+import mothIcon from '../assets/moth_icon.svg';
+import mothIconLight from '../assets/moth_icon_light.png';
+import { useTheme } from '../features/theme/useTheme';
 import {
   type CodexOverallProgressDTO,
   type CodexPageProgressDTO,
@@ -19,6 +21,7 @@ import {
   type DictionarySense,
   type XpUpdateResponseDTO,
   type RarityTier,
+  type WordLookupReadResponseDTO,
 } from '../api/api';
 
 interface WordLookupModalProps {
@@ -39,6 +42,7 @@ interface WordLookupModalProps {
     pageProgress: CodexPageProgressDTO | null;
     overallProgress: CodexOverallProgressDTO | null;
   }) => void;
+  onLookupSaved?: (lookup: WordLookupReadResponseDTO) => void;
   sessionId?: number | null;
   bookId?: string | number | null;
 }
@@ -221,12 +225,12 @@ const getResultEyebrow = (result: LookupResult) => {
 };
 
 const searchInputClassName = `${inputClassName} placeholder:text-text-subtle focus:border-transparent`;
-const resultInfoCardClassName = 'rounded-[18px] border border-border bg-surface-alt p-3 dark:bg-surface-muted';
 
 export function WordLookupModal({
   isOpen,
   onClose,
   onCapture,
+  onLookupSaved,
   sessionId,
   bookId,
 }: WordLookupModalProps) {
@@ -236,6 +240,7 @@ export function WordLookupModal({
     <WordLookupModalContent
       onClose={onClose}
       onCapture={onCapture}
+      onLookupSaved={onLookupSaved}
       sessionId={sessionId}
       bookId={bookId}
     />
@@ -245,10 +250,12 @@ export function WordLookupModal({
 function WordLookupModalContent({
   onClose,
   onCapture,
+  onLookupSaved,
   sessionId,
   bookId,
 }: Omit<WordLookupModalProps, 'isOpen'>) {
   const navigate = useNavigate();
+  const { theme } = useTheme();
   const prefersReducedMotion = useReducedMotion() === true;
   const [word, setWord] = useState('');
   const [lookupError, setLookupError] = useState<string | null>(null);
@@ -262,6 +269,7 @@ function WordLookupModalContent({
   const revealTimeoutRef = useRef<number | null>(null);
   const pendingCapturePayloadRef = useRef<CapturePayload | null>(null);
   const captureCommittedRef = useRef(false);
+  const themedMothIcon = theme === 'light' ? mothIconLight : mothIcon;
   const shouldShowCaptureParticles = !!result?.isNewCapture && !!result?.isCollectible && result.rarityTier !== 'COMMON';
 
   useEffect(() => {
@@ -316,6 +324,7 @@ function WordLookupModalContent({
         lemma: trimmedWord,
       });
       const { wordLookup } = lookupResponse;
+      onLookupSaved?.(wordLookup);
       const mappedDefinition = extractDefinitionFromDefinitions(wordLookup.definitions);
       const mappedSenses = extractDictionarySenses(wordLookup.definitions);
       const mappedSynonyms = extractSynonymsFromDefinitions(wordLookup.definitions);
@@ -477,37 +486,27 @@ function WordLookupModalContent({
     <AppDialog
       isOpen
       onClose={onClose}
-      contentClassName="w-full max-w-lg max-h-[94vh] overflow-y-auto rounded-t-[32px] border border-border bg-surface shadow-[0_8px_32px_rgba(0,0,0,0.12)] animate-in slide-in-from-bottom duration-300 sm:rounded-[32px] sm:slide-in-from-bottom-0"
+      contentClassName="w-[calc(100vw-2rem)] max-w-lg bg-transparent p-0 shadow-none outline-none animate-in slide-in-from-bottom duration-300 sm:slide-in-from-bottom-0"
     >
-        <div className="p-6 pt-6">
-          <div className="mb-4 flex justify-end">
-            <AppDialogClose asChild>
-              <button
-                type="button"
-                onClick={onClose}
-                className="flex h-10 w-10 items-center justify-center rounded-full transition-colors hover:bg-surface-muted"
-                aria-label="Close word lookup modal"
-              >
-                <X size={20} className="text-text-muted" />
-              </button>
-            </AppDialogClose>
-          </div>
+      <div
+        className="relative transition-[height] duration-300"
+        style={{
+          height: `min(${lookupCardHeight}px, calc(94vh - 2rem))`,
+          perspective: prefersReducedMotion ? 'none' : '1200px',
+        }}
+      >
+        <div
+          className="relative h-full w-full transition-transform duration-700"
+          style={{
+            transformStyle: 'preserve-3d',
+            transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
+            transitionDuration: prefersReducedMotion ? '120ms' : '700ms',
+          }}
+        >
           <div
-            className="relative transition-[height] duration-300"
-            style={{ height: `${lookupCardHeight}px`, perspective: prefersReducedMotion ? 'none' : '1200px' }}
+            className="absolute inset-0 rounded-[24px] border border-border bg-surface p-5 overflow-hidden"
+            style={{ backfaceVisibility: 'hidden' }}
           >
-            <div
-              className="relative h-full w-full transition-transform duration-700"
-              style={{
-                transformStyle: 'preserve-3d',
-                transform: isFlipped ? 'rotateY(180deg)' : 'rotateY(0deg)',
-                transitionDuration: prefersReducedMotion ? '120ms' : '700ms',
-              }}
-            >
-              <div
-                className="absolute inset-0 rounded-[24px] border border-border bg-surface p-5 overflow-hidden"
-                style={{ backfaceVisibility: 'hidden' }}
-              >
                 {shouldRenderMysteryCard ? (
                   <motion.button
                     type="button"
@@ -527,7 +526,7 @@ function WordLookupModalContent({
                     }
                   >
                     <motion.img
-                      src={mothIcon}
+                      src={themedMothIcon}
                       alt=""
                       className="h-20 w-20 opacity-80"
                       animate={
@@ -684,53 +683,9 @@ function WordLookupModalContent({
                         </div>
                       ) : null}
 
-                      {!result.isCollectible ? (
-                        <div className="mt-4 rounded-[18px] border border-border bg-surface-alt p-3 text-sm leading-relaxed text-text-muted">
-                          This word is saved in Looked-up Words. It is not on the Codex board, so no Codex capture was created.
-                        </div>
-                      ) : null}
-
                       {result.alreadyCaptured ? (
                         <div className="mt-4 rounded-[18px] border border-border bg-surface-alt p-3 text-sm leading-relaxed text-text-muted">
                           This word was already in your Codex. No new capture XP was awarded.
-                        </div>
-                      ) : null}
-
-                      {result.isCollectible && result.pageNumber != null && result.slotNumber != null ? (
-                        <div className="mt-4 grid grid-cols-2 gap-3">
-                          <div className={resultInfoCardClassName}>
-                            <p className="text-[0.68rem] uppercase tracking-[0.2em] text-text-subtle">Board slot</p>
-                            <p className="mt-2 text-sm font-semibold text-text">
-                              Page {result.pageNumber}, Slot {result.slotNumber}
-                            </p>
-                          </div>
-                          <div className={resultInfoCardClassName}>
-                            <p className="text-[0.68rem] uppercase tracking-[0.2em] text-text-subtle">Collection</p>
-                            <p className="mt-2 text-sm font-semibold text-text">
-                              {result.isNewCapture ? 'Added to Volume 1' : 'Already in Volume 1'}
-                            </p>
-                          </div>
-                        </div>
-                      ) : null}
-
-                      {result.isCollectible && (result.pageProgress || result.overallProgress) ? (
-                        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                          {result.pageProgress ? (
-                            <div className={resultInfoCardClassName}>
-                              <p className="text-[0.68rem] uppercase tracking-[0.2em] text-text-subtle">Page progress</p>
-                              <p className="mt-2 text-sm font-semibold text-text">
-                                {result.pageProgress.capturedCount} / {result.pageProgress.totalCount}
-                              </p>
-                            </div>
-                          ) : null}
-                          {result.overallProgress ? (
-                            <div className={resultInfoCardClassName}>
-                              <p className="text-[0.68rem] uppercase tracking-[0.2em] text-text-subtle">Overall progress</p>
-                              <p className="mt-2 text-sm font-semibold text-text">
-                                {result.overallProgress.capturedWords} / {result.overallProgress.totalWords}
-                              </p>
-                            </div>
-                          ) : null}
                         </div>
                       ) : null}
 
@@ -853,7 +808,6 @@ function WordLookupModalContent({
               </motion.div>
             </div>
           </div>
-        </div>
     </AppDialog>
   );
 }

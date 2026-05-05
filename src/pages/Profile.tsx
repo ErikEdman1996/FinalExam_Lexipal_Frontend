@@ -26,7 +26,6 @@ import {
 } from '../components/form/inputStyles';
 import { ThemeToggle } from '../features/theme/ThemeToggle.tsx';
 import { useAuth } from '../features/auth/useAuth';
-import { getXpProgressMeta, XP_PER_LEVEL } from '../features/xp/xp';
 import { PortraitImage } from '../features/portraits/portraitAssets';
 import { formatLongDate, formatMonthDay } from '../utils/formatting';
 import {
@@ -687,7 +686,11 @@ export default function Profile() {
   }
 
   const { stats, streak, recentDailyActivities, createdAt, status } = profile;
-  const { level, xpIntoLevel, progressPercent } = getXpProgressMeta(stats.totalXpEarned);
+  const { level, xpIntoLevel, xpPerLevel, maxLevel } = stats;
+  const isAtMaxLevel = level >= maxLevel;
+  const progressPercent = isAtMaxLevel
+    ? 100
+    : Math.max(0, Math.min(100, (xpIntoLevel / Math.max(1, xpPerLevel)) * 100));
   const showNewUserState = isNewUserProfile(stats);
   const currentStreak = streak?.currentStreak ?? 0;
   const longestStreak = streak?.longestStreak ?? 0;
@@ -887,16 +890,22 @@ export default function Profile() {
 
               <div className="mt-5">
                 <div className="flex flex-wrap items-center justify-center gap-2 text-sm text-text-muted md:justify-start">
-                  <span className="rounded-full bg-brand-soft px-3 py-1.5 text-brand-strong">Level {level}</span>
+                  <span className="rounded-full bg-brand-soft px-3 py-1.5 text-brand-strong">
+                    Level {level}{isAtMaxLevel ? ' — MAX' : ''}
+                  </span>
                   <span className="rounded-full bg-surface-muted px-3 py-1.5">{stats.totalXpEarned} total XP</span>
                 </div>
                 <div className="mt-4 h-3.5 overflow-hidden rounded-full bg-surface-muted">
                   <div
                     className="h-full rounded-full bg-accent transition-[width] duration-500"
-                    style={{ width: `${Math.max(progressPercent, 6)}%` }}
+                    style={{ width: `${isAtMaxLevel ? 100 : Math.max(progressPercent, 6)}%` }}
                   />
                 </div>
-                <p className="mt-2 text-xs text-text-muted">{xpIntoLevel}/{XP_PER_LEVEL} XP to next level</p>
+                {isAtMaxLevel ? (
+                  <p className="mt-2 text-xs text-text-muted">Max level reached</p>
+                ) : (
+                  <p className="mt-2 text-xs text-text-muted">{xpIntoLevel}/{xpPerLevel} XP — {stats.xpToNextLevel} to next level</p>
+                )}
               </div>
 
               <div className="mt-5 flex flex-wrap items-center justify-center gap-2 text-sm text-text-muted md:justify-start">
