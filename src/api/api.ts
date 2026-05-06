@@ -86,6 +86,7 @@ export interface CreateBookRequest {
     title: string;
     author: string;
     totalPages: number;
+    startPage?: number;
 }
 
 export interface UpdateBookRequest {

@@ -27,6 +27,7 @@ function AddBookModalContent({ onClose, onAdd }: Omit<AddBookModalProps, 'isOpen
   const [title, setTitle] = useState('');
   const [author, setAuthor] = useState('');
   const [totalPages, setTotalPages] = useState('');
+  const [startPage, setStartPage] = useState('0');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
@@ -35,9 +36,20 @@ function AddBookModalContent({ onClose, onAdd }: Omit<AddBookModalProps, 'isOpen
     const trimmedTitle = title.trim();
     const trimmedAuthor = author.trim();
     const parsedTotalPages = Number(totalPages);
+    const parsedStartPage = startPage.trim() === '' ? 0 : Number(startPage);
 
     if (!trimmedTitle || !trimmedAuthor || !Number.isInteger(parsedTotalPages) || parsedTotalPages < 1) {
       setSubmitError('Enter a title, author, and a total page count of at least 1.');
+      return;
+    }
+
+    if (!Number.isInteger(parsedStartPage) || parsedStartPage < 0) {
+      setSubmitError('Enter a starting page of 0 or greater.');
+      return;
+    }
+
+    if (parsedStartPage >= parsedTotalPages) {
+      setSubmitError('Starting page must be less than total pages.');
       return;
     }
 
@@ -48,10 +60,12 @@ function AddBookModalContent({ onClose, onAdd }: Omit<AddBookModalProps, 'isOpen
         title: trimmedTitle,
         author: trimmedAuthor,
         totalPages: parsedTotalPages,
+        startPage: parsedStartPage,
       });
       setTitle('');
       setAuthor('');
       setTotalPages('');
+      setStartPage('0');
       onClose();
     } catch (error) {
       console.error('Error adding book:', error);
@@ -144,6 +158,23 @@ function AddBookModalContent({ onClose, onAdd }: Omit<AddBookModalProps, 'isOpen
             min="1"
             inputMode="numeric"
             required
+          />
+        </div>
+
+        <div>
+          <label htmlFor="add-book-starting-page" className={fieldLabelClassName}>
+            Starting Page
+          </label>
+          <input
+            id="add-book-starting-page"
+            name="startPage"
+            type="number"
+            value={startPage}
+            onChange={(event) => setStartPage(event.target.value)}
+            className={inputClassName}
+            placeholder="Enter starting page"
+            min="0"
+            inputMode="numeric"
           />
         </div>
 
