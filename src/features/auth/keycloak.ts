@@ -1,10 +1,10 @@
 import Keycloak from 'keycloak-js';
+import { getViteStringEnv } from '../../utils/env';
 
-// Replace these with your actual Keycloak settings
 const keycloak = new Keycloak({
-  url: 'http://localhost:8080', 
-  realm: 'Lexipal_Realm',
-  clientId: 'Lexipal_Frontend',
+  url: getViteStringEnv('VITE_KEYCLOAK_URL', 'http://localhost:8080'),
+  realm: getViteStringEnv('VITE_KEYCLOAK_REALM', 'Lexipal_Realm'),
+  clientId: getViteStringEnv('VITE_KEYCLOAK_CLIENT_ID', 'Lexipal_Frontend'),
 });
 
 export default keycloak;

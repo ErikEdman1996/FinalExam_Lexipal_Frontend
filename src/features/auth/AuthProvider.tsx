@@ -8,9 +8,10 @@ import {
 import keycloak from './keycloak';
 import { getProfile, type ProfileReadResponseDTO } from '../../api/api';
 import { AuthContext, type AuthContextValue } from './AuthContext';
+import { getViteStringEnv } from '../../utils/env';
 
 let keycloakInitPromise: Promise<boolean> | null = null;
-const BACKEND_CLIENT_ID = 'Lexipal_Backend';
+const BACKEND_CLIENT_ID = getViteStringEnv('VITE_KEYCLOAK_BACKEND_CLIENT_ID', 'Lexipal_Backend');
 
 async function initKeycloakOnce() {
   if (!keycloakInitPromise) {
