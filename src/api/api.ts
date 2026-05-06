@@ -226,6 +226,7 @@ export interface CircleMemberNoteDTO {
     chapterLabel: string | null;
     createdAt: string;
     sourceSessionId: number | null;
+    tags: ApiNoteTag[];
 }
 
 export interface CircleMemberDetailResponseDTO {
@@ -266,9 +267,25 @@ export interface CompleteSessionPayload {
     reflection: string;
 }
 
-export type NoteFieldName = 'quotedText' | 'pageNumber' | 'chapterLabel';
+export type NoteFieldName = 'quotedText' | 'pageNumber' | 'chapterLabel' | 'tagIds';
 
 export type NoteFieldErrors = Partial<Record<NoteFieldName, string>>;
+
+export type NoteTagFieldName = 'name' | 'colorHex';
+
+export type NoteTagFieldErrors = Partial<Record<NoteTagFieldName, string>>;
+
+export type NoteTagMatch = 'ANY' | 'ALL';
+
+export interface ApiNoteTag {
+    id: number;
+    name: string;
+    colorHex: string;
+}
+
+export interface ApiNoteTagSummary extends ApiNoteTag {
+    usageCount: number;
+}
 
 export interface ApiNote {
     id: number;
@@ -278,6 +295,7 @@ export interface ApiNote {
     chapterLabel: string | null;
     quotedText: string;
     createdAt: string;
+    tags: ApiNoteTag[];
 }
 
 type ApiNoteResponse = unknown;
@@ -290,12 +308,29 @@ export interface CreateNotePayload {
     quotedText: string;
     pageNumber: number;
     chapterLabel?: string;
+    tagIds?: number[];
 }
 
 export interface UpdateNotePayload {
     quotedText?: string;
     pageNumber?: number;
     chapterLabel?: string | null;
+    tagIds?: number[];
+}
+
+export interface GetNotesOptions {
+    tagIds?: number[];
+    tagMatch?: NoteTagMatch;
+}
+
+export interface CreateNoteTagPayload {
+    name: string;
+    colorHex: string;
+}
+
+export interface UpdateNoteTagPayload {
+    name?: string;
+    colorHex?: string;
 }
 
 export type ApiJsonValue =
@@ -779,6 +814,18 @@ const isNoteLikeRecord = (value: unknown): value is Record<string, unknown> => {
     );
 };
 
+const isNoteTagLikeRecord = (value: unknown): value is Record<string, unknown> => {
+    if (!isRecord(value)) {
+        return false;
+    }
+
+    return (
+        toFiniteNumber(value.id) !== null
+        && typeof value.name === 'string'
+        && typeof value.colorHex === 'string'
+    );
+};
+
 const toApiBook = (value: Record<string, unknown>): ApiBook => {
     const id = toFiniteNumber(value.id) ?? 0;
     const readPages = toFiniteNumber(value.readPages) ?? 0;
@@ -861,8 +908,31 @@ const toBookLibraryItem = (book: ApiBook): LibraryItemResponseDTO => {
     };
 };
 
+const toApiNoteTag = (value: Record<string, unknown>): ApiNoteTag => {
+    const name = typeof value.name === 'string' ? value.name.trim() : '';
+    const colorHex = typeof value.colorHex === 'string' ? value.colorHex.trim() : '';
+
+    return {
+        id: toFiniteNumber(value.id) ?? 0,
+        name,
+        colorHex,
+    };
+};
+
+const toApiNoteTagSummary = (value: Record<string, unknown>): ApiNoteTagSummary => {
+    return {
+        ...toApiNoteTag(value),
+        usageCount: Math.max(0, toFiniteNumber(value.usageCount) ?? 0),
+    };
+};
+
 const toApiNote = (value: Record<string, unknown>): ApiNote => {
     const rawChapterLabel = typeof value.chapterLabel === 'string' ? value.chapterLabel.trim() : '';
+    const tags = Array.isArray(value.tags)
+        ? value.tags
+            .filter(isNoteTagLikeRecord)
+            .map(toApiNoteTag)
+        : [];
 
     return {
         id: toFiniteNumber(value.id) ?? 0,
@@ -872,6 +942,7 @@ const toApiNote = (value: Record<string, unknown>): ApiNote => {
         chapterLabel: rawChapterLabel ? rawChapterLabel : null,
         quotedText: typeof value.quotedText === 'string' ? value.quotedText : '',
         createdAt: typeof value.createdAt === 'string' ? value.createdAt : '',
+        tags,
     };
 };
 
@@ -1801,6 +1872,42 @@ const normalizeNoteResponse = (value: ApiNoteResponse): ApiNote => {
     throw new Error('Unexpected note response shape.');
 };
 
+const normalizeNoteTagsResponse = (value: unknown): ApiNoteTagSummary[] => {
+    const array = Array.isArray(value)
+        ? value
+        : (isRecord(value)
+            ? [value.tags, value.noteTags, value.content, value.data, value.items]
+                .find((candidate) => Array.isArray(candidate)) as unknown[] | undefined
+            : undefined);
+
+    if (!Array.isArray(array)) {
+        return [];
+    }
+
+    return array
+        .filter(isNoteTagLikeRecord)
+        .map(toApiNoteTagSummary);
+};
+
+const normalizeNoteTagResponse = (value: unknown): ApiNoteTag => {
+    if (isNoteTagLikeRecord(value)) {
+        return toApiNoteTag(value);
+    }
+
+    if (isRecord(value)) {
+        const candidates = [value.tag, value.noteTag, value.data, value.item];
+
+        for (const candidate of candidates) {
+            if (isNoteTagLikeRecord(candidate)) {
+                return toApiNoteTag(candidate);
+            }
+        }
+    }
+
+    console.error('Unexpected note tag response shape. Raw payload:', value);
+    throw new Error('Unexpected note tag response shape.');
+};
+
 const toBookCircleVisibility = (value: unknown): BookCircleVisibility => {
     return value === 'OWNER_ONLY' ? 'OWNER_ONLY' : 'ALL_MEMBERS';
 };
@@ -1898,6 +2005,12 @@ const toCircleMemberNote = (value: unknown): CircleMemberNoteDTO | null => {
         return null;
     }
 
+    const tags = Array.isArray(value.tags)
+        ? value.tags
+            .filter(isNoteTagLikeRecord)
+            .map(toApiNoteTag)
+        : [];
+
     return {
         noteId,
         quotedText: typeof value.quotedText === 'string' ? value.quotedText : '',
@@ -1907,6 +2020,7 @@ const toCircleMemberNote = (value: unknown): CircleMemberNoteDTO | null => {
             : null,
         createdAt: typeof value.createdAt === 'string' ? value.createdAt : '',
         sourceSessionId: value.sourceSessionId == null ? null : (toFiniteNumber(value.sourceSessionId) ?? null),
+        tags,
     };
 };
 
@@ -2174,7 +2288,8 @@ const getFirstErrorString = (value: unknown): string | null => {
     return null;
 };
 
-const NOTE_FIELD_NAMES = ['quotedText', 'pageNumber', 'chapterLabel'] as const satisfies readonly NoteFieldName[];
+const NOTE_FIELD_NAMES = ['quotedText', 'pageNumber', 'chapterLabel', 'tagIds'] as const satisfies readonly NoteFieldName[];
+const NOTE_TAG_FIELD_NAMES = ['name', 'colorHex'] as const satisfies readonly NoteTagFieldName[];
 
 const extractFieldErrors = <FieldName extends string>(
     payload: unknown,
@@ -2308,6 +2423,33 @@ const toNoteValidationError = (
     }
 
     return new ApiValidationError<NoteFieldName>(message, {
+        status,
+        fieldErrors,
+    });
+};
+
+const toNoteTagValidationError = (
+    payload: unknown,
+    fallbackMessage: string,
+    status: number,
+) => {
+    const message = normalizeErrorMessage(payload, fallbackMessage);
+    const fieldErrors = extractFieldErrors(payload, NOTE_TAG_FIELD_NAMES);
+    const normalizedMessage = message.toLowerCase();
+
+    if (Object.keys(fieldErrors).length === 0) {
+        if (normalizedMessage.includes('color')) {
+            fieldErrors.colorHex = message;
+        } else if (
+            normalizedMessage.includes('name')
+            || normalizedMessage.includes('duplicate')
+            || normalizedMessage.includes('already exists')
+        ) {
+            fieldErrors.name = message;
+        }
+    }
+
+    return new ApiValidationError<NoteTagFieldName>(message, {
         status,
         fieldErrors,
     });
@@ -3336,9 +3478,127 @@ export const completeSession = async (sessionId: number, payload: CompleteSessio
     }
 };
 
-export const getNotes = async () => {
+const buildNotesQuery = (options: GetNotesOptions = {}) => {
+    const tagIds = (options.tagIds ?? [])
+        .filter((tagId) => Number.isFinite(tagId) && tagId > 0)
+        .map((tagId) => Math.floor(tagId));
+
+    if (tagIds.length === 0) {
+        return '';
+    }
+
+    const params = new URLSearchParams();
+    params.set('tagIds', tagIds.join(','));
+    params.set('tagMatch', options.tagMatch === 'ALL' ? 'ALL' : 'ANY');
+    return `?${params.toString()}`;
+};
+
+export const getNoteTags = async () => {
     try {
-        const res = await fetch(`${API_BASE_URL}/notes`, {
+        const res = await fetch(`${API_BASE_URL}/note-tags`, {
+            headers: await buildAuthHeaders(),
+        });
+
+        if (res.status === 204) {
+            return [];
+        }
+
+        if (!res.ok) {
+            throw toApiResponseError(await readErrorPayload(res), 'Could not load note tags.', res.status);
+        }
+
+        const data = await res.json();
+        return normalizeNoteTagsResponse(data);
+    } catch (error) {
+        console.error('Error fetching note tags:', error);
+        throw error;
+    }
+};
+
+export const createNoteTag = async (payload: CreateNoteTagPayload) => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/note-tags`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(await buildAuthHeaders()),
+            },
+            body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) {
+            const errorPayload = await readErrorPayload(res);
+
+            if (res.status === 400 || res.status === 409) {
+                throw toNoteTagValidationError(errorPayload, 'Could not create tag.', res.status);
+            }
+
+            throw toApiResponseError(errorPayload, 'Could not create tag.', res.status);
+        }
+
+        const data = await res.json();
+        return normalizeNoteTagResponse(data);
+    } catch (error) {
+        console.error('Error creating note tag:', error);
+        throw error;
+    }
+};
+
+export const updateNoteTag = async (
+    tagId: number,
+    payload: UpdateNoteTagPayload,
+) => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/note-tags/${tagId}`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(await buildAuthHeaders()),
+            },
+            body: JSON.stringify(payload),
+        });
+
+        if (!res.ok) {
+            const errorPayload = await readErrorPayload(res);
+
+            if (res.status === 400 || res.status === 409) {
+                throw toNoteTagValidationError(errorPayload, 'Could not update tag.', res.status);
+            }
+
+            throw toApiResponseError(errorPayload, 'Could not update tag.', res.status);
+        }
+
+        if (res.status === 204) {
+            return null;
+        }
+
+        const data = await res.json();
+        return normalizeNoteTagResponse(data);
+    } catch (error) {
+        console.error('Error updating note tag:', error);
+        throw error;
+    }
+};
+
+export const deleteNoteTag = async (tagId: number) => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/note-tags/${tagId}`, {
+            method: 'DELETE',
+            headers: await buildAuthHeaders(),
+        });
+
+        if (!res.ok) {
+            throw toApiResponseError(await readErrorPayload(res), 'Could not delete tag.', res.status);
+        }
+    } catch (error) {
+        console.error('Error deleting note tag:', error);
+        throw error;
+    }
+};
+
+export const getNotes = async (options: GetNotesOptions = {}) => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/notes${buildNotesQuery(options)}`, {
             headers: await buildAuthHeaders(),
         });
 
@@ -3358,9 +3618,12 @@ export const getNotes = async () => {
     }
 };
 
-export const getNotesByBook = async (bookId: string | number) => {
+export const getNotesByBook = async (
+    bookId: string | number,
+    options: GetNotesOptions = {},
+) => {
     try {
-        const res = await fetch(`${API_BASE_URL}/notes/book/${bookId}`, {
+        const res = await fetch(`${API_BASE_URL}/notes/book/${bookId}${buildNotesQuery(options)}`, {
             headers: await buildAuthHeaders(),
         });
 

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Archive, ArrowLeft, Clock, FileText, Pencil, Play, RotateCcw, Trash2 } from 'lucide-react';
+import { Archive, ArrowLeft, Clock, FileText, Pencil, Play, RotateCcw, Settings2, Trash2 } from 'lucide-react';
 import { motion } from 'motion/react';
 import { BookCover } from '../components/BookCover';
 import { BottomNav } from '../components/BottomNav';
@@ -8,6 +8,7 @@ import { Button } from '../components/Button';
 import { ConfirmModal } from '../components/ConfirmModal';
 import { NoteModal } from '../components/NoteModal';
 import { useBooks } from '../features/books/useBooks';
+import { ManageNoteTagsDialog, NoteTagChip, NoteTagFilterBar, useNoteTags } from '../features/noteTags';
 import { formatDateValue } from '../utils/formatting';
 import {
   deleteBook,
@@ -21,6 +22,7 @@ import {
   type ApiBook,
   type ApiNote,
   type ApiSession,
+  type NoteTagMatch,
 } from '../api/api';
 
 type BookDetailsTab = 'overview' | 'sessions' | 'notes';
@@ -148,6 +150,9 @@ function BookDetailsContent({ bookId }: { bookId?: string }) {
   const [notes, setNotes] = useState<ApiNote[]>([]);
   const [editingNote, setEditingNote] = useState<ApiNote | null>(null);
   const [pendingDeleteNote, setPendingDeleteNote] = useState<ApiNote | null>(null);
+  const [isTagManagerOpen, setIsTagManagerOpen] = useState(false);
+  const [selectedTagIds, setSelectedTagIds] = useState<number[]>([]);
+  const [tagMatch, setTagMatch] = useState<NoteTagMatch>('ANY');
   const [isLoading, setIsLoading] = useState(true);
   const [isNotesLoading, setIsNotesLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -155,6 +160,7 @@ function BookDetailsContent({ bookId }: { bookId?: string }) {
   const [isUpdatingArchiveStatus, setIsUpdatingArchiveStatus] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deletingNoteId, setDeletingNoteId] = useState<number | null>(null);
+  const noteTags = useNoteTags();
   const activeTab: BookDetailsTab = searchParams.get('tab') === 'sessions'
     ? 'sessions'
     : searchParams.get('tab') === 'notes'
@@ -223,7 +229,10 @@ function BookDetailsContent({ bookId }: { bookId?: string }) {
     try {
       setIsNotesLoading(true);
       setNotesError(null);
-      const notesResponse = await getNotesByBook(bookId);
+      const notesResponse = await getNotesByBook(bookId, {
+        tagIds: selectedTagIds,
+        tagMatch,
+      });
       setNotes(notesResponse);
     } catch (error) {
       console.error('Error loading notes:', error);
@@ -231,11 +240,33 @@ function BookDetailsContent({ bookId }: { bookId?: string }) {
     } finally {
       setIsNotesLoading(false);
     }
-  }, [bookId]);
+  }, [bookId, selectedTagIds, tagMatch]);
 
   useEffect(() => {
     void refreshNotes();
   }, [refreshNotes]);
+
+  const applySelectedTagIds = (nextTagIds: number[]) => {
+    const uniqueTagIds = Array.from(new Set(nextTagIds));
+    setSelectedTagIds(uniqueTagIds);
+
+    if (uniqueTagIds.length < 2) {
+      setTagMatch('ANY');
+    }
+  };
+
+  const handleToggleTagFilter = (tagId: number) => {
+    if (selectedTagIds.includes(tagId)) {
+      applySelectedTagIds(selectedTagIds.filter((selectedTagId) => selectedTagId !== tagId));
+      return;
+    }
+
+    applySelectedTagIds([...selectedTagIds, tagId]);
+  };
+
+  const handleClearTagFilters = () => {
+    applySelectedTagIds([]);
+  };
 
   const handleDeleteBook = async () => {
     if (!bookId || isDeleting) {
@@ -296,10 +327,12 @@ function BookDetailsContent({ bookId }: { bookId?: string }) {
     quotedText,
     pageNumber,
     chapterLabel,
+    tagIds,
   }: {
     quotedText: string;
     pageNumber: number;
     chapterLabel?: string;
+    tagIds?: number[];
   }) => {
     if (!editingNote) {
       throw new Error('Note not found.');
@@ -309,9 +342,13 @@ function BookDetailsContent({ bookId }: { bookId?: string }) {
       quotedText,
       pageNumber,
       chapterLabel: chapterLabel ?? null,
+      tagIds: tagIds ?? [],
     });
 
     setEditingNote(null);
+    await noteTags.refreshTags().catch((error) => {
+      console.error('Error refreshing note tags after note update:', error);
+    });
     await refreshNotes();
   };
 
@@ -329,6 +366,9 @@ function BookDetailsContent({ bookId }: { bookId?: string }) {
         setEditingNote(null);
       }
 
+      await noteTags.refreshTags().catch((error) => {
+        console.error('Error refreshing note tags after note delete:', error);
+      });
       await refreshNotes();
       setPendingDeleteNote(null);
     } catch (error) {
@@ -336,6 +376,17 @@ function BookDetailsContent({ bookId }: { bookId?: string }) {
       setNotesError('Could not delete this note right now.');
     } finally {
       setDeletingNoteId(null);
+    }
+  };
+
+  const handleDeleteTag = async (tagId: number) => {
+    const nextSelectedTagIds = selectedTagIds.filter((selectedTagId) => selectedTagId !== tagId);
+
+    await noteTags.deleteTag(tagId);
+    applySelectedTagIds(nextSelectedTagIds);
+
+    if (nextSelectedTagIds.length === selectedTagIds.length) {
+      await refreshNotes();
     }
   };
 
@@ -350,7 +401,6 @@ function BookDetailsContent({ bookId }: { bookId?: string }) {
     [book],
   );
 
-  const pagesRemaining = Math.max((book?.totalPages ?? 0) - (book?.readPages ?? 0), 0);
   const activeDraftCurrentPage = activeDraft
     ? Math.max(activeDraft.endPage, activeDraft.startPage)
     : 0;
@@ -582,9 +632,19 @@ function BookDetailsContent({ bookId }: { bookId?: string }) {
                       Notes are added during active reading sessions and stay attached to this book.
                     </p>
                   </div>
-                  <span className="rounded-full bg-surface-muted px-3 py-1 text-sm font-medium text-text-muted">
-                    {notes.length}
-                  </span>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded-full bg-surface-muted px-3 py-1 text-sm font-medium text-text-muted">
+                      {notes.length}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsTagManagerOpen(true)}
+                      className="inline-flex h-10 items-center gap-2 rounded-full border border-border bg-surface px-4 text-sm font-medium text-text transition-colors hover:bg-surface-alt"
+                    >
+                      <Settings2 size={14} />
+                      Manage tags
+                    </button>
+                  </div>
                 </div>
 
                 {notesError ? (
@@ -593,13 +653,32 @@ function BookDetailsContent({ bookId }: { bookId?: string }) {
                   </div>
                 ) : null}
 
-                {isNotesLoading ? (
+                {noteTags.errorMessage ? (
+                  <div className="mt-5 rounded-[22px] border border-danger/30 bg-danger-soft px-4 py-4 text-sm text-danger">
+                    {noteTags.errorMessage}
+                  </div>
+                ) : null}
+
+                <NoteTagFilterBar
+                  tags={noteTags.tags}
+                  activeTagIds={selectedTagIds}
+                  tagMatch={tagMatch}
+                  isUpdating={isNotesLoading && notes.length > 0}
+                  isLoadingTags={noteTags.isLoading}
+                  onToggleTag={handleToggleTagFilter}
+                  onTagMatchChange={setTagMatch}
+                  onClear={handleClearTagFilters}
+                />
+
+                {isNotesLoading && notes.length === 0 ? (
                   <div className="mt-5 rounded-[24px] border border-border bg-surface-alt px-4 py-8 text-center text-sm text-text-muted">
                     Loading notes...
                   </div>
                 ) : notes.length === 0 ? (
                   <div className="mt-5 rounded-[24px] border border-border bg-surface-alt px-4 py-8 text-center text-sm text-text-muted">
-                    No notes for this book yet. Add one during an active reading session.
+                    {selectedTagIds.length > 0
+                      ? 'No notes match the selected tags.'
+                      : 'No notes for this book yet. Add one during an active reading session.'}
                   </div>
                 ) : (
                   <div className="mt-5 space-y-4">
@@ -643,6 +722,14 @@ function BookDetailsContent({ bookId }: { bookId?: string }) {
                             {note.quotedText}
                           </p>
 
+                          {note.tags.length > 0 ? (
+                            <div className="mt-4 flex flex-wrap gap-2">
+                              {note.tags.map((tag) => (
+                                <NoteTagChip key={tag.id} tag={tag} />
+                              ))}
+                            </div>
+                          ) : null}
+
                           <p className="mt-4 text-xs uppercase tracking-[0.18em] text-text-subtle">
                             {formatNoteCreatedAt(note.createdAt)}
                           </p>
@@ -666,8 +753,33 @@ function BookDetailsContent({ bookId }: { bookId?: string }) {
         initialQuotedText={editingNote?.quotedText ?? ''}
         initialPageNumber={editingNote?.pageNumber ?? null}
         initialChapterLabel={editingNote?.chapterLabel ?? ''}
+        initialTagIds={editingNote?.tags.map((tag) => tag.id) ?? []}
+        availableTags={noteTags.tags}
+        isTagsLoading={noteTags.isLoading}
+        tagLoadError={noteTags.errorMessage}
+        submitTagIdsWhenEmpty
+        onCreateTag={noteTags.createTag}
         onClose={() => setEditingNote(null)}
         onSubmit={handleUpdateNote}
+      />
+
+      <ManageNoteTagsDialog
+        isOpen={isTagManagerOpen}
+        tags={noteTags.tags}
+        isLoading={noteTags.isLoading}
+        loadError={noteTags.errorMessage}
+        onClose={() => setIsTagManagerOpen(false)}
+        onUpdateTag={noteTags.updateTag}
+        onDeleteTag={handleDeleteTag}
+        onTagsChanged={async (reason) => {
+          await noteTags.refreshTags().catch((error) => {
+            console.error('Error refreshing note tags after tag change:', error);
+          });
+
+          if (reason === 'update') {
+            await refreshNotes();
+          }
+        }}
       />
 
       <ConfirmModal

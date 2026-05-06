@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, BookOpen, Check, Pause, Play, Search, Square, X } from 'lucide-react';
+import { ArrowLeft, BookOpen, Check, ChevronDown, Pause, Play, Search, Square, X } from 'lucide-react';
 import { BookCover } from '../components/BookCover';
 import { Button } from '../components/Button';
 import { AppDialog, AppDialogClose, AppDialogTitle } from '../components/dialog/AppDialog';
@@ -15,6 +15,8 @@ import { NoteModal } from '../components/NoteModal';
 import { WordLookupDetailsDialog } from '../components/WordLookupDetailsDialog';
 import { WordLookupModal } from '../components/WordLookupModal';
 import { useBooks } from '../features/books/useBooks';
+import { ReadingMusicPlayer } from '../features/music/ReadingMusicPlayer';
+import { useNoteTags } from '../features/noteTags';
 import { useXpGain } from '../features/xp/useXpGain';
 import {
   completeSession,
@@ -129,12 +131,14 @@ export default function ReadingSession() {
   const [noteToastMessage, setNoteToastMessage] = useState<string | null>(null);
   const [seconds, setSeconds] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
+  const [isLookedUpWordsExpanded, setIsLookedUpWordsExpanded] = useState(false);
   const [recentWordLookups, setRecentWordLookups] = useState<WordLookupReadResponseDTO[]>(
     () => loadStoredRecentWordLookups(recentWordLookupsStorageKey),
   );
   const [selectedLookup, setSelectedLookup] = useState<WordLookupReadResponseDTO | null>(null);
   const [activeSession, setActiveSession] = useState<ApiSession | null>(null);
   const { refreshBooks, refreshLibraryItems } = useBooks();
+  const noteTags = useNoteTags();
   const { showXpGain } = useXpGain();
   const intervalRef = useRef<number | null>(null);
   const shouldResumeAfterActionModalRef = useRef(false);
@@ -436,10 +440,12 @@ export default function ReadingSession() {
     quotedText,
     pageNumber,
     chapterLabel,
+    tagIds,
   }: {
     quotedText: string;
     pageNumber: number;
     chapterLabel?: string;
+    tagIds?: number[];
   }) => {
     if (!book || !activeSession) {
       throw new Error('Reading session is not ready yet.');
@@ -451,6 +457,7 @@ export default function ReadingSession() {
       quotedText,
       pageNumber,
       chapterLabel,
+      ...(tagIds && tagIds.length > 0 ? { tagIds } : {}),
     });
 
     setShowNoteModal(false);
@@ -655,40 +662,66 @@ export default function ReadingSession() {
           {actionError ? <p className="mt-4 text-sm text-danger">{actionError}</p> : null}
         </section>
 
-        <section className="mt-6 rounded-[28px] border border-border bg-surface p-5 shadow-[0_14px_30px_rgba(31,41,55,0.06)]">
-          <div>
-            <p className="text-xs uppercase tracking-[0.22em] text-text-subtle">Looked up Words</p>
-            <p className="mt-2 text-sm text-text-muted">
-              {recentWordLookups.length === 0 ? 'No words looked up yet' : `${recentWordLookups.length} words looked up this session`}
-            </p>
-          </div>
+        <ReadingMusicPlayer />
 
-          {recentWordLookups.length === 0 ? (
-            <div className="mt-4 rounded-[22px] bg-surface-muted px-4 py-5 text-sm leading-relaxed text-text-muted">
-              Pause when you encounter unfamiliar words to look them up.
-            </div>
-          ) : (
-            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-              {recentWordLookups.map((lookup) => {
-                const phoneticText = extractPhoneticText(lookup.phonetics);
+        <section className="mt-4 rounded-[24px] border border-border bg-surface shadow-[0_12px_26px_rgba(31,41,55,0.05)]">
+          <button
+            type="button"
+            onClick={() => setIsLookedUpWordsExpanded((currentValue) => !currentValue)}
+            className="flex w-full items-center justify-between gap-3 rounded-[24px] px-4 py-3 text-left transition-colors hover:bg-surface-alt/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-brand"
+            aria-expanded={isLookedUpWordsExpanded}
+            aria-controls="looked-up-words-panel"
+          >
+            <span className="flex min-w-0 items-center gap-3">
+              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-surface-muted text-text-muted">
+                <Search size={18} />
+              </span>
+              <span className="min-w-0">
+                <span className="block text-xs uppercase tracking-[0.22em] text-text-subtle">Looked up Words</span>
+                <span className="mt-1 block truncate text-sm font-medium text-text">
+                  {recentWordLookups.length === 0 ? 'No words looked up yet' : `${recentWordLookups.length} words this session`}
+                </span>
+              </span>
+            </span>
 
-                return (
-                  <button
-                    key={lookup.id}
-                    type="button"
-                    onClick={() => setSelectedLookup(lookup)}
-                    className="rounded-[20px] border border-border bg-surface-alt px-4 py-3 text-left shadow-[0_10px_22px_rgba(31,41,55,0.05)] transition-[background-color,transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:bg-surface-muted hover:shadow-[0_14px_26px_rgba(31,41,55,0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-                    aria-label={`Open details for ${lookup.lemma}`}
-                  >
-                    <span className="block truncate text-base font-semibold text-text">{lookup.lemma}</span>
-                    <span className="mt-1 block truncate text-sm font-medium italic text-text-muted">
-                      {phoneticText ? `/${phoneticText}/` : 'No phonetic'}
-                    </span>
-                  </button>
-                );
-              })}
+            <ChevronDown
+              size={18}
+              className={`shrink-0 text-text-muted transition-transform ${
+                isLookedUpWordsExpanded ? 'rotate-180' : ''
+              }`}
+            />
+          </button>
+
+          {isLookedUpWordsExpanded ? (
+            <div id="looked-up-words-panel" className="mx-4 border-t border-border/70 pb-4 pt-4">
+              {recentWordLookups.length === 0 ? (
+                <div className="rounded-[20px] bg-surface-muted px-4 py-5 text-sm leading-relaxed text-text-muted">
+                  Pause when you encounter unfamiliar words to look them up.
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {recentWordLookups.map((lookup) => {
+                    const phoneticText = extractPhoneticText(lookup.phonetics);
+
+                    return (
+                      <button
+                        key={lookup.id}
+                        type="button"
+                        onClick={() => setSelectedLookup(lookup)}
+                        className="rounded-[20px] border border-border bg-surface-alt px-4 py-3 text-left shadow-[0_10px_22px_rgba(31,41,55,0.05)] transition-[background-color,transform,box-shadow] duration-200 hover:-translate-y-0.5 hover:bg-surface-muted hover:shadow-[0_14px_26px_rgba(31,41,55,0.08)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+                        aria-label={`Open details for ${lookup.lemma}`}
+                      >
+                        <span className="block truncate text-base font-semibold text-text">{lookup.lemma}</span>
+                        <span className="mt-1 block truncate text-sm font-medium italic text-text-muted">
+                          {phoneticText ? `/${phoneticText}/` : 'No phonetic'}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          )}
+          ) : null}
         </section>
       </div>
 
@@ -712,6 +745,10 @@ export default function ReadingSession() {
         submitLabel="Save note"
         bookTotalPages={book.totalPages}
         initialPageNumber={noteInitialPage}
+        availableTags={noteTags.tags}
+        isTagsLoading={noteTags.isLoading}
+        tagLoadError={noteTags.errorMessage}
+        onCreateTag={noteTags.createTag}
         onClose={() => setShowNoteModal(false)}
         onSubmit={handleSaveNote}
       />

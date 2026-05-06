@@ -1,6 +1,7 @@
 import { useId, useState, type FormEvent } from 'react';
 import { FileText, X } from 'lucide-react';
-import { ApiValidationError, type NoteFieldErrors } from '../api/api';
+import { ApiValidationError, type ApiNoteTag, type ApiNoteTagSummary, type NoteFieldErrors } from '../api/api';
+import { NoteTagMultiSelect } from '../features/noteTags';
 import { Button } from './Button';
 import { AppDialog, AppDialogClose, AppDialogTitle } from './dialog/AppDialog';
 import {
@@ -15,6 +16,7 @@ interface NoteSubmitValues {
   quotedText: string;
   pageNumber: number;
   chapterLabel?: string;
+  tagIds?: number[];
 }
 
 interface NoteModalProps {
@@ -25,6 +27,12 @@ interface NoteModalProps {
   initialQuotedText?: string;
   initialPageNumber?: number | null;
   initialChapterLabel?: string | null;
+  initialTagIds?: number[];
+  availableTags?: ApiNoteTagSummary[];
+  isTagsLoading?: boolean;
+  tagLoadError?: string | null;
+  submitTagIdsWhenEmpty?: boolean;
+  onCreateTag?: (payload: { name: string; colorHex: string }) => Promise<ApiNoteTag>;
   onClose: () => void;
   onSubmit: (values: NoteSubmitValues) => Promise<void>;
 }
@@ -37,6 +45,12 @@ export function NoteModal({
   initialQuotedText = '',
   initialPageNumber = null,
   initialChapterLabel = '',
+  initialTagIds = [],
+  availableTags = [],
+  isTagsLoading = false,
+  tagLoadError = null,
+  submitTagIdsWhenEmpty = false,
+  onCreateTag,
   onClose,
   onSubmit,
 }: NoteModalProps) {
@@ -50,6 +64,7 @@ export function NoteModal({
     initialQuotedText,
     initialPageNumber ?? '',
     initialChapterLabel ?? '',
+    initialTagIds.join(','),
   ].join('|');
 
   return (
@@ -61,6 +76,12 @@ export function NoteModal({
       initialQuotedText={initialQuotedText}
       initialPageNumber={initialPageNumber}
       initialChapterLabel={initialChapterLabel}
+      initialTagIds={initialTagIds}
+      availableTags={availableTags}
+      isTagsLoading={isTagsLoading}
+      tagLoadError={tagLoadError}
+      submitTagIdsWhenEmpty={submitTagIdsWhenEmpty}
+      onCreateTag={onCreateTag}
       onClose={onClose}
       onSubmit={onSubmit}
     />
@@ -74,6 +95,12 @@ function NoteModalContent({
   initialQuotedText = '',
   initialPageNumber = null,
   initialChapterLabel = '',
+  initialTagIds = [],
+  availableTags = [],
+  isTagsLoading = false,
+  tagLoadError = null,
+  submitTagIdsWhenEmpty = false,
+  onCreateTag,
   onClose,
   onSubmit,
 }: Omit<NoteModalProps, 'isOpen'>) {
@@ -83,6 +110,7 @@ function NoteModalContent({
     initialPageNumber != null && initialPageNumber > 0 ? String(initialPageNumber) : '',
   );
   const [chapterLabel, setChapterLabel] = useState(initialChapterLabel ?? '');
+  const [selectedTagIds, setSelectedTagIds] = useState(initialTagIds);
   const [fieldErrors, setFieldErrors] = useState<NoteFieldErrors>({});
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -137,6 +165,7 @@ function NoteModalContent({
         quotedText: trimmedQuotedText,
         pageNumber: parsedPageNumber,
         chapterLabel: trimmedChapterLabel || undefined,
+        ...((selectedTagIds.length > 0 || submitTagIdsWhenEmpty) ? { tagIds: selectedTagIds } : {}),
       });
     } catch (error) {
       if (error instanceof ApiValidationError) {
@@ -281,6 +310,24 @@ function NoteModalContent({
               </p>
             ) : null}
           </div>
+
+          {onCreateTag ? (
+            <NoteTagMultiSelect
+              id={`${titleId}-note-tags`}
+              tags={availableTags}
+              selectedTagIds={selectedTagIds}
+              onChange={(nextTagIds) => {
+                setSelectedTagIds(nextTagIds);
+                clearFieldError('tagIds');
+                setSubmitError(null);
+              }}
+              onCreateTag={onCreateTag}
+              disabled={isSubmitting}
+              isLoading={isTagsLoading}
+              loadError={tagLoadError}
+              error={fieldErrors.tagIds}
+            />
+          ) : null}
 
           {submitError ? <p className={fieldErrorClassName}>{submitError}</p> : null}
 

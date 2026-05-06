@@ -46,10 +46,6 @@ function XpGainBarItem({
   onComplete: () => void;
 }) {
   const prefersReducedMotion = useReducedMotion() === true;
-  const [phase, setPhase] = useState<'enter' | 'visible' | 'exit'>('enter');
-  const [progressPercent, setProgressPercent] = useState(0);
-  const [displayTotalXp, setDisplayTotalXp] = useState(() => item.fromTotalXp);
-
   const isAtMaxLevel = item.level >= item.maxLevel;
   const finalProgressPercent = isAtMaxLevel
     ? 100
@@ -57,10 +53,11 @@ function XpGainBarItem({
   const startProgressPercent = item.leveledUp
     ? 0
     : clampPercent(((item.previousTotalXp - item.currentLevelMinXp) / Math.max(1, item.xpPerLevel)) * 100);
+  const [phase, setPhase] = useState<'enter' | 'visible' | 'exit'>('enter');
+  const [progressPercent, setProgressPercent] = useState(startProgressPercent);
+  const [displayTotalXp, setDisplayTotalXp] = useState(() => item.fromTotalXp);
 
   useEffect(() => {
-    setProgressPercent(startProgressPercent);
-
     const animationDurationMs = prefersReducedMotion ? 0 : 1200;
     const visibleHoldMs = prefersReducedMotion ? 3600 : 3900;
     const exitDurationMs = 260;

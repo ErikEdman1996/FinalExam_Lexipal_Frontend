@@ -3,6 +3,7 @@ import { ArrowUpRight, BookCopy, Clock3, StickyNote, X } from 'lucide-react';
 import { ApiResponseError, getCircleMemberDetails, type CircleMemberDetailResponseDTO } from '../../api/api';
 import { Button } from '../../components/Button';
 import { AppDialog, AppDialogClose, AppDialogTitle } from '../../components/dialog/AppDialog';
+import { NoteTagChip } from '../noteTags';
 import {
   formatCircleDate,
   formatCircleDateTime,
@@ -326,6 +327,14 @@ function MemberDetailsPanelContent({
                       <blockquote className="mt-4 rounded-[20px] bg-surface-alt px-4 py-4 text-base leading-relaxed text-text">
                         &ldquo;{note.quotedText}&rdquo;
                       </blockquote>
+
+                      {note.tags.length > 0 ? (
+                        <div className="mt-4 flex flex-wrap gap-2">
+                          {note.tags.map((tag) => (
+                            <NoteTagChip key={tag.id} tag={tag} />
+                          ))}
+                        </div>
+                      ) : null}
 
                       <div className="mt-4 flex flex-wrap items-center gap-3 text-sm text-text-muted">
                         <span>{formatCircleDateTime(note.createdAt)}</span>
