@@ -629,14 +629,6 @@ export default function ReadingSession() {
     ? Math.max(activeSession.endPage, activeSession.startPage)
     : null;
   const noteInitialPage = noteDefaultPage != null && noteDefaultPage > 0 ? noteDefaultPage : null;
-  const wakeLockStatusLabel = keepScreenAwake && isRunning
-    ? wakeLock.status === 'active'
-      ? 'Screen awake'
-      : wakeLock.status === 'unsupported' || wakeLock.status === 'unavailable'
-        ? 'Screen awake unavailable'
-        : null
-    : null;
-
   if (isLoadingBook) {
     return (
       <div className="page-bg min-h-screen pb-24">
@@ -760,38 +752,27 @@ export default function ReadingSession() {
               aria-checked={keepScreenAwake}
               title={wakeLock.errorMessage ?? undefined}
               onClick={() => setKeepScreenAwake((currentValue) => !currentValue)}
-              className={`inline-flex min-h-11 flex-wrap items-center justify-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
+              className={`inline-flex h-10 items-center justify-center gap-3 rounded-full border px-3 pr-4 text-sm font-medium shadow-[0_8px_18px_rgba(31,41,55,0.05)] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
                 keepScreenAwake
-                  ? 'border-brand/35 bg-brand-soft text-brand-strong'
-                  : 'border-border bg-surface-alt text-text-muted hover:bg-surface-muted hover:text-text'
+                  ? 'border-brand/25 bg-brand-soft/70 text-brand-strong'
+                  : 'border-border bg-surface-alt/80 text-text-muted hover:bg-surface-muted hover:text-text'
               }`}
             >
               <span
-                className={`flex h-6 w-11 items-center rounded-full p-0.5 transition-colors ${
+                className={`flex h-6 w-10 shrink-0 items-center rounded-full p-0.5 transition-colors ${
                   keepScreenAwake ? 'bg-brand' : 'bg-surface-muted'
                 }`}
                 aria-hidden="true"
               >
                 <span
                   className={`flex h-5 w-5 items-center justify-center rounded-full bg-surface text-[10px] transition-transform ${
-                    keepScreenAwake ? 'translate-x-5 text-brand-strong' : 'translate-x-0 text-text-muted'
+                    keepScreenAwake ? 'translate-x-4 text-brand-strong' : 'translate-x-0 text-text-muted'
                   }`}
                 >
                   <SunMedium size={12} />
                 </span>
               </span>
               <span>Keep screen awake</span>
-              {wakeLockStatusLabel ? (
-                <span
-                  className={`rounded-full px-2.5 py-1 text-xs ${
-                    wakeLock.status === 'active'
-                      ? 'bg-surface text-brand-strong'
-                      : 'bg-danger-soft text-danger'
-                  }`}
-                >
-                  {wakeLockStatusLabel}
-                </span>
-              ) : null}
             </button>
           </div>
 
