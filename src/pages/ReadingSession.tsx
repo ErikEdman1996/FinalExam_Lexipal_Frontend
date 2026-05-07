@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, BookOpen, Check, ChevronDown, Pause, Play, Search, Square, X } from 'lucide-react';
+import { ArrowLeft, BookOpen, Check, ChevronDown, Pause, Play, Search, Square, SunMedium, X } from 'lucide-react';
 import { BookCover } from '../components/BookCover';
 import { Button } from '../components/Button';
 import { AppDialog, AppDialogClose, AppDialogTitle } from '../components/dialog/AppDialog';
@@ -17,6 +17,7 @@ import { WordLookupModal } from '../components/WordLookupModal';
 import { useBooks } from '../features/books/useBooks';
 import { ReadingMusicPlayer } from '../features/music/ReadingMusicPlayer';
 import { useNoteTags } from '../features/noteTags';
+import { useScreenWakeLock } from '../features/wakeLock/useScreenWakeLock';
 import { useXpGain } from '../features/xp/useXpGain';
 import {
   completeSession,
@@ -35,6 +36,7 @@ import {
 } from '../api/api';
 
 const AUTOSAVE_INTERVAL_SECONDS = 15;
+const KEEP_SCREEN_AWAKE_STORAGE_KEY = 'lexipal:keep-screen-awake';
 const RECENT_WORD_LOOKUPS_STORAGE_PREFIX = 'lexipal:reading-session-recent-word-lookups:';
 
 const isRecord = (value: unknown): value is Record<string, unknown> => {
@@ -58,6 +60,31 @@ const isStoredWordLookup = (value: unknown): value is WordLookupReadResponseDTO 
 
 const getRecentWordLookupsStorageKey = (bookId: string | undefined) => {
   return bookId ? `${RECENT_WORD_LOOKUPS_STORAGE_PREFIX}${bookId}` : null;
+};
+
+const loadKeepScreenAwakePreference = () => {
+  if (typeof window === 'undefined') {
+    return true;
+  }
+
+  try {
+    return window.localStorage.getItem(KEEP_SCREEN_AWAKE_STORAGE_KEY) !== 'false';
+  } catch (error) {
+    console.error('Error loading screen wake preference:', error);
+    return true;
+  }
+};
+
+const saveKeepScreenAwakePreference = (shouldKeepAwake: boolean) => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(KEEP_SCREEN_AWAKE_STORAGE_KEY, String(shouldKeepAwake));
+  } catch (error) {
+    console.error('Error saving screen wake preference:', error);
+  }
 };
 
 const loadStoredRecentWordLookups = (storageKey: string | null): WordLookupReadResponseDTO[] => {
@@ -131,6 +158,7 @@ export default function ReadingSession() {
   const [noteToastMessage, setNoteToastMessage] = useState<string | null>(null);
   const [seconds, setSeconds] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
+  const [keepScreenAwake, setKeepScreenAwake] = useState(loadKeepScreenAwakePreference);
   const [isLookedUpWordsExpanded, setIsLookedUpWordsExpanded] = useState(false);
   const [recentWordLookups, setRecentWordLookups] = useState<WordLookupReadResponseDTO[]>(
     () => loadStoredRecentWordLookups(recentWordLookupsStorageKey),
@@ -140,6 +168,7 @@ export default function ReadingSession() {
   const { refreshBooks, refreshLibraryItems } = useBooks();
   const noteTags = useNoteTags();
   const { showXpGain } = useXpGain();
+  const wakeLock = useScreenWakeLock(isRunning && keepScreenAwake);
   const intervalRef = useRef<number | null>(null);
   const shouldResumeAfterActionModalRef = useRef(false);
   const sessionInitializationRef = useRef<Promise<ApiSession> | null>(null);
@@ -160,6 +189,10 @@ export default function ReadingSession() {
   useEffect(() => {
     saveStoredRecentWordLookups(recentWordLookupsStorageKey, recentWordLookups);
   }, [recentWordLookups, recentWordLookupsStorageKey]);
+
+  useEffect(() => {
+    saveKeepScreenAwakePreference(keepScreenAwake);
+  }, [keepScreenAwake]);
 
   const ensureSessionInitialized = useCallback(async (parsedBookId: number) => {
     if (activeSessionRef.current) {
@@ -532,6 +565,13 @@ export default function ReadingSession() {
     ? Math.max(activeSession.endPage, activeSession.startPage)
     : null;
   const noteInitialPage = noteDefaultPage != null && noteDefaultPage > 0 ? noteDefaultPage : null;
+  const wakeLockStatusLabel = keepScreenAwake && isRunning
+    ? wakeLock.status === 'active'
+      ? 'Screen awake'
+      : wakeLock.status === 'unsupported' || wakeLock.status === 'unavailable'
+        ? 'Screen awake unavailable'
+        : null
+    : null;
 
   if (isLoadingBook) {
     return (
@@ -636,6 +676,48 @@ export default function ReadingSession() {
                 </Button>
               </>
             )}
+          </div>
+
+          <div className="mt-4 flex justify-center">
+            <button
+              type="button"
+              role="switch"
+              aria-checked={keepScreenAwake}
+              title={wakeLock.errorMessage ?? undefined}
+              onClick={() => setKeepScreenAwake((currentValue) => !currentValue)}
+              className={`inline-flex min-h-11 flex-wrap items-center justify-center gap-2 rounded-full border px-4 py-2 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
+                keepScreenAwake
+                  ? 'border-brand/35 bg-brand-soft text-brand-strong'
+                  : 'border-border bg-surface-alt text-text-muted hover:bg-surface-muted hover:text-text'
+              }`}
+            >
+              <span
+                className={`flex h-6 w-11 items-center rounded-full p-0.5 transition-colors ${
+                  keepScreenAwake ? 'bg-brand' : 'bg-surface-muted'
+                }`}
+                aria-hidden="true"
+              >
+                <span
+                  className={`flex h-5 w-5 items-center justify-center rounded-full bg-surface text-[10px] transition-transform ${
+                    keepScreenAwake ? 'translate-x-5 text-brand-strong' : 'translate-x-0 text-text-muted'
+                  }`}
+                >
+                  <SunMedium size={12} />
+                </span>
+              </span>
+              <span>Keep screen awake</span>
+              {wakeLockStatusLabel ? (
+                <span
+                  className={`rounded-full px-2.5 py-1 text-xs ${
+                    wakeLock.status === 'active'
+                      ? 'bg-surface text-brand-strong'
+                      : 'bg-danger-soft text-danger'
+                  }`}
+                >
+                  {wakeLockStatusLabel}
+                </span>
+              ) : null}
+            </button>
           </div>
 
           <div className="mt-5 flex flex-wrap justify-center gap-3">
