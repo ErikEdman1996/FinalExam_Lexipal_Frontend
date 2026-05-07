@@ -6,6 +6,9 @@ import tailwindcss from '@tailwindcss/vite'
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
+    host: 'localhost',
+    port: 5173,
+    strictPort: true,
     proxy: {
       '/lexipal': {
         target: 'http://localhost:8585',

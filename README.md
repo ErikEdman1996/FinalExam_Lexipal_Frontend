@@ -30,6 +30,7 @@ npm install
 
 - Backend API at `http://localhost:8585`
 - Keycloak at `http://localhost:8080`
+- Frontend dev server at `http://localhost:5173`
 
 3. Review authentication settings in `src/features/auth/keycloak.ts`.
 
@@ -38,6 +39,14 @@ Current defaults:
 - `url`: `http://localhost:8080`
 - `realm`: `Lexipal_Realm`
 - `clientId`: `Lexipal_Frontend`
+
+The Keycloak `Lexipal_Frontend` client must allow the local frontend origin:
+
+- Valid redirect URIs: `http://localhost:5173/*`
+- Valid post logout redirect URIs: `http://localhost:5173/*`
+- Web origins: `http://localhost:5173`
+
+Vite is configured with `strictPort: true` so the dev server fails instead of silently moving to another port. This keeps Keycloak redirect URIs predictable.
 
 4. Optionally set `VITE_API_ROOT_URL` if the API is not served from the same origin.
 
