@@ -753,7 +753,7 @@ export default function ReadingSession() {
             )}
           </div>
 
-          <div className="mt-4 flex justify-center">
+          <div className="mt-4 flex justify-center md:hidden">
             <button
               type="button"
               role="switch"
