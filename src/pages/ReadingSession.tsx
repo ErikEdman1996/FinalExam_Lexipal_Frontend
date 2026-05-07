@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { ArrowLeft, BookOpen, Check, ChevronDown, Pause, Play, Search, Square, SunMedium, X } from 'lucide-react';
+import { ArrowLeft, BookOpen, Check, ChevronDown, Pause, Play, RotateCcw, Search, Square, SunMedium, X } from 'lucide-react';
 import { BookCover } from '../components/BookCover';
 import { Button } from '../components/Button';
+import { ConfirmModal } from '../components/ConfirmModal';
 import { AppDialog, AppDialogClose, AppDialogTitle } from '../components/dialog/AppDialog';
 import {
   fieldErrorClassName,
@@ -154,8 +155,10 @@ export default function ReadingSession() {
   const [showReflectionModal, setShowReflectionModal] = useState(false);
   const [showWordLookupModal, setShowWordLookupModal] = useState(false);
   const [showNoteModal, setShowNoteModal] = useState(false);
+  const [showResetTimerModal, setShowResetTimerModal] = useState(false);
   const [isPreparingLookup, setIsPreparingLookup] = useState(false);
-  const [noteToastMessage, setNoteToastMessage] = useState<string | null>(null);
+  const [isResettingTimer, setIsResettingTimer] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [seconds, setSeconds] = useState(0);
   const [isRunning, setIsRunning] = useState(false);
   const [keepScreenAwake, setKeepScreenAwake] = useState(loadKeepScreenAwakePreference);
@@ -176,7 +179,8 @@ export default function ReadingSession() {
   const secondsRef = useRef(0);
   const wasRunningRef = useRef(false);
   const lastAutosavedSecondRef = useRef(0);
-  const noteToastTimeoutRef = useRef<number | null>(null);
+  const resetSyncPendingRef = useRef(false);
+  const toastTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     activeSessionRef.current = activeSession;
@@ -255,6 +259,16 @@ export default function ReadingSession() {
       return null;
     }
   }, []);
+
+  const persistDraftSessionAndClearPendingReset = useCallback(async (overrides: UpdateSessionPayload = {}) => {
+    const updatedSession = await persistDraftSession(overrides);
+
+    if (updatedSession) {
+      resetSyncPendingRef.current = false;
+    }
+
+    return updatedSession;
+  }, [persistDraftSession]);
 
   useEffect(() => {
     let isMounted = true;
@@ -342,8 +356,8 @@ export default function ReadingSession() {
 
   useEffect(() => {
     return () => {
-      if (noteToastTimeoutRef.current != null) {
-        window.clearTimeout(noteToastTimeoutRef.current);
+      if (toastTimeoutRef.current != null) {
+        window.clearTimeout(toastTimeoutRef.current);
       }
     };
   }, []);
@@ -358,16 +372,16 @@ export default function ReadingSession() {
     }
 
     lastAutosavedSecondRef.current = seconds;
-    void persistDraftSession();
-  }, [activeSession, isRunning, persistDraftSession, seconds]);
+    void persistDraftSessionAndClearPendingReset();
+  }, [activeSession, isRunning, persistDraftSessionAndClearPendingReset, seconds]);
 
   useEffect(() => {
     if (wasRunningRef.current && !isRunning && activeSession && seconds > 0) {
-      void persistDraftSession();
+      void persistDraftSessionAndClearPendingReset();
     }
 
     wasRunningRef.current = isRunning;
-  }, [activeSession, isRunning, persistDraftSession, seconds]);
+  }, [activeSession, isRunning, persistDraftSessionAndClearPendingReset, seconds]);
 
   const handleStopSession = () => {
     setIsRunning(false);
@@ -457,15 +471,15 @@ export default function ReadingSession() {
     setSelectedLookup((currentLookup) => (currentLookup?.id === lookup.id ? lookup : currentLookup));
   }, []);
 
-  const showNoteSavedToast = useCallback(() => {
-    if (noteToastTimeoutRef.current != null) {
-      window.clearTimeout(noteToastTimeoutRef.current);
+  const showToast = useCallback((message: string) => {
+    if (toastTimeoutRef.current != null) {
+      window.clearTimeout(toastTimeoutRef.current);
     }
 
-    setNoteToastMessage('Note saved');
-    noteToastTimeoutRef.current = window.setTimeout(() => {
-      setNoteToastMessage(null);
-      noteToastTimeoutRef.current = null;
+    setToastMessage(message);
+    toastTimeoutRef.current = window.setTimeout(() => {
+      setToastMessage(null);
+      toastTimeoutRef.current = null;
     }, 2400);
   }, []);
 
@@ -494,7 +508,47 @@ export default function ReadingSession() {
     });
 
     setShowNoteModal(false);
-    showNoteSavedToast();
+    showToast('Note saved');
+  };
+
+  const handleResetSessionTimer = async () => {
+    const currentSession = activeSessionRef.current;
+
+    try {
+      setIsResettingTimer(true);
+      setActionError(null);
+      setIsRunning(false);
+      setSeconds(0);
+      secondsRef.current = 0;
+      lastAutosavedSecondRef.current = 0;
+      wasRunningRef.current = false;
+
+      if (currentSession) {
+        const resetSession = {
+          ...currentSession,
+          durationSeconds: 0,
+        };
+
+        activeSessionRef.current = resetSession;
+        setActiveSession(resetSession);
+      }
+
+      const updatedSession = currentSession
+        ? await persistDraftSessionAndClearPendingReset({ durationSeconds: 0 })
+        : null;
+
+      if (currentSession && !updatedSession) {
+        resetSyncPendingRef.current = true;
+        setActionError('Timer reset locally. Could not sync it yet, but Lexipal will try again when the session runs.');
+      } else {
+        resetSyncPendingRef.current = false;
+        showToast('Timer reset');
+      }
+
+      setShowResetTimerModal(false);
+    } finally {
+      setIsResettingTimer(false);
+    }
   };
 
   const handleToggleTimer = async () => {
@@ -518,6 +572,16 @@ export default function ReadingSession() {
     try {
       setActionError(null);
       await ensureSessionInitialized(parsedBookId);
+
+      if (resetSyncPendingRef.current && activeSessionRef.current) {
+        const syncedReset = await persistDraftSessionAndClearPendingReset({ durationSeconds: 0 });
+
+        if (!syncedReset) {
+          resetSyncPendingRef.current = true;
+          setActionError('Timer is running from 0, but the reset has not synced yet.');
+        }
+      }
+
       setIsRunning(true);
     } catch (error) {
       console.error('Error starting reading session:', error);
@@ -662,6 +726,17 @@ export default function ReadingSession() {
                   <span className="inline-flex items-center gap-2">
                     {isRunning ? <Pause size={18} /> : <Play size={18} />}
                     {isRunning ? 'Pause' : 'Resume'}
+                  </span>
+                </Button>
+                <Button
+                  variant="outline"
+                  className="h-12 rounded-full border-border-strong bg-surface text-text-muted hover:bg-surface-alt hover:text-text disabled:cursor-not-allowed disabled:opacity-60"
+                  onClick={() => setShowResetTimerModal(true)}
+                  disabled={isResettingTimer}
+                >
+                  <span className="inline-flex items-center gap-2">
+                    <RotateCcw size={18} />
+                    Reset
                   </span>
                 </Button>
                 <Button
@@ -849,11 +924,23 @@ export default function ReadingSession() {
         />
       ) : null}
 
-      {noteToastMessage ? (
+      <ConfirmModal
+        isOpen={showResetTimerModal}
+        title="Reset timer?"
+        description="Your elapsed time will go back to 0. This will not delete your session, notes, looked up words, or page progress."
+        confirmLabel="Reset timer"
+        confirmingLabel="Resetting..."
+        cancelLabel="Keep timer"
+        isConfirming={isResettingTimer}
+        onClose={() => setShowResetTimerModal(false)}
+        onConfirm={handleResetSessionTimer}
+      />
+
+      {toastMessage ? (
         <div className="pointer-events-none fixed inset-x-0 bottom-6 z-40 flex justify-center px-4">
           <div className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-4 py-2 text-sm font-medium text-text shadow-[0_14px_28px_rgba(17,24,39,0.16)]">
             <Check size={14} className="text-brand-strong" />
-            {noteToastMessage}
+            {toastMessage}
           </div>
         </div>
       ) : null}
