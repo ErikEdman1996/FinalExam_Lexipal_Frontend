@@ -22,6 +22,7 @@ interface NoteTagMultiSelectProps {
   selectedTagIds: number[];
   onChange: (tagIds: number[]) => void;
   onCreateTag: (payload: { name: string; colorHex: string }) => Promise<ApiNoteTag>;
+  maxSelectedTags?: number;
   disabled?: boolean;
   isLoading?: boolean;
   loadError?: string | null;
@@ -34,6 +35,7 @@ export function NoteTagMultiSelect({
   selectedTagIds,
   onChange,
   onCreateTag,
+  maxSelectedTags,
   disabled = false,
   isLoading = false,
   loadError = null,
@@ -47,6 +49,11 @@ export function NoteTagMultiSelect({
 
   const normalizedDraft = normalizeTagName(draft);
   const selectedIdSet = useMemo(() => new Set(selectedTagIds), [selectedTagIds]);
+  const hasSelectionLimit = maxSelectedTags != null;
+  const hasReachedSelectionLimit = hasSelectionLimit && selectedTagIds.length >= maxSelectedTags;
+  const selectionLimitMessage = hasSelectionLimit
+    ? `You can add up to ${maxSelectedTags} tags per note.`
+    : null;
   const selectedTags = tags.filter((tag) => selectedIdSet.has(tag.id));
   const matchingTags = normalizedDraft
     ? tags.filter((tag) => normalizeTagName(tag.name).includes(normalizedDraft))
@@ -54,7 +61,7 @@ export function NoteTagMultiSelect({
   const exactMatch = normalizedDraft
     ? tags.find((tag) => normalizeTagName(tag.name) === normalizedDraft)
     : null;
-  const canCreateTag = Boolean(normalizedDraft) && !exactMatch;
+  const canCreateTag = Boolean(normalizedDraft) && !exactMatch && !hasReachedSelectionLimit;
 
   const clearErrors = () => {
     setFieldErrors({});
@@ -69,6 +76,11 @@ export function NoteTagMultiSelect({
       return;
     }
 
+    if (hasReachedSelectionLimit) {
+      setSubmitError(selectionLimitMessage);
+      return;
+    }
+
     onChange([...selectedTagIds, tagId]);
   };
 
@@ -79,6 +91,11 @@ export function NoteTagMultiSelect({
 
   const handleCreateTag = async () => {
     if (isCreating) {
+      return;
+    }
+
+    if (hasReachedSelectionLimit) {
+      setSubmitError(selectionLimitMessage);
       return;
     }
 
@@ -176,10 +193,16 @@ export function NoteTagMultiSelect({
           disabled={disabled || isCreating}
         />
       </div>
-      <p className={fieldHintClassName}>Optional. Select existing tags or create a new colored tag.</p>
+      <p className={fieldHintClassName}>
+        Optional. Select existing tags or create a new colored tag.
+        {selectionLimitMessage ? ` ${selectionLimitMessage}` : ''}
+      </p>
       {loadError ? <p className={fieldErrorClassName}>{loadError}</p> : null}
       {error ? <p className={fieldErrorClassName}>{error}</p> : null}
       {fieldErrors.name ? <p className={fieldErrorClassName}>{fieldErrors.name}</p> : null}
+      {hasReachedSelectionLimit && submitError === selectionLimitMessage ? (
+        <p className={fieldErrorClassName}>{selectionLimitMessage}</p>
+      ) : null}
 
       <div className="mt-3 max-h-44 overflow-y-auto rounded-[18px] border border-border bg-surface-alt p-2">
         {isLoading ? (
@@ -193,13 +216,14 @@ export function NoteTagMultiSelect({
             {matchingTags.map((tag) => {
               const isSelected = selectedIdSet.has(tag.id);
               const tagTextColor = getReadableTagTextColor(tag.colorHex);
+              const isOptionDisabled = disabled || isCreating || (!isSelected && hasReachedSelectionLimit);
 
               return (
                 <button
                   key={tag.id}
                   type="button"
                   onClick={() => toggleTag(tag.id)}
-                  disabled={disabled || isCreating}
+                  disabled={isOptionDisabled}
                   className={`flex items-center justify-between gap-3 rounded-[14px] px-3 py-2 text-left text-sm transition-colors disabled:cursor-not-allowed disabled:opacity-60 ${
                     isSelected ? 'bg-brand-soft text-text' : 'hover:bg-surface'
                   }`}

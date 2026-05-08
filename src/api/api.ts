@@ -2291,6 +2291,8 @@ const getFirstErrorString = (value: unknown): string | null => {
 
 const NOTE_FIELD_NAMES = ['quotedText', 'pageNumber', 'chapterLabel', 'tagIds'] as const satisfies readonly NoteFieldName[];
 const NOTE_TAG_FIELD_NAMES = ['name', 'colorHex'] as const satisfies readonly NoteTagFieldName[];
+const NOTE_TAG_LIMIT_MESSAGE = 'You can add up to 4 tags per note.';
+const NOTE_TAG_LIMIT_BACKEND_MESSAGE = 'a note can have at most 4 tags';
 
 const extractFieldErrors = <FieldName extends string>(
     payload: unknown,
@@ -2392,6 +2394,10 @@ const normalizeErrorMessage = (payload: unknown, fallbackMessage: string) => {
 const inferNoteFieldFromMessage = (message: string): NoteFieldName | null => {
     const normalizedMessage = message.toLowerCase();
 
+    if (normalizedMessage.includes(NOTE_TAG_LIMIT_BACKEND_MESSAGE) || normalizedMessage.includes('tag')) {
+        return 'tagIds';
+    }
+
     if (normalizedMessage.includes('page')) {
         return 'pageNumber';
     }
@@ -2407,13 +2413,27 @@ const inferNoteFieldFromMessage = (message: string): NoteFieldName | null => {
     return null;
 };
 
+const normalizeNoteValidationMessage = (message: string) => {
+    return message.toLowerCase().includes(NOTE_TAG_LIMIT_BACKEND_MESSAGE)
+        ? NOTE_TAG_LIMIT_MESSAGE
+        : message;
+};
+
 const toNoteValidationError = (
     payload: unknown,
     fallbackMessage: string,
     status: number,
 ) => {
-    const message = normalizeErrorMessage(payload, fallbackMessage);
+    const message = normalizeNoteValidationMessage(normalizeErrorMessage(payload, fallbackMessage));
     const fieldErrors = extractFieldErrors(payload, NOTE_FIELD_NAMES);
+
+    (Object.keys(fieldErrors) as NoteFieldName[]).forEach((fieldName) => {
+        const fieldMessage = fieldErrors[fieldName];
+
+        if (fieldMessage) {
+            fieldErrors[fieldName] = normalizeNoteValidationMessage(fieldMessage);
+        }
+    });
 
     if (Object.keys(fieldErrors).length === 0) {
         const inferredField = inferNoteFieldFromMessage(message);
