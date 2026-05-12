@@ -9,6 +9,7 @@ import mothIcon from '../assets/moth_icon.svg';
 import mothIconLight from '../assets/moth_icon_light.png';
 import { useTheme } from '../features/theme/useTheme';
 import {
+  type AchievementResponseDTO,
   type CodexOverallProgressDTO,
   type CodexPageProgressDTO,
   createWordLookup,
@@ -36,6 +37,7 @@ interface WordLookupModalProps {
     alreadyCaptured: boolean;
     xpValue: number;
     xpUpdate: XpUpdateResponseDTO | null;
+    newlyUnlockedAchievements: AchievementResponseDTO[];
     rarityTier: RarityTier;
     pageNumber: number | null;
     slotNumber: number | null;
@@ -377,6 +379,7 @@ function WordLookupModalContent({
         alreadyCaptured: nextResult.alreadyCaptured,
         xpValue: nextResult.xpValue,
         xpUpdate: nextXpUpdate,
+        newlyUnlockedAchievements: lookupResponse.newlyUnlockedAchievements,
         rarityTier: nextResult.rarityTier,
         pageNumber: nextResult.pageNumber,
         slotNumber: nextResult.slotNumber,

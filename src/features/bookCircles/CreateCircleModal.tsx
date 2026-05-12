@@ -18,6 +18,7 @@ import {
 } from '../../components/form/inputStyles';
 import { ProgressBar } from '../../components/ProgressBar';
 import { useBooks } from '../books/useBooks';
+import { useXpGain } from '../xp/useXpGain';
 import {
   circleInputClassName,
   copyTextToClipboard,
@@ -79,6 +80,7 @@ function CreateCircleModalContent({
   onCreated,
 }: Omit<CreateCircleModalProps, 'isOpen'>) {
   const { books, isLoading: isBooksLoading, refreshBooks, refreshLibraryItems } = useBooks();
+  const { showRewards } = useXpGain();
   const [sourceMode, setSourceMode] = useState<SourceMode>('existing');
   const [selectedBookId, setSelectedBookId] = useState<number | null>(null);
   const [bookTitle, setBookTitle] = useState('');
@@ -198,6 +200,9 @@ function CreateCircleModalContent({
       });
 
       setCreatedCircle(created);
+      showRewards({
+        newlyUnlockedAchievements: created.newlyUnlockedAchievements,
+      });
       void refreshBooks({ silent: true }).catch((error) => {
         console.error('Error refreshing books after circle creation:', error);
       });

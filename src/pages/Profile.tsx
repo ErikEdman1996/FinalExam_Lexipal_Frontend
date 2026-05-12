@@ -44,7 +44,6 @@ import {
 } from '../api/api';
 
 const NICKNAME_PATTERN = /^[a-zA-Z0-9_]{3,20}$/;
-const SEEN_ACHIEVEMENTS_STORAGE_KEY = 'lexipal.seenAchievements.v1';
 
 type AchievementFilter = 'all' | 'unlocked' | 'locked';
 
@@ -159,54 +158,6 @@ const isNewUserProfile = (stats: ProfileStatsResponseDTO) => {
     && stats.totalCapturedWords === 0
     && stats.totalXpEarned === 0
   );
-};
-
-const getSeenAchievementCodes = () => {
-  if (typeof window === 'undefined') {
-    return new Set<string>();
-  }
-
-  try {
-    const rawValue = window.localStorage.getItem(SEEN_ACHIEVEMENTS_STORAGE_KEY);
-    const parsed: unknown = rawValue ? JSON.parse(rawValue) : [];
-
-    return new Set(Array.isArray(parsed) ? parsed.filter((code): code is string => typeof code === 'string') : []);
-  } catch {
-    return new Set<string>();
-  }
-};
-
-const markAchievementCodesSeen = (codes: string[]) => {
-  if (typeof window === 'undefined' || codes.length === 0) {
-    return;
-  }
-
-  try {
-    const seenCodes = getSeenAchievementCodes();
-    codes.forEach((code) => seenCodes.add(code));
-    window.localStorage.setItem(SEEN_ACHIEVEMENTS_STORAGE_KEY, JSON.stringify(Array.from(seenCodes)));
-  } catch {
-    // localStorage can be unavailable in private or restricted browsing contexts.
-  }
-};
-
-const announceNewlyUnlockedAchievements = (achievements: AchievementResponseDTO[]) => {
-  const unlockedAchievements = achievements.filter((achievement) => achievement.unlocked);
-
-  if (unlockedAchievements.length === 0) {
-    return;
-  }
-
-  const seenCodes = getSeenAchievementCodes();
-  const newlyUnlocked = unlockedAchievements.filter((achievement) => !seenCodes.has(achievement.code));
-
-  markAchievementCodesSeen(unlockedAchievements.map((achievement) => achievement.code));
-
-  if (newlyUnlocked.length === 1) {
-    toast.success(`Achievement unlocked: ${newlyUnlocked[0].title}`);
-  } else if (newlyUnlocked.length > 1) {
-    toast.success(`${newlyUnlocked.length} achievements unlocked.`);
-  }
 };
 
 interface ProfileStatCardProps {
@@ -632,7 +583,6 @@ export default function Profile() {
           }
 
           setAchievements(nextAchievements);
-          announceNewlyUnlockedAchievements(nextAchievements);
         })
         .catch((error) => {
           console.error('Error loading achievements:', error);

@@ -4,7 +4,7 @@ const API_ROOT_URL = (import.meta.env.VITE_API_ROOT_URL as string | undefined)?.
 const API_BASE_URL = `${API_ROOT_URL}/lexipal/api/v1`;
 const BOOK_CIRCLE_CHAT_WEBSOCKET_PATH = '/lexipal/ws';
 
-export type ApiBookStatus = 'ACTIVE' | 'COMPLETED' | 'ARCHIVED';
+export type ApiBookStatus = 'ACTIVE' | 'COMPLETE' | 'ARCHIVED' | 'DELETED';
 
 export interface ApiSession {
     id: number;
@@ -19,6 +19,7 @@ export interface ApiSession {
     status: 'IN_PROGRESS' | 'COMPLETED';
     capturedWordCount: number;
     xpUpdate?: XpUpdateResponseDTO | null;
+    newlyUnlockedAchievements: AchievementResponseDTO[];
 }
 
 type ApiSessionResponse = unknown;
@@ -124,6 +125,7 @@ export interface BookCircleCreateResponseDTO {
     visibility: BookCircleVisibility;
     status: BookCircleStatus;
     createdAt: string;
+    newlyUnlockedAchievements: AchievementResponseDTO[];
 }
 
 export interface BookCircleMemberSummaryDTO {
@@ -570,6 +572,7 @@ export interface WordLookupCreateResponseDTO {
     overallProgress: CodexOverallProgressDTO | null;
     rarityTier: RarityTier | string | null;
     xpUpdate: XpUpdateResponseDTO | null;
+    newlyUnlockedAchievements: AchievementResponseDTO[];
 }
 
 export type ChallengeType = 'FLASHCARD' | 'CROSSWORD' | string;
@@ -1200,6 +1203,16 @@ const toAchievement = (value: unknown): AchievementResponseDTO | null => {
     };
 };
 
+const toAchievementArray = (value: unknown): AchievementResponseDTO[] => {
+    if (!Array.isArray(value)) {
+        return [];
+    }
+
+    return value
+        .map(toAchievement)
+        .filter((achievement): achievement is AchievementResponseDTO => achievement !== null);
+};
+
 const toPortrait = (value: unknown): PortraitResponseDTO | null => {
     if (!isRecord(value) || typeof value.code !== 'string') {
         return null;
@@ -1403,6 +1416,7 @@ const toApiSession = (value: Record<string, unknown>): ApiSession => {
         sessionDate,
         capturedWordCount,
         xpUpdate: toXpUpdate(value.xpUpdate),
+        newlyUnlockedAchievements: toAchievementArray(value.newlyUnlockedAchievements),
     };
 };
 
@@ -1556,6 +1570,7 @@ const normalizeWordLookupCreateResponse = (value: unknown): WordLookupCreateResp
         overallProgress: toCodexOverallProgress(record.overallProgress),
         rarityTier: typeof record.rarityTier === 'string' ? record.rarityTier : null,
         xpUpdate: toXpUpdate(record.xpUpdate),
+        newlyUnlockedAchievements: toAchievementArray(record.newlyUnlockedAchievements),
     };
 };
 
@@ -1588,9 +1603,7 @@ const normalizeAchievementsResponse = (value: unknown): AchievementResponseDTO[]
         return [];
     }
 
-    return array
-        .map(toAchievement)
-        .filter((achievement): achievement is AchievementResponseDTO => achievement !== null)
+    return toAchievementArray(array)
         .sort((a, b) => a.sortOrder - b.sortOrder);
 };
 
@@ -1940,6 +1953,7 @@ const toBookCircleBase = (value: Record<string, unknown>): BookCircleCreateRespo
         visibility: toBookCircleVisibility(value.visibility),
         status: toBookCircleStatus(value.status),
         createdAt: typeof value.createdAt === 'string' ? value.createdAt : '',
+        newlyUnlockedAchievements: toAchievementArray(value.newlyUnlockedAchievements),
     };
 };
 

@@ -92,7 +92,7 @@ function clampPercentage(value: number) {
 }
 
 function mapApiStatusToUiStatus(status: string): BookStatus {
-  if (status === 'COMPLETED') {
+  if (status === 'COMPLETE') {
     return 'completed';
   }
 

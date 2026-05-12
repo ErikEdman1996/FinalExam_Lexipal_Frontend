@@ -28,6 +28,7 @@ import {
   getActiveSessionByBook,
   getBook,
   updateSession,
+  type AchievementResponseDTO,
   type ApiBook,
   type ApiSession,
   type RarityTier,
@@ -170,7 +171,7 @@ export default function ReadingSession() {
   const [activeSession, setActiveSession] = useState<ApiSession | null>(null);
   const { refreshBooks, refreshLibraryItems } = useBooks();
   const noteTags = useNoteTags();
-  const { showXpGain } = useXpGain();
+  const { showRewards } = useXpGain();
   const wakeLock = useScreenWakeLock(isRunning && keepScreenAwake);
   const intervalRef = useRef<number | null>(null);
   const shouldResumeAfterActionModalRef = useRef(false);
@@ -424,12 +425,11 @@ export default function ReadingSession() {
       reflection: trimmedReflection,
     });
 
-    if (completedSession.xpUpdate) {
-      showXpGain({
-        xpUpdate: completedSession.xpUpdate,
-        source: 'session',
-      });
-    }
+    showRewards({
+      xpUpdate: completedSession.xpUpdate,
+      source: 'session',
+      newlyUnlockedAchievements: completedSession.newlyUnlockedAchievements,
+    });
 
     activeSessionRef.current = null;
     setActiveSession(null);
@@ -448,18 +448,18 @@ export default function ReadingSession() {
     isNewCapture: boolean;
     xpUpdate: XpUpdateResponseDTO | null;
     rarityTier: RarityTier;
+    newlyUnlockedAchievements: AchievementResponseDTO[];
   }) => {
     if (!captureResult.isCollectible || !captureResult.isNewCapture) {
       return;
     }
 
-    if (captureResult.xpUpdate) {
-      showXpGain({
-        xpUpdate: captureResult.xpUpdate,
-        source: 'capture',
-        rarityTier: captureResult.rarityTier,
-      });
-    }
+    showRewards({
+      xpUpdate: captureResult.xpUpdate,
+      source: 'capture',
+      rarityTier: captureResult.rarityTier,
+      newlyUnlockedAchievements: captureResult.newlyUnlockedAchievements,
+    });
   };
 
   const handleLookupSaved = useCallback((lookup: WordLookupReadResponseDTO) => {

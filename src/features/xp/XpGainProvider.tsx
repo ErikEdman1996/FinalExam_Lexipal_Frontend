@@ -5,16 +5,37 @@ import {
   useState,
   type PropsWithChildren,
 } from 'react';
-import { getProfile } from '../../api/api';
+import { getProfile, type AchievementResponseDTO } from '../../api/api';
+import {
+  AchievementUnlockBar,
+  type AchievementUnlockPresentation,
+} from '../../components/AchievementUnlockBar';
 import { XpGainBar, type XpGainPresentation } from '../../components/XpGainBar';
 import { launchCelebration } from './confetti';
-import { XpGainContext, type XpGainTrigger } from './XpGainContext';
+import { XpGainContext, type RewardTrigger, type XpGainTrigger } from './XpGainContext';
+
+type RewardQueueItem =
+  | ({ type: 'xp' } & Pick<XpGainTrigger, 'xpUpdate' | 'source' | 'rarityTier'>)
+  | {
+    type: 'achievement';
+    achievement: AchievementResponseDTO;
+  };
+
+type ActiveRewardPresentation =
+  | {
+    type: 'xp';
+    item: XpGainPresentation;
+  }
+  | {
+    type: 'achievement';
+    item: AchievementUnlockPresentation;
+  };
 
 export function XpGainProvider({ children }: PropsWithChildren) {
   const [currentTotalXp, setCurrentTotalXp] = useState<number | null>(null);
-  const [activePresentation, setActivePresentation] = useState<XpGainPresentation | null>(null);
+  const [activePresentation, setActivePresentation] = useState<ActiveRewardPresentation | null>(null);
   const totalXpRef = useRef<number | null>(null);
-  const queueRef = useRef<XpGainTrigger[]>([]);
+  const queueRef = useRef<RewardQueueItem[]>([]);
   const isProcessingRef = useRef(false);
   const presentationIdRef = useRef(1);
   const presentationResolverRef = useRef<(() => void) | null>(null);
@@ -50,6 +71,21 @@ export function XpGainProvider({ children }: PropsWithChildren) {
         continue;
       }
 
+      if (nextItem.type === 'achievement') {
+        await new Promise<void>((resolve) => {
+          presentationResolverRef.current = resolve;
+          setActivePresentation({
+            type: 'achievement',
+            item: {
+              id: presentationIdRef.current,
+              achievement: nextItem.achievement,
+            },
+          });
+          presentationIdRef.current += 1;
+        });
+        continue;
+      }
+
       const { xpUpdate } = nextItem;
       const fromTotalXp = Math.max(0, xpUpdate.previousTotalXp);
       const toTotalXp = Math.max(fromTotalXp, xpUpdate.newTotalXp);
@@ -70,20 +106,23 @@ export function XpGainProvider({ children }: PropsWithChildren) {
       await new Promise<void>((resolve) => {
         presentationResolverRef.current = resolve;
         setActivePresentation({
-          id: presentationIdRef.current,
-          fromTotalXp,
-          toTotalXp,
-          gainedXp: Math.max(0, xpUpdate.xpAwarded),
-          level: Math.max(1, xpUpdate.level),
-          xpIntoLevel: Math.max(0, xpUpdate.xpIntoLevel),
-          xpPerLevel: Math.max(1, xpUpdate.xpPerLevel),
-          maxLevel: Math.max(1, xpUpdate.maxLevel),
-          currentLevelMinXp: Math.max(0, xpUpdate.currentLevelMinXp),
-          nextLevelMinXp: xpUpdate.nextLevelMinXp,
-          xpToNextLevel: Math.max(0, xpUpdate.xpToNextLevel),
-          previousTotalXp: fromTotalXp,
-          leveledUp: xpUpdate.leveledUp,
-          source: nextItem.source,
+          type: 'xp',
+          item: {
+            id: presentationIdRef.current,
+            fromTotalXp,
+            toTotalXp,
+            gainedXp: Math.max(0, xpUpdate.xpAwarded),
+            level: Math.max(1, xpUpdate.level),
+            xpIntoLevel: Math.max(0, xpUpdate.xpIntoLevel),
+            xpPerLevel: Math.max(1, xpUpdate.xpPerLevel),
+            maxLevel: Math.max(1, xpUpdate.maxLevel),
+            currentLevelMinXp: Math.max(0, xpUpdate.currentLevelMinXp),
+            nextLevelMinXp: xpUpdate.nextLevelMinXp,
+            xpToNextLevel: Math.max(0, xpUpdate.xpToNextLevel),
+            previousTotalXp: fromTotalXp,
+            leveledUp: xpUpdate.leveledUp,
+            source: nextItem.source,
+          },
         });
         presentationIdRef.current += 1;
       });
@@ -92,15 +131,29 @@ export function XpGainProvider({ children }: PropsWithChildren) {
     isProcessingRef.current = false;
   }, []);
 
-  const showXpGain = useCallback((input: XpGainTrigger) => {
-    queueRef.current.push({
-      xpUpdate: input.xpUpdate,
-      source: input.source,
-      rarityTier: input.rarityTier,
+  const showRewards = useCallback((input: RewardTrigger) => {
+    if (input.xpUpdate) {
+      queueRef.current.push({
+        type: 'xp',
+        xpUpdate: input.xpUpdate,
+        source: input.source,
+        rarityTier: input.rarityTier,
+      });
+    }
+
+    input.newlyUnlockedAchievements?.forEach((achievement) => {
+      queueRef.current.push({
+        type: 'achievement',
+        achievement,
+      });
     });
 
     void processQueue();
   }, [processQueue]);
+
+  const showXpGain = useCallback((input: XpGainTrigger) => {
+    showRewards(input);
+  }, [showRewards]);
 
   useEffect(() => {
     let isMounted = true;
@@ -128,12 +181,20 @@ export function XpGainProvider({ children }: PropsWithChildren) {
     <XpGainContext.Provider
       value={{
         showXpGain,
+        showRewards,
         currentTotalXp,
         refreshProfileXp,
       }}
     >
       {children}
-      <XpGainBar item={activePresentation} onComplete={handlePresentationComplete} />
+      <XpGainBar
+        item={activePresentation?.type === 'xp' ? activePresentation.item : null}
+        onComplete={handlePresentationComplete}
+      />
+      <AchievementUnlockBar
+        item={activePresentation?.type === 'achievement' ? activePresentation.item : null}
+        onComplete={handlePresentationComplete}
+      />
     </XpGainContext.Provider>
   );
 }
