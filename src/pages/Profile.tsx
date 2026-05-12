@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ComponentType } from 'react';
+import { useEffect, useMemo, useState, useSyncExternalStore, type ComponentType } from 'react';
 import {
   Award,
   BadgeCheck,
@@ -54,12 +54,36 @@ const ACHIEVEMENT_FILTERS: { value: AchievementFilter; label: string }[] = [
   { value: 'locked', label: 'Locked' },
 ];
 
-type ProfileTab = 'overview' | 'achievements';
+type ProfileTab = 'overview' | 'stats' | 'achievements';
 
-const PROFILE_TABS: { value: ProfileTab; label: string }[] = [
+const PROFILE_DESKTOP_QUERY = '(min-width: 640px)';
+
+const PROFILE_TABS: { value: ProfileTab; label: string; mobileOnly?: boolean }[] = [
   { value: 'overview', label: 'Overview' },
+  { value: 'stats', label: 'Stats', mobileOnly: true },
   { value: 'achievements', label: 'Achievements' },
 ];
+
+const getIsProfileDesktop = () => (
+  typeof window !== 'undefined'
+  && typeof window.matchMedia === 'function'
+  && window.matchMedia(PROFILE_DESKTOP_QUERY).matches
+);
+
+const subscribeToProfileDesktopQuery = (onStoreChange: () => void) => {
+  if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+    return () => undefined;
+  }
+
+  const mediaQuery = window.matchMedia(PROFILE_DESKTOP_QUERY);
+  mediaQuery.addEventListener('change', onStoreChange);
+
+  return () => mediaQuery.removeEventListener('change', onStoreChange);
+};
+
+function useIsProfileDesktop() {
+  return useSyncExternalStore(subscribeToProfileDesktopQuery, getIsProfileDesktop, () => true);
+}
 
 interface ProfileTabsProps {
   active: ProfileTab;
@@ -74,13 +98,14 @@ function ProfileTabs({ active, unlockedCount, totalCount, onChange }: ProfileTab
       {PROFILE_TABS.map((tab) => {
         const isActive = tab.value === active;
         const showBadge = tab.value === 'achievements' && totalCount > 0;
+        const visibilityClassName = tab.mobileOnly ? 'sm:hidden' : '';
 
         return (
           <button
             key={tab.value}
             type="button"
             onClick={() => onChange(tab.value)}
-            className={`inline-flex items-center gap-2 whitespace-nowrap rounded-full px-4 py-2 text-sm font-medium transition-all duration-200 ${
+            className={`${visibilityClassName} inline-flex flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-full px-3 py-2 text-xs font-medium transition-all duration-200 sm:flex-none sm:px-4 sm:text-sm ${
               isActive
                 ? 'bg-brand text-text-on-brand shadow-[0_6px_14px_rgba(154,74,66,0.24)]'
                 : 'text-text-muted hover:text-text'
@@ -574,6 +599,16 @@ export default function Profile() {
   const [nicknameError, setNicknameError] = useState<string | null>(null);
   const [isSavingNickname, setIsSavingNickname] = useState(false);
   const [activeTab, setActiveTab] = useState<ProfileTab>('overview');
+  const isProfileDesktop = useIsProfileDesktop();
+  const activeProfileTab = isProfileDesktop && activeTab === 'stats' ? 'overview' : activeTab;
+
+  useEffect(() => {
+    if (!isProfileDesktop) {
+      return;
+    }
+
+    setActiveTab((current) => (current === 'stats' ? 'overview' : current));
+  }, [isProfileDesktop]);
 
   useEffect(() => {
     let isMounted = true;
@@ -830,6 +865,40 @@ export default function Profile() {
     },
   ];
 
+  const statsSections = (
+    <>
+      <section className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {statCards.map((card, index) => (
+          <ProfileStatCard
+            key={card.label}
+            label={card.label}
+            value={card.value}
+            icon={card.icon}
+            tone={card.tone}
+            delayMs={index * 80}
+          />
+        ))}
+      </section>
+
+      <section className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <DetailCard
+          title="Last Active"
+          value={lastActive}
+          description="Your most recent recorded reading activity."
+        />
+        <DetailCard
+          title="Reading Momentum"
+          value={currentStreak > 0 ? `${currentStreak} day streak` : 'Start your streak'}
+          description="Read on consecutive days to build consistency and improve your longest run."
+        />
+      </section>
+
+      <div className="mt-6">
+        <RecentActivitySection activities={recentDailyActivities} />
+      </div>
+    </>
+  );
+
   return (
     <div className="page-bg min-h-screen pb-24 lg:pl-60 lg:pb-0">
       <div className="mx-auto max-w-5xl px-5 py-8 sm:px-6 sm:py-10">
@@ -854,79 +923,79 @@ export default function Profile() {
           </div>
         </div>
 
-        <section className="rounded-[32px] border border-border bg-surface px-6 py-7 shadow-[0_18px_36px_rgba(31,41,55,0.07)] sm:px-8">
-          <div className="grid gap-7 md:grid-cols-[auto_minmax(0,1fr)] md:items-center">
-            <div className="mx-auto w-36 md:mx-0 md:w-40">
-              <PortraitImage
-                assetKey={selectedPortrait?.assetKey}
-                name={selectedPortrait?.name ?? undefined}
-                className="shadow-[0_18px_36px_rgba(31,41,55,0.16)] ring-4 ring-surface-muted"
-              />
-            </div>
-
-            <div className="min-w-0 text-center md:text-left">
-              <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.24em] text-text-subtle">Selected portrait</p>
-                  <h2 className="mt-2 text-3xl font-semibold text-text">
-                    {selectedPortrait?.name ?? `Level ${level}`}
-                  </h2>
-                  <p className="mt-2 text-sm leading-relaxed text-text-muted">
-                    {selectedPortrait?.description ?? 'Your mascot portrait will appear here once the collection loads.'}
-                  </p>
-                </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="rounded-full px-5"
-                  onClick={() => setIsPortraitModalOpen(true)}
-                >
-                  <span className="inline-flex items-center gap-2">
-                    <Images size={16} />
-                    Portrait collection
-                  </span>
-                </Button>
-              </div>
-
-              <div className="mt-5">
-                <div className="flex flex-wrap items-center justify-center gap-2 text-sm text-text-muted md:justify-start">
-                  <span className="rounded-full bg-brand-soft px-3 py-1.5 text-brand-strong">
-                    Level {level}{isAtMaxLevel ? ' — MAX' : ''}
-                  </span>
-                  <span className="rounded-full bg-surface-muted px-3 py-1.5">{stats.totalXpEarned} total XP</span>
-                </div>
-                <div className="mt-4 h-3.5 overflow-hidden rounded-full bg-surface-muted">
-                  <div
-                    className="h-full rounded-full bg-accent transition-[width] duration-500"
-                    style={{ width: `${isAtMaxLevel ? 100 : Math.max(progressPercent, 6)}%` }}
-                  />
-                </div>
-                {isAtMaxLevel ? (
-                  <p className="mt-2 text-xs text-text-muted">Max level reached</p>
-                ) : (
-                  <p className="mt-2 text-xs text-text-muted">{xpIntoLevel}/{xpPerLevel} XP — {stats.xpToNextLevel} to next level</p>
-                )}
-              </div>
-
-              <div className="mt-5 flex flex-wrap items-center justify-center gap-2 text-sm text-text-muted md:justify-start">
-                <span className="rounded-full bg-surface-muted px-3 py-1.5">Member since {formatMemberSince(createdAt)}</span>
-                <span className="rounded-full bg-brand-soft px-3 py-1.5 text-brand-strong">Status: {status}</span>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <div className="mt-6 flex justify-start">
+        <div className="flex justify-start">
           <ProfileTabs
-            active={activeTab}
+            active={activeProfileTab}
             unlockedCount={unlockedAchievementsCount}
             totalCount={totalAchievementsCount}
             onChange={setActiveTab}
           />
         </div>
 
-        {activeTab === 'overview' ? (
+        {activeProfileTab === 'overview' ? (
           <>
+            <section className="mt-6 rounded-[32px] border border-border bg-surface px-6 py-7 shadow-[0_18px_36px_rgba(31,41,55,0.07)] sm:px-8">
+              <div className="grid gap-7 md:grid-cols-[auto_minmax(0,1fr)] md:items-center">
+                <div className="mx-auto w-36 md:mx-0 md:w-40">
+                  <PortraitImage
+                    assetKey={selectedPortrait?.assetKey}
+                    name={selectedPortrait?.name ?? undefined}
+                    className="shadow-[0_18px_36px_rgba(31,41,55,0.16)] ring-4 ring-surface-muted"
+                  />
+                </div>
+
+                <div className="min-w-0 text-center md:text-left">
+                  <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.24em] text-text-subtle">Selected portrait</p>
+                      <h2 className="mt-2 text-3xl font-semibold text-text">
+                        {selectedPortrait?.name ?? `Level ${level}`}
+                      </h2>
+                      <p className="mt-2 text-sm leading-relaxed text-text-muted">
+                        {selectedPortrait?.description ?? 'Your mascot portrait will appear here once the collection loads.'}
+                      </p>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="rounded-full px-5"
+                      onClick={() => setIsPortraitModalOpen(true)}
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        <Images size={16} />
+                        Portrait collection
+                      </span>
+                    </Button>
+                  </div>
+
+                  <div className="mt-5">
+                    <div className="flex flex-wrap items-center justify-center gap-2 text-sm text-text-muted md:justify-start">
+                      <span className="rounded-full bg-brand-soft px-3 py-1.5 text-brand-strong">
+                        Level {level}{isAtMaxLevel ? ' — MAX' : ''}
+                      </span>
+                      <span className="rounded-full bg-surface-muted px-3 py-1.5">{stats.totalXpEarned} total XP</span>
+                    </div>
+                    <div className="mt-4 h-3.5 overflow-hidden rounded-full bg-surface-muted">
+                      <div
+                        className="h-full rounded-full bg-accent transition-[width] duration-500"
+                        style={{ width: `${isAtMaxLevel ? 100 : Math.max(progressPercent, 6)}%` }}
+                      />
+                    </div>
+                    {isAtMaxLevel ? (
+                      <p className="mt-2 text-xs text-text-muted">Max level reached</p>
+                    ) : (
+                      <p className="mt-2 text-xs text-text-muted">{xpIntoLevel}/{xpPerLevel} XP — {stats.xpToNextLevel} to next level</p>
+                    )}
+                  </div>
+
+                  <div className="mt-5 flex flex-wrap items-center justify-center gap-2 text-sm text-text-muted md:justify-start">
+                    <span className="rounded-full bg-surface-muted px-3 py-1.5">Member since {formatMemberSince(createdAt)}</span>
+                    <span className="rounded-full bg-brand-soft px-3 py-1.5 text-brand-strong">Status: {status}</span>
+                  </div>
+                </div>
+              </div>
+            </section>
+
             {showNewUserState ? (
               <section className="mt-6 rounded-[28px] border border-border bg-[linear-gradient(135deg,var(--color-surface)_0%,var(--color-brand-soft)_100%)] p-5 shadow-[0_14px_30px_rgba(31,41,55,0.05)]">
                 <p className="text-base font-medium text-text">Your journey is just getting started</p>
@@ -992,36 +1061,14 @@ export default function Profile() {
           </div>
         </section>
 
-            <section className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {statCards.map((card, index) => (
-                <ProfileStatCard
-                  key={card.label}
-                  label={card.label}
-                  value={card.value}
-                  icon={card.icon}
-                  tone={card.tone}
-                  delayMs={index * 80}
-                />
-              ))}
-            </section>
-
-            <section className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <DetailCard
-                title="Last Active"
-                value={lastActive}
-                description="Your most recent recorded reading activity."
-              />
-              <DetailCard
-                title="Reading Momentum"
-                value={currentStreak > 0 ? `${currentStreak} day streak` : 'Start your streak'}
-                description="Read on consecutive days to build consistency and improve your longest run."
-              />
-            </section>
-
-            <div className="mt-6">
-              <RecentActivitySection activities={recentDailyActivities} />
+            <div className="hidden sm:block">
+              {statsSections}
             </div>
           </>
+        ) : activeProfileTab === 'stats' ? (
+          <div className="sm:hidden">
+            {statsSections}
+          </div>
         ) : (
           <AchievementsSection
             achievements={achievements}
