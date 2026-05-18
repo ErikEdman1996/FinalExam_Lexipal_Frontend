@@ -128,7 +128,7 @@ function CreateCircleModalContent({
       if (navigator.share) {
         await navigator.share({
           title: `Join my BookCircle for ${createdCircle.bookTitle}`,
-          text: `Use invite code ${createdCircle.inviteCode} to join my BookCircle in Lexipal.`,
+          text: `Use invite code ${createdCircle.inviteCode} to join my BookCircle in Bookmark.`,
         });
         return;
       }

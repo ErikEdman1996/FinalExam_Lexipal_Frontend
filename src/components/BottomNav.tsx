@@ -45,7 +45,7 @@ export function BottomNav() {
     ? [...NAV_ITEMS, { to: '/admin', icon: ShieldCheck, label: 'Admin', mobileLabel: 'Admin' }]
     : NAV_ITEMS;
   const nickname = profile?.nickname?.trim() || username || 'Reader';
-  const handle = username ? `@${username}` : 'Lexipal profile';
+  const handle = username ? `@${username}` : 'Bookmark profile';
   const isDark = theme === 'dark';
   const themedMothIcon = isDark ? mothIcon : mothIconLight;
   const ThemeIcon = isDark ? Sun : Moon;
@@ -86,14 +86,14 @@ export function BottomNav() {
       <aside className="fixed left-0 top-0 bottom-0 z-40 hidden w-60 flex-col border-r border-sidebar-border bg-sidebar px-5 py-7 shadow-[0_20px_48px_rgba(15,23,42,0.16)] lg:flex">
         <div className="flex items-center gap-3 px-2">
           <div className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-[16px] bg-brand text-text-on-brand shadow-[0_10px_22px_rgba(154,74,66,0.22)]">
-            <img src={themedMothIcon} alt="Lexipal" className="h-7 w-7 object-contain" />
+            <img src={themedMothIcon} alt="Bookmark" className="h-7 w-7 object-contain" />
           </div>
           <div className="min-w-0">
             <p className="text-[0.66rem] font-medium uppercase tracking-[0.28em] text-sidebar-muted">
               Reading app
             </p>
             <p className="mt-0.5 text-base font-semibold tracking-[-0.02em] text-sidebar-text">
-              Lexipal
+              Bookmark
             </p>
           </div>
         </div>

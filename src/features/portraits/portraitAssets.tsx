@@ -59,7 +59,7 @@ export function PortraitImage({
   imageClassName = '',
 }: PortraitImageProps) {
   const { theme } = useTheme();
-  const label = name?.trim() ? name : 'Lexipal portrait';
+  const label = name?.trim() ? name : 'Bookmark portrait';
   const isLight = theme === 'light';
 
   if (!assetKey || !isKnownPortraitAssetKey(assetKey)) {

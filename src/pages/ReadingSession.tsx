@@ -539,7 +539,7 @@ export default function ReadingSession() {
 
       if (currentSession && !updatedSession) {
         resetSyncPendingRef.current = true;
-        setActionError('Timer reset locally. Could not sync it yet, but Lexipal will try again when the session runs.');
+        setActionError('Timer reset locally. Could not sync it yet, but Bookmark will try again when the session runs.');
       } else {
         resetSyncPendingRef.current = false;
         showToast('Timer reset');

@@ -254,7 +254,7 @@ export default function AdminDashboard() {
                 Platform Dashboard
               </h1>
               <p className="mt-2 max-w-2xl text-sm leading-relaxed text-text-muted sm:text-base">
-                Usage, reading progress, activity, and leaderboards across Lexipal.
+                Usage, reading progress, activity, and leaderboards across Bookmark.
               </p>
               {dashboard ? (
                 <p className="mt-3 text-sm text-text-subtle">

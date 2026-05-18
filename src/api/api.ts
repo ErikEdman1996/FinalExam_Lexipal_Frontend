@@ -1213,6 +1213,13 @@ const toAchievementArray = (value: unknown): AchievementResponseDTO[] => {
         .filter((achievement): achievement is AchievementResponseDTO => achievement !== null);
 };
 
+const replaceLegacyBrandCopy = (value: string) => (
+    value
+        .replace(/\bLexipal\b/g, 'Bookmark')
+        .replace(/\blexipal\b/g, 'Bookmark')
+        .replace(/\bLEXIPAL\b/g, 'BOOKMARK')
+);
+
 const toPortrait = (value: unknown): PortraitResponseDTO | null => {
     if (!isRecord(value) || typeof value.code !== 'string') {
         return null;
@@ -1220,8 +1227,8 @@ const toPortrait = (value: unknown): PortraitResponseDTO | null => {
 
     return {
         code: value.code,
-        name: typeof value.name === 'string' ? value.name : value.code,
-        description: typeof value.description === 'string' ? value.description : '',
+        name: replaceLegacyBrandCopy(typeof value.name === 'string' ? value.name : value.code),
+        description: replaceLegacyBrandCopy(typeof value.description === 'string' ? value.description : ''),
         assetKey: typeof value.assetKey === 'string' ? value.assetKey : '',
         requiredLevel: Math.max(1, toFiniteNumber(value.requiredLevel) ?? 1),
         sortOrder: toFiniteNumber(value.sortOrder) ?? 0,

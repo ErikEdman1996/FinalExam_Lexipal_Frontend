@@ -89,14 +89,14 @@ function PhonePreview() {
         <div className="relative aspect-[9/19] overflow-hidden rounded-[2.1rem] border-[9px] border-[#17120f] bg-[#17120f] shadow-[0_30px_80px_rgba(0,0,0,0.42)] sm:rounded-[2.35rem]">
           <img
             src={mobileSession}
-            alt="Mobile Lexipal reading session showing a focus timer, note controls, word lookup, reading audio, and looked-up words."
+            alt="Mobile Bookmark reading session showing a focus timer, note controls, word lookup, reading audio, and looked-up words."
             width={919}
             height={1935}
             loading="eager"
             className="h-full w-full rounded-[1.55rem] object-cover object-top sm:rounded-[1.75rem]"
           />
         </div>
-        <figcaption className="sr-only">Real mobile screenshot of a Lexipal reading session.</figcaption>
+        <figcaption className="sr-only">Real mobile screenshot of a Bookmark reading session.</figcaption>
       </figure>
 
       <div className="absolute -bottom-2 right-[-1.4rem] z-20 hidden rounded-[18px] border border-border bg-surface/95 px-4 py-3 shadow-[0_18px_44px_rgba(0,0,0,0.18)] backdrop-blur sm:block lg:right-[-5.4rem]">
@@ -140,7 +140,7 @@ export default function Landing() {
           <a
             href="/"
             className="flex min-w-0 items-center gap-3 rounded-full focus:outline-none focus-visible:ring-2 focus-visible:ring-brand"
-            aria-label="Lexipal home"
+            aria-label="Bookmark home"
           >
             <img
               src={mothIcon}
@@ -154,7 +154,7 @@ export default function Landing() {
                 Reading app
               </span>
               <span className="block font-['Fraunces',Georgia,serif] text-xl font-semibold leading-none text-text">
-                Lexipal
+                Bookmark
               </span>
             </span>
           </a>
@@ -180,13 +180,13 @@ export default function Landing() {
         <section className="mx-auto grid min-h-[calc(100vh-4rem)] max-w-6xl items-center gap-12 px-4 py-12 sm:px-6 sm:py-16 lg:grid-cols-[minmax(0,1fr)_minmax(320px,0.78fr)] lg:px-8">
           <div className="max-w-2xl">
             <h1 className="mt-7 font-['Fraunces',Georgia,serif] text-[4.5rem] font-semibold leading-[0.9] tracking-[-0.02em] text-text sm:text-[6.5rem] lg:text-[7.5rem]">
-              Lexipal
+              Bookmark
             </h1>
             <p className="mt-5 max-w-2xl text-3xl font-semibold leading-tight tracking-[-0.03em] text-text sm:text-4xl">
               Read with focus. Remember what matters.
             </p>
             <p className="mt-6 max-w-xl text-base leading-relaxed text-text-muted sm:text-lg">
-              Set a reading timer, look up words, save notes, and turn what you collect into practice. Lexipal keeps
+              Set a reading timer, look up words, save notes, and turn what you collect into practice. Bookmark keeps
               the useful parts of reading close without pulling you out of the book.
             </p>
 
