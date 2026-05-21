@@ -34,13 +34,16 @@ import {
   getMyAchievements,
   getMyPortraits,
   getProfile,
+  getStreakLeaderboard,
   selectPortrait,
   updateNickname,
   type AchievementResponseDTO,
   type DailyActivityReadResponseDTO,
+  type LeaderboardLimit,
   type PortraitResponseDTO,
   type ProfileReadResponseDTO,
   type ProfileStatsResponseDTO,
+  type StreakLeaderboardResponseDTO,
 } from '../api/api';
 
 const NICKNAME_PATTERN = /^[a-zA-Z0-9_]{3,20}$/;
@@ -53,15 +56,18 @@ const ACHIEVEMENT_FILTERS: { value: AchievementFilter; label: string }[] = [
   { value: 'locked', label: 'Locked' },
 ];
 
-type ProfileTab = 'overview' | 'stats' | 'achievements';
+type ProfileTab = 'overview' | 'stats' | 'leaderboard' | 'achievements';
 
 const PROFILE_DESKTOP_QUERY = '(min-width: 640px)';
 
 const PROFILE_TABS: { value: ProfileTab; label: string; mobileOnly?: boolean }[] = [
   { value: 'overview', label: 'Overview' },
   { value: 'stats', label: 'Stats', mobileOnly: true },
+  { value: 'leaderboard', label: 'Leaderboard' },
   { value: 'achievements', label: 'Achievements' },
 ];
+
+const LEADERBOARD_LIMIT_OPTIONS = [10, 50, 100] as const satisfies readonly LeaderboardLimit[];
 
 const getIsProfileDesktop = () => (
   typeof window !== 'undefined'
@@ -93,7 +99,7 @@ interface ProfileTabsProps {
 
 function ProfileTabs({ active, unlockedCount, totalCount, onChange }: ProfileTabsProps) {
   return (
-    <div className="flex w-full gap-1 rounded-full border border-border bg-surface p-1 shadow-[0_8px_18px_rgba(31,41,55,0.04)] sm:w-fit">
+    <div className="grid w-full grid-cols-2 gap-1 rounded-[22px] border border-border bg-surface p-1 shadow-[0_8px_18px_rgba(31,41,55,0.04)] sm:flex sm:w-fit sm:rounded-full">
       {PROFILE_TABS.map((tab) => {
         const isActive = tab.value === active;
         const showBadge = tab.value === 'achievements' && totalCount > 0;
@@ -103,16 +109,17 @@ function ProfileTabs({ active, unlockedCount, totalCount, onChange }: ProfileTab
           <button
             key={tab.value}
             type="button"
+            aria-pressed={isActive}
             onClick={() => onChange(tab.value)}
-            className={`${visibilityClassName} inline-flex flex-1 items-center justify-center gap-2 whitespace-nowrap rounded-full px-3 py-2 text-xs font-medium transition-all duration-200 sm:flex-none sm:px-4 sm:text-sm ${
+            className={`${visibilityClassName} inline-flex min-w-0 items-center justify-center gap-1.5 rounded-[18px] px-3 py-2.5 text-xs font-medium leading-none transition-[background-color,color,box-shadow] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand sm:flex-none sm:rounded-full sm:px-4 sm:py-2 sm:text-sm ${
               isActive
                 ? 'bg-brand text-text-on-brand shadow-[0_6px_14px_rgba(154,74,66,0.24)]'
                 : 'text-text-muted hover:text-text'
             }`}
           >
-            <span>{tab.label}</span>
+            <span className="min-w-0 truncate">{tab.label}</span>
             {showBadge ? (
-              <span className={`text-xs ${isActive ? 'text-text-on-brand/80' : 'text-text-subtle'}`}>
+              <span className={`hidden shrink-0 text-xs sm:inline ${isActive ? 'text-text-on-brand/80' : 'text-text-subtle'}`}>
                 {unlockedCount}/{totalCount}
               </span>
             ) : null}
@@ -129,6 +136,11 @@ const formatMemberSince = (value: string) => {
 
 const formatActivityDate = (value: string) => {
   return formatMonthDay(value);
+};
+
+const formatStreakDays = (value: number) => {
+  const safeValue = Math.max(0, value);
+  return `${safeValue} ${safeValue === 1 ? 'day' : 'days'}`;
 };
 
 const toReadableActivityLabel = (activityType: string) => {
@@ -533,6 +545,154 @@ function AchievementsSection({ achievements, isLoading, errorMessage }: Achievem
   );
 }
 
+function StreakLeaderboardSection() {
+  const [limit, setLimit] = useState<LeaderboardLimit>(10);
+  const [leaderboard, setLeaderboard] = useState<StreakLeaderboardResponseDTO | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const entries = leaderboard?.entries ?? [];
+
+  useEffect(() => {
+    let isCurrent = true;
+
+    const loadLeaderboard = async () => {
+      try {
+        setIsLoading(true);
+        setErrorMessage(null);
+        const data = await getStreakLeaderboard(limit);
+
+        if (!isCurrent) {
+          return;
+        }
+
+        setLeaderboard(data);
+      } catch (error) {
+        console.error('Error loading streak leaderboard:', error);
+
+        if (!isCurrent) {
+          return;
+        }
+
+        setLeaderboard(null);
+        setErrorMessage(error instanceof ApiResponseError
+          ? error.message
+          : 'Could not load the leaderboard right now.');
+      } finally {
+        if (isCurrent) {
+          setIsLoading(false);
+        }
+      }
+    };
+
+    void loadLeaderboard();
+
+    return () => {
+      isCurrent = false;
+    };
+  }, [limit]);
+
+  return (
+    <section className="mt-5 rounded-[24px] border border-border bg-surface p-4 shadow-[0_16px_34px_rgba(31,41,55,0.06)] sm:mt-6 sm:rounded-[30px] sm:p-6">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="text-xs uppercase tracking-[0.24em] text-text-subtle">Reading Streaks</p>
+          <h2 className="mt-2 text-xl font-semibold text-text text-pretty sm:text-2xl">Streak Leaderboard</h2>
+          <p className="mt-1.5 max-w-xl text-sm leading-relaxed text-text-muted sm:mt-2">
+            See who's keeping their daily reading habit alive.
+          </p>
+        </div>
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[14px] bg-brand-soft sm:h-12 sm:w-12 sm:rounded-[18px]">
+          <Trophy size={20} className="text-brand-strong" aria-hidden="true" />
+        </div>
+      </div>
+
+      <div className="mt-4 grid w-full grid-cols-3 gap-1 rounded-full bg-surface-muted p-1 sm:mt-5 sm:w-fit">
+        {LEADERBOARD_LIMIT_OPTIONS.map((option) => {
+          const isActive = option === limit;
+
+          return (
+            <button
+              key={option}
+              type="button"
+              aria-pressed={isActive}
+              onClick={() => setLimit(option)}
+              className={`rounded-full px-2 py-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand sm:px-4 sm:text-sm ${
+                isActive
+                  ? 'bg-brand text-text-on-brand'
+                  : 'bg-surface-muted text-text-muted hover:bg-surface-alt hover:text-text'
+              }`}
+            >
+              Top {option}
+            </button>
+          );
+        })}
+      </div>
+
+      {isLoading ? (
+        <div className="mt-4 space-y-3 sm:mt-5">
+          {Array.from({ length: 5 }, (_, index) => (
+            <div key={index} className="h-14 rounded-[18px] bg-surface-muted sm:h-16 sm:rounded-[22px]" />
+          ))}
+        </div>
+      ) : errorMessage ? (
+        <div className="mt-4 rounded-[18px] bg-surface-muted px-4 py-4 text-sm leading-relaxed text-text-muted sm:mt-5 sm:rounded-[22px] sm:py-5">
+          {errorMessage}
+        </div>
+      ) : entries.length === 0 ? (
+        <div className="mt-4 rounded-[18px] bg-surface-muted px-4 py-4 text-sm leading-relaxed text-text-muted sm:mt-5 sm:rounded-[22px] sm:py-5">
+          No readers on the leaderboard yet.
+        </div>
+      ) : (
+        <div className="mt-4 overflow-hidden rounded-[20px] border border-border sm:mt-5 sm:rounded-[24px]">
+          <div className="grid grid-cols-[2.75rem_minmax(0,1fr)_5.5rem] gap-2 bg-surface-muted px-3 py-3 text-[0.65rem] font-semibold uppercase tracking-[0.14em] text-text-subtle sm:grid-cols-[5rem_minmax(0,1fr)_9rem] sm:gap-3 sm:px-4 sm:text-xs sm:tracking-[0.16em]">
+            <span>Rank</span>
+            <span>Nickname</span>
+            <span className="text-right">
+              <span className="sm:hidden">Streak</span>
+              <span className="hidden sm:inline">Current Streak</span>
+            </span>
+          </div>
+          <div className="divide-y divide-border">
+            {entries.map((entry) => {
+              const isTopRank = entry.rank <= 3;
+              const rowClassName = isTopRank ? 'bg-surface' : 'bg-surface-alt';
+              const rankClassName = entry.rank === 1
+                ? 'bg-brand text-text-on-brand'
+                : isTopRank
+                  ? 'bg-surface text-accent-strong'
+                  : 'bg-surface-muted text-text-muted';
+              const streakClassName = entry.currentStreak >= 7 || isTopRank
+                ? 'bg-brand-soft text-brand-strong'
+                : 'bg-surface-muted text-text-muted';
+
+              return (
+                <article
+                  key={`${entry.rank}-${entry.userId}`}
+                  className={`grid grid-cols-[2.75rem_minmax(0,1fr)_5.5rem] items-center gap-2 px-3 py-3 sm:grid-cols-[5rem_minmax(0,1fr)_9rem] sm:gap-3 sm:px-4 sm:py-4 ${rowClassName}`}
+                >
+                  <span
+                    className={`inline-flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold tabular-nums sm:h-9 sm:w-9 ${rankClassName}`}
+                  >
+                    {entry.rank}
+                  </span>
+                  <span className="min-w-0 truncate text-sm font-semibold text-text">
+                    {entry.nickname}
+                  </span>
+                  <span className="text-right">
+                    <span className={`inline-flex rounded-full px-2.5 py-1.5 text-xs font-semibold tabular-nums sm:px-3 sm:text-sm ${streakClassName}`}>
+                      {formatStreakDays(entry.currentStreak)}
+                    </span>
+                  </span>
+                </article>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 export default function Profile() {
   const { logout, setProfile: setAuthProfile, username } = useAuth();
   const [profile, setProfile] = useState<ProfileReadResponseDTO | null>(null);
@@ -649,7 +809,7 @@ export default function Profile() {
 
   if (isLoading) {
     return (
-      <div className="page-bg min-h-screen pb-24 lg:pl-60 lg:pb-0">
+      <div className="page-bg min-h-screen overflow-x-hidden pb-24 lg:pl-60 lg:pb-0">
         <div className="mx-auto max-w-3xl px-5 py-16 text-center text-text-muted">
           Loading your profile...
         </div>
@@ -660,7 +820,7 @@ export default function Profile() {
 
   if (errorMessage || !profile) {
     return (
-      <div className="page-bg min-h-screen pb-24 lg:pl-60 lg:pb-0">
+      <div className="page-bg min-h-screen overflow-x-hidden pb-24 lg:pl-60 lg:pb-0">
         <div className="mx-auto max-w-3xl px-5 py-16 text-center">
           <p className="text-lg text-danger">{errorMessage ?? 'Profile not found.'}</p>
           <p className="mt-2 text-sm text-text-muted">Check backend connection and try again.</p>
@@ -773,13 +933,13 @@ export default function Profile() {
   const statCards = [
     {
       label: 'Current Streak',
-      value: `${currentStreak} days`,
+      value: formatStreakDays(currentStreak),
       icon: Flame,
       tone: 'brand' as const,
     },
     {
       label: 'Longest Streak',
-      value: `${longestStreak} days`,
+      value: formatStreakDays(longestStreak),
       icon: Trophy,
       tone: 'accent' as const,
     },
@@ -838,7 +998,7 @@ export default function Profile() {
         />
         <DetailCard
           title="Reading Momentum"
-          value={currentStreak > 0 ? `${currentStreak} day streak` : 'Start your streak'}
+          value={currentStreak > 0 ? `${formatStreakDays(currentStreak)} streak` : 'Start your streak'}
           description="Read on consecutive days to build consistency and improve your longest run."
         />
       </section>
@@ -850,11 +1010,11 @@ export default function Profile() {
   );
 
   return (
-    <div className="page-bg min-h-screen pb-24 lg:pl-60 lg:pb-0">
-      <div className="mx-auto max-w-5xl px-5 py-8 sm:px-6 sm:py-10">
-        <div className="mb-6 flex flex-wrap items-start justify-between gap-4">
+    <div className="page-bg min-h-screen overflow-x-hidden pb-28 lg:pl-60 lg:pb-0">
+      <div className="mx-auto max-w-5xl px-4 py-6 sm:px-6 sm:py-10">
+        <div className="mb-5 flex flex-wrap items-start justify-between gap-4 sm:mb-6">
           <div>
-            <h1 className="text-4xl font-semibold tracking-[-0.03em] text-text">Profile</h1>
+            <h1 className="text-4xl font-semibold text-text">Profile</h1>
             <p className="mt-2 max-w-xl text-sm leading-relaxed text-text-muted">
               Track your reading level, streaks, and milestones in one place.
             </p>
@@ -1019,6 +1179,8 @@ export default function Profile() {
           <div className="sm:hidden">
             {statsSections}
           </div>
+        ) : activeProfileTab === 'leaderboard' ? (
+          <StreakLeaderboardSection />
         ) : (
           <AchievementsSection
             achievements={achievements}

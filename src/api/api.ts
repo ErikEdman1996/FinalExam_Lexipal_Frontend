@@ -486,12 +486,29 @@ export interface ProfileStatsResponseDTO {
     xpToNextLevel: number;
 }
 
+export type LeaderboardLimit = 10 | 50 | 100;
+
 export interface StreakMetaDataReadResponseDTO {
     id: number;
     userId: number;
     currentStreak: number;
     longestStreak: number;
     lastActivityDate: string;
+}
+
+export interface StreakLeaderboardEntryDTO {
+    rank: number;
+    userId: number;
+    nickname: string;
+    currentStreak: number;
+    lastActivityDate: string | null;
+}
+
+export interface StreakLeaderboardResponseDTO {
+    limit: LeaderboardLimit;
+    asOfDate: string;
+    timezone: string;
+    entries: StreakLeaderboardEntryDTO[];
 }
 
 export interface DailyActivityReadResponseDTO {
@@ -739,6 +756,10 @@ const toFiniteNumber = (value: unknown): number | null => {
     }
 
     return null;
+};
+
+const isLeaderboardLimit = (value: number): value is LeaderboardLimit => {
+    return value === 10 || value === 50 || value === 100;
 };
 
 const isBookLikeRecord = (value: unknown): value is Record<string, unknown> => {
@@ -1167,6 +1188,26 @@ const toStreakMetadata = (value: unknown): StreakMetaDataReadResponseDTO | null 
         currentStreak: toFiniteNumber(value.currentStreak) ?? 0,
         longestStreak: toFiniteNumber(value.longestStreak) ?? 0,
         lastActivityDate: typeof value.lastActivityDate === 'string' ? value.lastActivityDate : '',
+    };
+};
+
+const toStreakLeaderboardEntry = (value: unknown, index: number): StreakLeaderboardEntryDTO | null => {
+    if (!isRecord(value)) {
+        return null;
+    }
+
+    const nickname = typeof value.nickname === 'string' && value.nickname.trim()
+        ? value.nickname.trim()
+        : 'Reader';
+
+    return {
+        rank: Math.max(1, toFiniteNumber(value.rank) ?? index + 1),
+        userId: Math.max(0, toFiniteNumber(value.userId) ?? 0),
+        nickname,
+        currentStreak: Math.max(0, toFiniteNumber(value.currentStreak) ?? 0),
+        lastActivityDate: typeof value.lastActivityDate === 'string' && value.lastActivityDate.trim()
+            ? value.lastActivityDate
+            : null,
     };
 };
 
@@ -1630,6 +1671,25 @@ const normalizePortraitsResponse = (value: unknown): PortraitResponseDTO[] => {
         .map(toPortrait)
         .filter((portrait): portrait is PortraitResponseDTO => portrait !== null)
         .sort((a, b) => a.sortOrder - b.sortOrder);
+};
+
+const normalizeStreakLeaderboardResponse = (
+    value: unknown,
+    requestedLimit: LeaderboardLimit,
+): StreakLeaderboardResponseDTO => {
+    const record = isRecord(value) ? value : {};
+    const rawLimit = toFiniteNumber(record.limit);
+    const limit = rawLimit != null && isLeaderboardLimit(rawLimit) ? rawLimit : requestedLimit;
+    const rawEntries = Array.isArray(record.entries) ? record.entries : [];
+
+    return {
+        limit,
+        asOfDate: typeof record.asOfDate === 'string' ? record.asOfDate : '',
+        timezone: typeof record.timezone === 'string' ? record.timezone : '',
+        entries: rawEntries
+            .map(toStreakLeaderboardEntry)
+            .filter((entry): entry is StreakLeaderboardEntryDTO => entry !== null),
+    };
 };
 
 const normalizeProfileResponse = (value: unknown): ProfileReadResponseDTO => {
@@ -2797,6 +2857,28 @@ export const getProfile = async () => {
         return normalizeProfileResponse(data);
     } catch (error) {
         console.error('Error fetching profile:', error);
+        throw error;
+    }
+};
+
+export const getStreakLeaderboard = async (limit: LeaderboardLimit = 10) => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/leaderboards/streaks?limit=${limit}`, {
+            headers: await buildAuthHeaders(),
+        });
+
+        if (!res.ok) {
+            throw toApiResponseError(
+                await readErrorPayload(res),
+                'Could not load the streak leaderboard.',
+                res.status,
+            );
+        }
+
+        const data = await res.json();
+        return normalizeStreakLeaderboardResponse(data, limit);
+    } catch (error) {
+        console.error('Error fetching streak leaderboard:', error);
         throw error;
     }
 };
