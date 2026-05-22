@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { BookOpen, History, Search } from 'lucide-react';
 import { BottomNav } from '../components/BottomNav';
 import { Button } from '../components/Button';
-import { CodexNavTabs } from '../components/CodexNavTabs';
+import { ChallengeNavTabs } from '../components/ChallengeNavTabs';
 import { inputClassName } from '../components/form/inputStyles';
 import { WordLookupDetailsDialog } from '../components/WordLookupDetailsDialog';
 import { formatShortDate } from '../utils/formatting';
@@ -90,7 +90,7 @@ export default function WordLookups() {
           </div>
         </header>
 
-        <CodexNavTabs className="mt-6" />
+        <ChallengeNavTabs className="mt-6" />
 
         <section className="mt-6 rounded-[30px] border border-border bg-surface p-4 shadow-[0_16px_34px_rgba(31,41,55,0.06)] sm:p-5">
           <label htmlFor="word-history-search" className="sr-only">

@@ -67,6 +67,13 @@ export function AuthProvider({ children }: PropsWithChildren) {
     setIsBootstrappingProfile(false);
   }, []);
 
+  const refreshProfile = useCallback(async () => {
+    const profileResponse = await getProfile();
+    setProfile(profileResponse);
+    setHasBootstrappedProfile(true);
+    return profileResponse;
+  }, []);
+
   useEffect(() => {
     let isMounted = true;
 
@@ -229,9 +236,18 @@ export function AuthProvider({ children }: PropsWithChildren) {
         setIsBootstrappingProfile(false);
       }
     },
+    refreshProfile,
     setProfile,
     };
-  }, [authenticated, bootstrapError, hasBootstrappedProfile, initialized, isBootstrappingProfile, profile]);
+  }, [
+    authenticated,
+    bootstrapError,
+    hasBootstrappedProfile,
+    initialized,
+    isBootstrappingProfile,
+    profile,
+    refreshProfile,
+  ]);
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

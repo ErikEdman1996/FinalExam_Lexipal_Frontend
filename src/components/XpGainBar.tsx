@@ -54,6 +54,8 @@ function XpGainBarContent({
   const startProgressPercent = item.leveledUp
     ? 0
     : clampPercent(((item.previousTotalXp - item.currentLevelMinXp) / Math.max(1, item.xpPerLevel)) * 100);
+  const xpDelta = Math.max(0, item.toTotalXp - item.fromTotalXp);
+  const shouldShowFinalValues = animationDurationMs === 0 || xpDelta === 0;
   const [progressPercent, setProgressPercent] = useState(startProgressPercent);
   const [displayTotalXp, setDisplayTotalXp] = useState(() => item.fromTotalXp);
 
@@ -63,11 +65,8 @@ function XpGainBarContent({
     }
 
     let animationFrameId: number | null = null;
-    const xpDelta = Math.max(0, item.toTotalXp - item.fromTotalXp);
 
-    if (animationDurationMs === 0 || xpDelta === 0) {
-      setDisplayTotalXp(item.toTotalXp);
-      setProgressPercent(finalProgressPercent);
+    if (shouldShowFinalValues) {
       return undefined;
     }
 
@@ -99,10 +98,13 @@ function XpGainBarContent({
         window.cancelAnimationFrame(animationFrameId);
       }
     };
-  }, [animationDurationMs, phase, item, startProgressPercent, finalProgressPercent]);
+  }, [animationDurationMs, phase, item, startProgressPercent, finalProgressPercent, shouldShowFinalValues, xpDelta]);
 
-  const roundedDisplayedTotalXp = Math.round(displayTotalXp);
-  const displayedProgressWidth = `${Math.max(progressPercent, isAtMaxLevel ? 100 : 4)}%`;
+  const roundedDisplayedTotalXp = Math.round(shouldShowFinalValues ? item.toTotalXp : displayTotalXp);
+  const displayedProgressWidth = `${Math.max(
+    shouldShowFinalValues ? finalProgressPercent : progressPercent,
+    isAtMaxLevel ? 100 : 4,
+  )}%`;
 
   return (
     <>

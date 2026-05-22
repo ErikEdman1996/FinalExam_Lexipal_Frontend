@@ -10,12 +10,29 @@ import {
   AchievementUnlockBar,
   type AchievementUnlockPresentation,
 } from '../../components/AchievementUnlockBar';
+import {
+  CoinGainBar,
+  type CoinGainPresentation,
+} from '../../components/CoinGainBar';
 import { XpGainBar, type XpGainPresentation } from '../../components/XpGainBar';
+import { useAuth } from '../auth/useAuth';
 import { launchCelebration } from './confetti';
-import { XpGainContext, type RewardTrigger, type XpGainTrigger } from './XpGainContext';
+import {
+  XpGainContext,
+  type CoinGainSource,
+  type RewardTrigger,
+  type XpGainTrigger,
+} from './XpGainContext';
 
 type RewardQueueItem =
   | ({ type: 'xp' } & Pick<XpGainTrigger, 'xpUpdate' | 'source' | 'rarityTier'>)
+  | {
+    type: 'coin';
+    coinsAwarded: number;
+    fromCoinBalance: number;
+    source: CoinGainSource;
+    toCoinBalance: number;
+  }
   | {
     type: 'achievement';
     achievement: AchievementResponseDTO;
@@ -27,14 +44,24 @@ type ActiveRewardPresentation =
     item: XpGainPresentation;
   }
   | {
+    type: 'coin';
+    item: CoinGainPresentation;
+  }
+  | {
     type: 'achievement';
     item: AchievementUnlockPresentation;
   };
 
 export function XpGainProvider({ children }: PropsWithChildren) {
+  const { profile: authProfile, refreshProfile } = useAuth();
   const [currentTotalXp, setCurrentTotalXp] = useState<number | null>(null);
   const [activePresentation, setActivePresentation] = useState<ActiveRewardPresentation | null>(null);
   const totalXpRef = useRef<number | null>(null);
+  const authCoinBalance = authProfile?.wallet.coinBalance;
+  const coinBalanceRef = useRef<number | null>(
+    typeof authCoinBalance === 'number' ? Math.max(0, authCoinBalance) : null,
+  );
+  const coinRefreshTailRef = useRef<Promise<void>>(Promise.resolve());
   const queueRef = useRef<RewardQueueItem[]>([]);
   const isProcessingRef = useRef(false);
   const presentationIdRef = useRef(1);
@@ -79,6 +106,24 @@ export function XpGainProvider({ children }: PropsWithChildren) {
             item: {
               id: presentationIdRef.current,
               achievement: nextItem.achievement,
+            },
+          });
+          presentationIdRef.current += 1;
+        });
+        continue;
+      }
+
+      if (nextItem.type === 'coin') {
+        await new Promise<void>((resolve) => {
+          presentationResolverRef.current = resolve;
+          setActivePresentation({
+            type: 'coin',
+            item: {
+              id: presentationIdRef.current,
+              coinsAwarded: nextItem.coinsAwarded,
+              fromCoinBalance: nextItem.fromCoinBalance,
+              source: nextItem.source,
+              toCoinBalance: nextItem.toCoinBalance,
             },
           });
           presentationIdRef.current += 1;
@@ -155,6 +200,42 @@ export function XpGainProvider({ children }: PropsWithChildren) {
     showRewards(input);
   }, [showRewards]);
 
+  const refreshCoinGain = useCallback((source: CoinGainSource) => {
+    const refreshTask = coinRefreshTailRef.current
+      .catch(() => undefined)
+      .then(async () => {
+        const previousCoinBalance = coinBalanceRef.current;
+        const refreshedProfile = await refreshProfile();
+        const nextCoinBalance = Math.max(0, refreshedProfile.wallet.coinBalance);
+
+        coinBalanceRef.current = nextCoinBalance;
+
+        if (previousCoinBalance == null || nextCoinBalance <= previousCoinBalance) {
+          return;
+        }
+
+        queueRef.current.push({
+          type: 'coin',
+          coinsAwarded: nextCoinBalance - previousCoinBalance,
+          fromCoinBalance: previousCoinBalance,
+          source,
+          toCoinBalance: nextCoinBalance,
+        });
+        void processQueue();
+      });
+
+    coinRefreshTailRef.current = refreshTask.catch(() => undefined);
+    return refreshTask;
+  }, [processQueue, refreshProfile]);
+
+  useEffect(() => {
+    if (typeof authCoinBalance !== 'number') {
+      return;
+    }
+
+    coinBalanceRef.current = Math.max(0, authCoinBalance);
+  }, [authCoinBalance]);
+
   useEffect(() => {
     let isMounted = true;
 
@@ -183,12 +264,17 @@ export function XpGainProvider({ children }: PropsWithChildren) {
         showXpGain,
         showRewards,
         currentTotalXp,
+        refreshCoinGain,
         refreshProfileXp,
       }}
     >
       {children}
       <XpGainBar
         item={activePresentation?.type === 'xp' ? activePresentation.item : null}
+        onComplete={handlePresentationComplete}
+      />
+      <CoinGainBar
+        item={activePresentation?.type === 'coin' ? activePresentation.item : null}
         onComplete={handlePresentationComplete}
       />
       <AchievementUnlockBar

@@ -488,12 +488,57 @@ export interface ProfileStatsResponseDTO {
 
 export type LeaderboardLimit = 10 | 50 | 100;
 
+export interface WalletResponseDTO {
+    coinBalance: number;
+    availableStreakFreezes: number;
+}
+
+export type StoreItemType = 'STREAK_FREEZE' | 'THEME';
+
+export interface StoreItemResponseDTO {
+    code: string;
+    name: string;
+    description: string;
+    itemType: StoreItemType;
+    priceCoins: number;
+    owned: boolean;
+    selected: boolean;
+    ownedQuantity: number | null;
+    themeCode: string | null;
+}
+
+export interface StoreResponseDTO {
+    wallet: WalletResponseDTO;
+    items: StoreItemResponseDTO[];
+}
+
+export interface StorePurchaseResponseDTO {
+    wallet: WalletResponseDTO;
+    item: StoreItemResponseDTO;
+}
+
+export type ThemeTone = 'LIGHT' | 'DARK';
+
+export interface ThemeResponseDTO {
+    code: string;
+    name: string;
+    description: string;
+    tone: ThemeTone;
+    sortOrder: number;
+    unlocked: boolean;
+    selected: boolean;
+    priceCoins: number;
+    unlockedAt: string | null;
+}
+
 export interface StreakMetaDataReadResponseDTO {
     id: number;
     userId: number;
     currentStreak: number;
     longestStreak: number;
-    lastActivityDate: string;
+    lastActivityDate: string | null;
+    availableStreakFreezes: number;
+    freezeProtectedThroughDate: string | null;
 }
 
 export interface StreakLeaderboardEntryDTO {
@@ -554,6 +599,8 @@ export interface ProfileReadResponseDTO {
     streak: StreakMetaDataReadResponseDTO | null;
     recentDailyActivities: DailyActivityReadResponseDTO[];
     selectedPortrait: PortraitResponseDTO | null;
+    selectedTheme: ThemeResponseDTO | null;
+    wallet: WalletResponseDTO;
 }
 
 export interface XpUpdateResponseDTO {
@@ -1187,7 +1234,81 @@ const toStreakMetadata = (value: unknown): StreakMetaDataReadResponseDTO | null 
         userId: toFiniteNumber(value.userId) ?? 0,
         currentStreak: toFiniteNumber(value.currentStreak) ?? 0,
         longestStreak: toFiniteNumber(value.longestStreak) ?? 0,
-        lastActivityDate: typeof value.lastActivityDate === 'string' ? value.lastActivityDate : '',
+        lastActivityDate: typeof value.lastActivityDate === 'string' && value.lastActivityDate.trim()
+            ? value.lastActivityDate
+            : null,
+        availableStreakFreezes: Math.max(0, toFiniteNumber(value.availableStreakFreezes) ?? 0),
+        freezeProtectedThroughDate:
+            typeof value.freezeProtectedThroughDate === 'string' && value.freezeProtectedThroughDate.trim()
+                ? value.freezeProtectedThroughDate
+                : null,
+    };
+};
+
+const toWallet = (value: unknown): WalletResponseDTO => {
+    const record = isRecord(value) ? value : {};
+
+    return {
+        coinBalance: Math.max(0, toFiniteNumber(record.coinBalance) ?? 0),
+        availableStreakFreezes: Math.max(0, toFiniteNumber(record.availableStreakFreezes) ?? 0),
+    };
+};
+
+const isStoreItemType = (value: unknown): value is StoreItemType => {
+    return value === 'STREAK_FREEZE' || value === 'THEME';
+};
+
+const toStoreItem = (value: unknown): StoreItemResponseDTO | null => {
+    if (!isRecord(value) || typeof value.code !== 'string' || !isStoreItemType(value.itemType)) {
+        return null;
+    }
+
+    return {
+        code: value.code,
+        name: typeof value.name === 'string' ? value.name : value.code,
+        description: typeof value.description === 'string' ? value.description : '',
+        itemType: value.itemType,
+        priceCoins: Math.max(0, toFiniteNumber(value.priceCoins) ?? 0),
+        owned: value.owned === true,
+        selected: value.selected === true,
+        ownedQuantity: value.ownedQuantity == null
+            ? null
+            : Math.max(0, toFiniteNumber(value.ownedQuantity) ?? 0),
+        themeCode: typeof value.themeCode === 'string' && value.themeCode.trim() ? value.themeCode : null,
+    };
+};
+
+const normalizeStoreResponse = (value: unknown): StoreResponseDTO => {
+    if (!isRecord(value)) {
+        throw new Error('Unexpected store response shape.');
+    }
+
+    const items = Array.isArray(value.items)
+        ? value.items
+            .map(toStoreItem)
+            .filter((item): item is StoreItemResponseDTO => item !== null)
+        : [];
+
+    return {
+        wallet: toWallet(value.wallet),
+        items,
+    };
+};
+
+const normalizeStorePurchaseResponse = (value: unknown): StorePurchaseResponseDTO => {
+    if (!isRecord(value)) {
+        throw new Error('Unexpected store purchase response shape.');
+    }
+
+    const item = toStoreItem(value.item);
+
+    if (!item) {
+        throw new Error('Unexpected purchased store item response shape.');
+    }
+
+    return {
+        wallet: toWallet(value.wallet),
+        item,
     };
 };
 
@@ -1277,6 +1398,46 @@ const toPortrait = (value: unknown): PortraitResponseDTO | null => {
         selected: value.selected === true,
         unlockedAt: typeof value.unlockedAt === 'string' && value.unlockedAt.trim() ? value.unlockedAt : null,
     };
+};
+
+const toThemeTone = (value: unknown): ThemeTone => {
+    return value === 'DARK' ? 'DARK' : 'LIGHT';
+};
+
+const toTheme = (value: unknown): ThemeResponseDTO | null => {
+    if (!isRecord(value) || typeof value.code !== 'string') {
+        return null;
+    }
+
+    return {
+        code: value.code,
+        name: typeof value.name === 'string' ? value.name : value.code,
+        description: typeof value.description === 'string' ? value.description : '',
+        tone: toThemeTone(value.tone),
+        sortOrder: toFiniteNumber(value.sortOrder) ?? 0,
+        unlocked: value.unlocked === true,
+        selected: value.selected === true,
+        priceCoins: Math.max(0, toFiniteNumber(value.priceCoins) ?? 0),
+        unlockedAt: typeof value.unlockedAt === 'string' && value.unlockedAt.trim() ? value.unlockedAt : null,
+    };
+};
+
+const normalizeThemesResponse = (value: unknown): ThemeResponseDTO[] => {
+    const themes = Array.isArray(value)
+        ? value
+        : (isRecord(value)
+            ? [value.themes, value.content, value.data, value.items]
+                .find((candidate) => Array.isArray(candidate))
+            : undefined);
+
+    if (!Array.isArray(themes)) {
+        return [];
+    }
+
+    return themes
+        .map(toTheme)
+        .filter((theme): theme is ThemeResponseDTO => theme !== null)
+        .sort((left, right) => left.sortOrder - right.sortOrder);
 };
 
 const findNoteLikeRecord = (value: unknown, depth = 0): Record<string, unknown> | null => {
@@ -1717,6 +1878,8 @@ const normalizeProfileResponse = (value: unknown): ProfileReadResponseDTO => {
         streak: toStreakMetadata(value.streak),
         recentDailyActivities,
         selectedPortrait: toPortrait(value.selectedPortrait),
+        selectedTheme: toTheme(value.selectedTheme),
+        wallet: toWallet(value.wallet),
     };
 };
 
@@ -2857,6 +3020,131 @@ export const getProfile = async () => {
         return normalizeProfileResponse(data);
     } catch (error) {
         console.error('Error fetching profile:', error);
+        throw error;
+    }
+};
+
+export const getMyWallet = async () => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/wallet/me`, {
+            headers: await buildAuthHeaders(),
+        });
+
+        if (!res.ok) {
+            throw toApiResponseError(await readErrorPayload(res), 'Could not load your wallet.', res.status);
+        }
+
+        const data = await res.json();
+        return toWallet(data);
+    } catch (error) {
+        console.error('Error fetching wallet:', error);
+        throw error;
+    }
+};
+
+export const purchaseMyStreakFreeze = async () => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/streak-freezes/me/purchase`, {
+            method: 'POST',
+            headers: await buildAuthHeaders(),
+        });
+
+        if (!res.ok) {
+            throw toApiResponseError(
+                await readErrorPayload(res),
+                'Could not buy a streak freeze.',
+                res.status,
+            );
+        }
+
+        const data = await res.json();
+        return toWallet(data);
+    } catch (error) {
+        console.error('Error purchasing streak freeze:', error);
+        throw error;
+    }
+};
+
+export const getMyStore = async () => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/store/me`, {
+            headers: await buildAuthHeaders(),
+        });
+
+        if (!res.ok) {
+            throw toApiResponseError(await readErrorPayload(res), 'Could not load the store.', res.status);
+        }
+
+        const data = await res.json();
+        return normalizeStoreResponse(data);
+    } catch (error) {
+        console.error('Error fetching store:', error);
+        throw error;
+    }
+};
+
+export const purchaseStoreItem = async (itemCode: string) => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/store/items/${encodeURIComponent(itemCode)}/purchase`, {
+            method: 'POST',
+            headers: await buildAuthHeaders(),
+        });
+
+        if (!res.ok) {
+            throw toApiResponseError(await readErrorPayload(res), 'Could not buy this store item.', res.status);
+        }
+
+        const data = await res.json();
+        return normalizeStorePurchaseResponse(data);
+    } catch (error) {
+        console.error('Error purchasing store item:', error);
+        throw error;
+    }
+};
+
+export const getMyThemes = async () => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/themes/me`, {
+            headers: await buildAuthHeaders(),
+        });
+
+        if (!res.ok) {
+            throw toApiResponseError(await readErrorPayload(res), 'Could not load your themes.', res.status);
+        }
+
+        const data = await res.json();
+        return normalizeThemesResponse(data);
+    } catch (error) {
+        console.error('Error fetching themes:', error);
+        throw error;
+    }
+};
+
+export const selectMyTheme = async (themeCode: string) => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/themes/me/selected`, {
+            method: 'PATCH',
+            headers: {
+                'Content-Type': 'application/json',
+                ...(await buildAuthHeaders()),
+            },
+            body: JSON.stringify({ themeCode }),
+        });
+
+        if (!res.ok) {
+            throw toApiResponseError(await readErrorPayload(res), 'Could not select this theme.', res.status);
+        }
+
+        const data = await res.json();
+        const theme = toTheme(data);
+
+        if (!theme) {
+            throw new Error('Unexpected selected theme response shape.');
+        }
+
+        return theme;
+    } catch (error) {
+        console.error('Error selecting theme:', error);
         throw error;
     }
 };

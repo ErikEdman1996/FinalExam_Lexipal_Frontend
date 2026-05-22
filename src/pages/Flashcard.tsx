@@ -128,7 +128,7 @@ export default function Flashcard() {
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
-  const { showXpGain } = useXpGain();
+  const { refreshCoinGain, showXpGain } = useXpGain();
   const game = useFlashcardGame();
 
   useEffect(() => {
@@ -210,6 +210,11 @@ export default function Flashcard() {
       game.applyXp(attempt.xpAwarded);
       if (attempt.xpUpdate) {
         showXpGain({ xpUpdate: attempt.xpUpdate, source: 'challenge' });
+      }
+      if (attempt.result === 'PASS') {
+        void refreshCoinGain('challenge').catch((error) => {
+          console.error('Error refreshing coins after flashcard pass:', error);
+        });
       }
     } catch (error) {
       console.error('Error submitting challenge attempt:', error);

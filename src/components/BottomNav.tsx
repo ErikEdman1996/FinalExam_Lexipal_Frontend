@@ -2,13 +2,12 @@ import { NavLink, useLocation } from 'react-router-dom';
 import * as DropdownMenu from '@radix-ui/react-dropdown-menu';
 import {
   BookMarked,
-  BookOpen,
   Ellipsis,
   Library,
   LogOut,
-  Moon,
+  Paintbrush,
   ShieldCheck,
-  Sun,
+  Store,
   Trophy,
   User,
   UsersRound,
@@ -32,14 +31,14 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/library', icon: Library, label: 'Library', mobileLabel: 'Library' },
   { to: '/reading-lists', icon: BookMarked, label: 'Lists', mobileLabel: 'Lists' },
   { to: '/circles', icon: UsersRound, label: 'Circles', mobileLabel: 'Circles' },
-  { to: '/codex', icon: BookOpen, label: 'Codex', mobileLabel: 'Codex', matchPaths: ['/word-lookups'] },
-  { to: '/challenges', icon: Trophy, label: 'Challenges', mobileLabel: 'Play' },
+  { to: '/store', icon: Store, label: 'Store', mobileLabel: 'Store' },
+  { to: '/challenges', icon: Trophy, label: 'Challenges', mobileLabel: 'Play', matchPaths: ['/word-lookups'] },
   { to: '/profile', icon: User, label: 'Profile', mobileLabel: 'Profile' },
 ];
 
 export function BottomNav() {
   const { isAdmin, logout, profile, username } = useAuth();
-  const { theme, toggle } = useTheme();
+  const { theme } = useTheme();
   const location = useLocation();
   const navItems: NavItem[] = isAdmin
     ? [...NAV_ITEMS, { to: '/admin', icon: ShieldCheck, label: 'Admin', mobileLabel: 'Admin' }]
@@ -48,7 +47,6 @@ export function BottomNav() {
   const handle = username ? `@${username}` : 'Bookmark profile';
   const isDark = theme === 'dark';
   const themedMothIcon = isDark ? mothIcon : mothIconLight;
-  const ThemeIcon = isDark ? Sun : Moon;
   const isMatchedPath = (paths?: readonly string[]) => (
     paths?.some((path) => location.pathname === path || location.pathname.startsWith(`${path}/`)) ?? false
   );
@@ -167,24 +165,26 @@ export function BottomNav() {
                   sideOffset={10}
                   className="z-50 w-60 rounded-[22px] border border-border bg-surface p-2 shadow-[0_24px_54px_rgba(15,23,42,0.22)]"
                 >
-                  <DropdownMenu.Item
-                    onSelect={toggle}
-                    className="flex cursor-pointer items-center justify-between gap-3 rounded-[16px] px-3 py-3 text-sm font-medium text-text outline-none transition-colors hover:bg-surface-alt focus:bg-surface-alt"
-                  >
-                    <span className="flex items-center gap-3">
-                      <span className="flex h-9 w-9 items-center justify-center rounded-[12px] bg-surface-muted text-text">
-                        <ThemeIcon size={18} />
-                      </span>
-                      <span className="flex flex-col">
-                        <span>Appearance</span>
-                        <span className="text-xs font-normal text-text-muted">
-                          {isDark ? 'Dark theme on' : 'Light theme on'}
+                  <DropdownMenu.Item asChild>
+                    <NavLink
+                      to="/store#themes"
+                      className="flex cursor-pointer items-center justify-between gap-3 rounded-[16px] px-3 py-3 text-sm font-medium text-text outline-none transition-colors hover:bg-surface-alt focus:bg-surface-alt"
+                    >
+                      <span className="flex items-center gap-3">
+                        <span className="flex h-9 w-9 items-center justify-center rounded-[12px] bg-surface-muted text-text">
+                          <Paintbrush size={18} />
+                        </span>
+                        <span className="flex flex-col">
+                          <span>Appearance</span>
+                          <span className="text-xs font-normal text-text-muted">
+                            Choose a reading theme
+                          </span>
                         </span>
                       </span>
-                    </span>
-                    <span className="rounded-full bg-brand-soft px-2.5 py-1 text-xs font-medium text-brand-strong">
-                      {isDark ? 'Dark' : 'Light'}
-                    </span>
+                      <span className="rounded-full bg-brand-soft px-2.5 py-1 text-xs font-medium text-brand-strong">
+                        Store
+                      </span>
+                    </NavLink>
                   </DropdownMenu.Item>
 
                   <DropdownMenu.Separator className="my-1 h-px bg-border" />

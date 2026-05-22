@@ -31,7 +31,7 @@ type LoadState =
 export default function Crossword() {
   const { puzzleId } = useParams<{ puzzleId: string }>();
   const navigate = useNavigate();
-  const { showXpGain } = useXpGain();
+  const { refreshCoinGain, showXpGain } = useXpGain();
   const [state, setState] = useState<LoadState>({ kind: 'idle' });
   const [submitting, setSubmitting] = useState(false);
   const createPromiseRef = useRef<Promise<CrosswordPuzzleResponse> | null>(null);
@@ -151,6 +151,11 @@ export default function Crossword() {
       if (result.attempt.xpUpdate) {
         showXpGain({ xpUpdate: result.attempt.xpUpdate, source: 'challenge' });
       }
+      if (result.result === 'PASS') {
+        void refreshCoinGain('challenge').catch((error) => {
+          console.error('Error refreshing coins after crossword pass:', error);
+        });
+      }
     } catch (error) {
       if (error instanceof ApiResponseError && error.status === 409) {
         toast.error('This puzzle has already been submitted.');
@@ -167,7 +172,7 @@ export default function Crossword() {
     } finally {
       setSubmitting(false);
     }
-  }, [game, showXpGain, state, submitting]);
+  }, [game, refreshCoinGain, showXpGain, state, submitting]);
 
   const handleNewCrossword = () => {
     void createNewCrossword();

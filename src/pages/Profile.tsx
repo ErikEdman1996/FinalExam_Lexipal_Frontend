@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, useSyncExternalStore, type ComponentType } from 'react';
+import { Link } from 'react-router-dom';
 import {
   Award,
   BadgeCheck,
@@ -6,10 +7,13 @@ import {
   Brain,
   CheckCircle2,
   Clock3,
+  Coins,
   Flame,
   Images,
   LockKeyhole,
   LogOut,
+  Paintbrush,
+  Snowflake,
   Target,
   Trophy,
   Zap,
@@ -24,7 +28,6 @@ import {
   fieldLabelClassName,
   inputClassName,
 } from '../components/form/inputStyles';
-import { ThemeToggle } from '../features/theme/ThemeToggle.tsx';
 import { useAuth } from '../features/auth/useAuth';
 import { PortraitImage } from '../features/portraits/portraitAssets';
 import { formatLongDate, formatMonthDay } from '../utils/formatting';
@@ -830,7 +833,7 @@ export default function Profile() {
     );
   }
 
-  const { stats, streak, recentDailyActivities, createdAt, status } = profile;
+  const { stats, streak, recentDailyActivities, createdAt, status, wallet } = profile;
   const { level, xpIntoLevel, xpPerLevel, maxLevel } = stats;
   const isAtMaxLevel = level >= maxLevel;
   const progressPercent = isAtMaxLevel
@@ -840,6 +843,9 @@ export default function Profile() {
   const currentStreak = streak?.currentStreak ?? 0;
   const longestStreak = streak?.longestStreak ?? 0;
   const lastActive = streak?.lastActivityDate ? formatActivityDate(streak.lastActivityDate) : 'No activity yet';
+  const lastFreezeProtection = streak?.freezeProtectedThroughDate
+    ? formatActivityDate(streak.freezeProtectedThroughDate)
+    : null;
   const trimmedNickname = nicknameDraft.trim();
   const isNicknameUnchanged = trimmedNickname === (profile.nickname ?? '').trim();
   const canSaveNickname = NICKNAME_PATTERN.test(trimmedNickname) && !isNicknameUnchanged;
@@ -990,7 +996,7 @@ export default function Profile() {
         ))}
       </section>
 
-      <section className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <section className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <DetailCard
           title="Last Active"
           value={lastActive}
@@ -1001,6 +1007,13 @@ export default function Profile() {
           value={currentStreak > 0 ? `${formatStreakDays(currentStreak)} streak` : 'Start your streak'}
           description="Read on consecutive days to build consistency and improve your longest run."
         />
+        {lastFreezeProtection ? (
+          <DetailCard
+            title="Last Freeze Protection"
+            value={lastFreezeProtection}
+            description="The most recent missed reading day a freeze protected automatically."
+          />
+        ) : null}
       </section>
 
       <div className="mt-6">
@@ -1023,7 +1036,23 @@ export default function Profile() {
             ) : null}
           </div>
           <div className="flex w-full flex-col gap-3 sm:w-auto sm:items-end">
-            <ThemeToggle variant="row" className="sm:min-w-[15rem]" />
+            <Link
+              to="/store#themes"
+              className="flex w-full items-center justify-between gap-3 rounded-[18px] border border-border bg-surface px-4 py-3 text-sm font-medium text-text shadow-[0_10px_22px_rgba(31,41,55,0.05)] transition-colors hover:bg-surface-alt sm:min-w-[15rem]"
+            >
+              <span className="flex items-center gap-3">
+                <span className="flex h-9 w-9 items-center justify-center rounded-[12px] bg-surface-muted text-text">
+                  <Paintbrush size={18} />
+                </span>
+                <span className="flex flex-col items-start">
+                  <span>Appearance</span>
+                  <span className="text-xs font-normal text-text-muted">Choose your reading theme</span>
+                </span>
+              </span>
+              <span className="rounded-full bg-brand-soft px-3 py-1 text-xs font-medium text-brand-strong">
+                Store
+              </span>
+            </Link>
             <Button variant="outline" className="rounded-full px-5" onClick={() => void logout()}>
               <span className="inline-flex items-center gap-2">
                 <LogOut size={16} />
@@ -1084,6 +1113,16 @@ export default function Profile() {
                         Level {level}{isAtMaxLevel ? ' — MAX' : ''}
                       </span>
                       <span className="rounded-full bg-surface-muted px-3 py-1.5">{stats.totalXpEarned} total XP</span>
+                    </div>
+                    <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-sm text-text-muted md:justify-start">
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-3 py-1.5 font-medium text-accent-strong">
+                        <Coins size={15} aria-hidden="true" />
+                        {wallet.coinBalance} coins
+                      </span>
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-surface-muted px-3 py-1.5">
+                        <Snowflake size={15} className="text-brand-strong" aria-hidden="true" />
+                        Streak freezes owned: {wallet.availableStreakFreezes}
+                      </span>
                     </div>
                     <div className="mt-4 h-3.5 overflow-hidden rounded-full bg-surface-muted">
                       <div

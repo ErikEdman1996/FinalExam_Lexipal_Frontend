@@ -44,11 +44,11 @@
   --t-surface-muted: #ECE7DC;
   --t-surface-alt: #ECE7DC;
   --t-sidebar: #E5DFD2;
-  --t-sidebar-border: rgba(42, 38, 34, 0.10);
-  --t-sidebar-hover: rgba(42, 38, 34, 0.06);
+  --t-sidebar-border: #2A26221A;
+  --t-sidebar-hover: #2A26220F;
 
-  --t-border: rgba(42, 38, 34, 0.10);
-  --t-border-strong: rgba(42, 38, 34, 0.18);
+  --t-border: #2A26221A;
+  --t-border-strong: #2A26222E;
 
   --t-text: #2A2622;
   --t-text-muted: #6B6259;
@@ -63,7 +63,7 @@
   --t-brand-strong: #AE5137;
 
   --t-accent: #6B6259;
-  --t-accent-soft: rgba(107, 98, 89, 0.14);
+  --t-accent-soft: #6B625924;
   --t-accent-strong: #6B6259;
   --t-gold: #A88433;
 
@@ -74,9 +74,9 @@
   --t-gradient-via: #F1EDE6;
   --t-gradient-to: #ECE7DC;
 
-  --t-page-glow-1: rgba(184, 90, 62, 0.16);
-  --t-page-glow-2: rgba(168, 132, 51, 0.12);
-  --t-page-glow-3: rgba(107, 98, 89, 0.10);
+  --t-page-glow-1: #B85A3E29;
+  --t-page-glow-2: #A884331F;
+  --t-page-glow-3: #6B62591A;
 }
 
 /* ---------- Dark theme ---------- */
@@ -88,11 +88,11 @@
   --t-surface-muted: #16120F;
   --t-surface-alt: #120F0D;
   --t-sidebar: #0B0908;
-  --t-sidebar-border: rgba(232, 226, 215, 0.08);
-  --t-sidebar-hover: rgba(232, 226, 215, 0.07);
+  --t-sidebar-border: #E8E2D714;
+  --t-sidebar-hover: #E8E2D712;
 
-  --t-border: rgba(232, 226, 215, 0.08);
-  --t-border-strong: rgba(232, 226, 215, 0.16);
+  --t-border: #E8E2D714;
+  --t-border-strong: #E8E2D729;
 
   --t-text: #EAE4D6;
   --t-text-muted: #9A9082;
@@ -103,24 +103,24 @@
 
   --t-brand: #D87A5A;
   --t-brand-hover: #E08A6C;
-  --t-brand-soft: rgba(216, 122, 90, 0.18);
+  --t-brand-soft: #D87A5A2E;
   --t-brand-strong: #D87A5A;
 
   --t-accent: #9A9082;
-  --t-accent-soft: rgba(154, 144, 130, 0.16);
+  --t-accent-soft: #9A908229;
   --t-accent-strong: #9A9082;
   --t-gold: #D4A55A;
 
   --t-danger: #D87A5A;
-  --t-danger-soft: rgba(216, 122, 90, 0.18);
+  --t-danger-soft: #D87A5A2E;
 
   --t-gradient-from: #0F0D0B;
   --t-gradient-via: #100E0C;
   --t-gradient-to: #0F0D0B;
 
-  --t-page-glow-1: rgba(216, 122, 90, 0.10);
-  --t-page-glow-2: rgba(212, 165, 90, 0.07);
-  --t-page-glow-3: rgba(154, 144, 130, 0.06);
+  --t-page-glow-1: #D87A5A1A;
+  --t-page-glow-2: #D4A55A12;
+  --t-page-glow-3: #9A90820F;
 }
 
 /* ---------- Shared utility classes ---------- */

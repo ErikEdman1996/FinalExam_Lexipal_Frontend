@@ -15,6 +15,7 @@ export interface AuthContextValue {
   login: () => Promise<void>;
   logout: () => Promise<void>;
   retryBootstrap: () => Promise<void>;
+  refreshProfile: () => Promise<ProfileReadResponseDTO>;
   setProfile: (profile: ProfileReadResponseDTO) => void;
 }
 

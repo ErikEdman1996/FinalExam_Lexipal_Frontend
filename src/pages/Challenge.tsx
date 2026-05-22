@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Brain, ChevronRight, Grid3x3, LockKeyhole, Swords, type LucideIcon } from 'lucide-react';
 import { BottomNav } from '../components/BottomNav';
+import { ChallengeNavTabs } from '../components/ChallengeNavTabs';
 
 interface MinigameTile {
   id: string;
@@ -108,6 +109,8 @@ export default function Challenge() {
             <Brain size={26} className="text-brand-strong" />
           </div>
         </div>
+
+        <ChallengeNavTabs className="mb-6" />
 
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
           {MINIGAMES.map((tile) => (

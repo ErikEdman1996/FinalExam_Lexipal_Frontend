@@ -171,7 +171,7 @@ export default function ReadingSession() {
   const [activeSession, setActiveSession] = useState<ApiSession | null>(null);
   const { refreshBooks, refreshLibraryItems } = useBooks();
   const noteTags = useNoteTags();
-  const { showRewards } = useXpGain();
+  const { refreshCoinGain, showRewards } = useXpGain();
   const wakeLock = useScreenWakeLock(isRunning && keepScreenAwake);
   const intervalRef = useRef<number | null>(null);
   const shouldResumeAfterActionModalRef = useRef(false);
@@ -429,6 +429,9 @@ export default function ReadingSession() {
       xpUpdate: completedSession.xpUpdate,
       source: 'session',
       newlyUnlockedAchievements: completedSession.newlyUnlockedAchievements,
+    });
+    void refreshCoinGain('session').catch((error) => {
+      console.error('Error refreshing coins after session completion:', error);
     });
 
     activeSessionRef.current = null;

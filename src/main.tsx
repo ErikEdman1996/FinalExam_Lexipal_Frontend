@@ -10,13 +10,13 @@ import './styles/index.css';
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <ThemeProvider>
-      <AuthProvider>
+    <AuthProvider>
+      <ThemeProvider>
         <BookTransitionProvider>
           <RouterProvider router={router} />
           <Toaster position="top-center" closeButton richColors />
         </BookTransitionProvider>
-      </AuthProvider>
-    </ThemeProvider>
+      </ThemeProvider>
+    </AuthProvider>
   </StrictMode>,
 );

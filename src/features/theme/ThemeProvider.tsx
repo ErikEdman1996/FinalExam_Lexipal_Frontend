@@ -5,6 +5,13 @@ import {
   type ThemeName,
   type ThemePreference,
 } from './ThemeContext';
+import { useAuth } from '../auth/useAuth';
+import {
+  DEFAULT_THEME_CODE_BY_TONE,
+  THEME_PALETTES,
+  THEME_TOKEN_CSS_VARIABLES,
+  getThemePalette,
+} from './themePalettes';
 
 const STORAGE_KEY = 'lexipal-theme';
 
@@ -56,6 +63,7 @@ interface ThemeProviderProps {
 }
 
 export function ThemeProvider({ children }: ThemeProviderProps) {
+  const { profile } = useAuth();
   const [preference, setPreferenceState] = useState<ThemePreference>(() => readStoredPreference());
   const systemIsDark = useSyncExternalStore(
     subscribeToSystemTheme,
@@ -63,11 +71,20 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
     getServerSystemThemeSnapshot,
   );
 
-  const theme = resolveTheme(preference, systemIsDark);
+  const fallbackTone = resolveTheme(preference, systemIsDark);
+  const profilePalette = getThemePalette(profile?.selectedTheme?.code);
+  const themeCode = profilePalette?.code ?? DEFAULT_THEME_CODE_BY_TONE[fallbackTone];
+  const palette = THEME_PALETTES[themeCode];
+  const theme = palette.tone;
 
   useEffect(() => {
     const root = document.documentElement;
     root.setAttribute('data-theme', theme);
+    root.setAttribute('data-theme-code', themeCode);
+
+    for (const [token, cssVariable] of THEME_TOKEN_CSS_VARIABLES) {
+      root.style.setProperty(cssVariable, palette.tokens[token]);
+    }
 
     let favicon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
     if (!favicon) {
@@ -78,7 +95,7 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
 
     favicon.type = theme === 'light' ? 'image/png' : 'image/svg+xml';
     favicon.href = theme === 'light' ? '/moth_icon_light.png' : '/moth_icon.svg';
-  }, [theme]);
+  }, [palette, theme, themeCode]);
 
   const setPreference = useCallback((next: ThemePreference) => {
     setPreferenceState(next);
@@ -99,8 +116,8 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
   }, [systemIsDark]);
 
   const value = useMemo<ThemeContextValue>(
-    () => ({ preference, theme, setPreference, toggle }),
-    [preference, theme, setPreference, toggle],
+    () => ({ preference, theme, themeCode, setPreference, toggle }),
+    [preference, theme, themeCode, setPreference, toggle],
   );
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

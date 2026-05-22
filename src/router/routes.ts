@@ -7,6 +7,7 @@ import Challenge from '../pages/Challenge.tsx';
 import Flashcard from '../pages/Flashcard.tsx';
 import Crossword from '../pages/Crossword.tsx';
 import WordLookups from '../pages/WordLookups.tsx';
+import Store from '../pages/Store.tsx';
 import Profile from '../pages/Profile.tsx';
 import Landing from '../pages/Landing.tsx';
 import Circles from '../pages/Circles.tsx';
@@ -39,6 +40,7 @@ export const router = createBrowserRouter([
       { path: '/challenges/flashcard', Component: Flashcard },
       { path: '/challenges/crossword', Component: Crossword },
       { path: '/challenges/crossword/:puzzleId', Component: Crossword },
+      { path: '/store', Component: Store },
       { path: '/profile', Component: Profile },
       { path: '*', Component: Library },
     ],
