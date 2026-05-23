@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowUpRight, BookCopy, Clock3, StickyNote, X } from 'lucide-react';
+import { BookCopy, Clock3, StickyNote, X } from 'lucide-react';
 import { ApiResponseError, getCircleMemberDetails, type CircleMemberDetailResponseDTO } from '../../api/api';
 import { Button } from '../../components/Button';
 import { AppDialog, AppDialogClose, AppDialogTitle } from '../../components/dialog/AppDialog';
@@ -250,7 +250,7 @@ function MemberDetailsPanelContent({
                             />
                           </div>
 
-                          <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                          <div className="mt-4 grid gap-3 sm:grid-cols-2">
                             <div className="rounded-[18px] bg-surface-alt p-4">
                               <div className="flex items-center gap-2 text-text-muted">
                                 <Clock3 size={16} />
@@ -266,13 +266,6 @@ function MemberDetailsPanelContent({
                               <p className="mt-2 text-sm font-medium text-text">
                                 {session.startPage} {'\u2192'} {session.endPage ?? 'in progress'}
                               </p>
-                            </div>
-                            <div className="rounded-[18px] bg-surface-alt p-4">
-                              <div className="flex items-center gap-2 text-text-muted">
-                                <ArrowUpRight size={16} />
-                                <span className="text-xs uppercase tracking-[0.18em]">Words</span>
-                              </div>
-                              <p className="mt-2 text-sm font-medium text-text">{session.capturedWordCount}</p>
                             </div>
                           </div>
 

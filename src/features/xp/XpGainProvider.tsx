@@ -25,7 +25,7 @@ import {
 } from './XpGainContext';
 
 type RewardQueueItem =
-  | ({ type: 'xp' } & Pick<XpGainTrigger, 'xpUpdate' | 'source' | 'rarityTier'>)
+  | ({ type: 'xp' } & Pick<XpGainTrigger, 'xpUpdate' | 'source'>)
   | {
     type: 'coin';
     coinsAwarded: number;
@@ -145,7 +145,6 @@ export function XpGainProvider({ children }: PropsWithChildren) {
       launchCelebration({
         leveledUp: xpUpdate.leveledUp,
         gainedXp: xpUpdate.xpAwarded,
-        rarityTier: nextItem.rarityTier,
       });
 
       await new Promise<void>((resolve) => {
@@ -182,7 +181,6 @@ export function XpGainProvider({ children }: PropsWithChildren) {
         type: 'xp',
         xpUpdate: input.xpUpdate,
         source: input.source,
-        rarityTier: input.rarityTier,
       });
     }
 

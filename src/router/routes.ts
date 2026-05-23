@@ -2,7 +2,6 @@ import { createBrowserRouter } from 'react-router-dom';
 import Library from '../pages/Library.tsx';
 import BookDetails from '../pages/BookDetails.tsx';
 import ReadingSession from '../pages/ReadingSession.tsx';
-import Codex from '../pages/Codex.tsx';
 import Challenge from '../pages/Challenge.tsx';
 import Flashcard from '../pages/Flashcard.tsx';
 import Crossword from '../pages/Crossword.tsx';
@@ -28,8 +27,6 @@ export const router = createBrowserRouter([
       { path: '/library', Component: Library },
       { path: '/book/:bookId', Component: BookDetails },
       { path: '/book/:bookId/session/new', Component: ReadingSession },
-      { path: '/codex', Component: Codex },
-      { path: '/codex/page/:pageNumber', Component: Codex },
       { path: '/word-lookups', Component: WordLookups },
       { path: '/circles', Component: Circles },
       { path: '/circles/:circleId', Component: CircleDetails },

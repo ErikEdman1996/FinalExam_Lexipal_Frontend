@@ -24,7 +24,7 @@ const MINIGAMES: MinigameTile[] = [
   {
     id: 'crossword',
     title: 'Crossword',
-    description: 'Fill a 5-word crossword built from your captured vocabulary.',
+    description: 'Fill a 5-word crossword built from your looked-up words.',
     icon: Grid3x3,
     route: '/challenges/crossword',
     locked: false,

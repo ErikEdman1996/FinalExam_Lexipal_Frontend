@@ -269,7 +269,7 @@ function Header() {
           Crossword
         </h1>
         <p className="mt-2 max-w-xl text-sm leading-relaxed text-text-muted">
-          Fill in the grid using the dictionary clues for words you've captured.
+          Fill in the grid using dictionary clues from your word history.
         </p>
       </div>
       <div className="flex h-14 w-14 items-center justify-center rounded-[20px] bg-brand-soft shadow-[0_10px_24px_rgba(62,157,123,0.16)]">
@@ -301,7 +301,7 @@ function NoWordsCard() {
     <div className="mt-6 rounded-[26px] border border-border bg-surface p-8 shadow-[0_14px_28px_rgba(31,41,55,0.06)]">
       <h2 className="text-2xl font-semibold text-text">Not enough words yet</h2>
       <p className="mt-2 text-sm leading-relaxed text-text-muted">
-        Capture a few more words while you read and we'll have enough to build a crossword.
+        Look up a few more words while you read and we'll have enough to build a crossword.
       </p>
       <div className="mt-5 flex flex-wrap gap-3">
         <Link

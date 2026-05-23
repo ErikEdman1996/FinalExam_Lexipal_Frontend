@@ -7,7 +7,7 @@ export const SUPPORTED_THEME_CODES = [
   'rose_bookmark',
   'midnight_archive',
   'mothlight_nocturne',
-  'forest_codex',
+  'forest_canopy',
   'plum_afterword',
 ] as const;
 
@@ -325,8 +325,8 @@ export const THEME_PALETTES: Record<SupportedThemeCode, LexipalThemePalette> = {
       gold: '#E0B65D',
     }),
   },
-  forest_codex: {
-    code: 'forest_codex',
+  forest_canopy: {
+    code: 'forest_canopy',
     tone: 'dark',
     tokens: makeDarkTokens({
       background: '#09130F',
@@ -364,10 +364,26 @@ export const DEFAULT_THEME_CODE_BY_TONE: Record<LexipalThemeTone, SupportedTheme
   dark: 'default_dark',
 };
 
+const LEGACY_THEME_CODE_ALIASES: Record<string, SupportedThemeCode> = {
+  forest_codex: 'forest_canopy',
+};
+
 export const isSupportedThemeCode = (value: unknown): value is SupportedThemeCode => {
   return typeof value === 'string' && value in THEME_PALETTES;
 };
 
+export const normalizeThemeCode = (value: unknown): SupportedThemeCode | null => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  const normalized = LEGACY_THEME_CODE_ALIASES[trimmed] ?? trimmed;
+
+  return isSupportedThemeCode(normalized) ? normalized : null;
+};
+
 export const getThemePalette = (code: string | null | undefined) => {
-  return isSupportedThemeCode(code) ? THEME_PALETTES[code] : null;
+  const normalizedCode = normalizeThemeCode(code);
+  return normalizedCode ? THEME_PALETTES[normalizedCode] : null;
 };

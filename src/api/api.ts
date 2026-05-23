@@ -17,7 +17,6 @@ export interface ApiSession {
     pagesRead: number;
     reflection: string;
     status: 'IN_PROGRESS' | 'COMPLETED';
-    capturedWordCount: number;
     xpUpdate?: XpUpdateResponseDTO | null;
     newlyUnlockedAchievements: AchievementResponseDTO[];
 }
@@ -219,7 +218,6 @@ export interface CircleMemberSessionDTO {
     pagesRead: number;
     status: 'IN_PROGRESS' | 'COMPLETED';
     reflection: string | null;
-    capturedWordCount: number;
 }
 
 export interface CircleMemberNoteDTO {
@@ -347,7 +345,6 @@ export type ApiJsonValue =
 export interface ApiWord {
     id: number;
     lemma: string;
-    rarityScore: number | null;
     source: string | null;
     definitions: ApiJsonValue | null;
     phonetics: ApiJsonValue | null;
@@ -399,10 +396,6 @@ export interface DictionaryEntry {
     antonyms: string[];
 }
 
-export type RarityTier = 'COMMON' | 'UNCOMMON' | 'RARE' | 'MYTHIC';
-
-export const rarityOrder: RarityTier[] = ['COMMON', 'UNCOMMON', 'RARE', 'MYTHIC'];
-
 export interface WordLookupCreateRequestDTO {
     lemma: string;
 }
@@ -411,7 +404,7 @@ export interface WordLookupReadResponseDTO {
     id: number;
     wordId: number;
     lemma: string;
-    source: string | null;
+    source: string;
     definitions: unknown;
     phonetics: unknown;
     firstLookedUpAt: string;
@@ -419,62 +412,10 @@ export interface WordLookupReadResponseDTO {
     lookupCount: number;
 }
 
-export interface CodexEntryReadResponseDTO {
-    id: number;
-    wordId: number;
-    sourceSessionId: number | null;
-    lemma: string;
-    specificDefinition: string | null;
-    xpValue: number | null;
-    createdAt: string;
-    rarityScore: number | null;
-    rarityTier: RarityTier | string;
-    source: string | null;
-    definitions: DictionaryEntry[] | null;
-    phonetics: Pronunciation[] | null;
-}
-
-export interface CodexBoardSlotDTO {
-    slotNumber: number;
-    isCaptured: boolean;
-    lemma?: string;
-    rarityTier?: RarityTier | string;
-    capturedAt?: string;
-}
-
-export interface CodexBoardPageDTO {
-    pageNumber: number;
-    capturedCount: number;
-    totalCount: number;
-    completionPercentage: number;
-    slots: CodexBoardSlotDTO[];
-}
-
-export interface CodexBoardResponseDTO {
-    volume: string;
-    totalWords: number;
-    capturedWords: number;
-    completionPercentage: number;
-    pages: CodexBoardPageDTO[];
-}
-
-export interface CodexPageProgressDTO {
-    capturedCount: number;
-    totalCount: number;
-    completionPercentage: number;
-}
-
-export interface CodexOverallProgressDTO {
-    capturedWords: number;
-    totalWords: number;
-    completionPercentage: number;
-}
-
 export interface ProfileStatsResponseDTO {
     totalPagesRead: number;
     totalBooksRead: number;
     totalSessionsCompleted: number;
-    totalCapturedWords: number;
     totalXpEarned: number;
     totalMinutesRead: number;
     level: number;
@@ -624,19 +565,8 @@ export interface DictionarySense {
 
 export interface WordLookupCreateResponseDTO {
     wordLookup: WordLookupReadResponseDTO;
-    codexEntry: CodexEntryReadResponseDTO | null;
     lookupSucceeded: boolean;
-    isCollectible: boolean;
     isNewLookup: boolean;
-    isNewCapture: boolean;
-    alreadyCaptured: boolean;
-    pageNumber: number | null;
-    slotNumber: number | null;
-    pageProgress: CodexPageProgressDTO | null;
-    overallProgress: CodexOverallProgressDTO | null;
-    rarityTier: RarityTier | string | null;
-    xpUpdate: XpUpdateResponseDTO | null;
-    newlyUnlockedAchievements: AchievementResponseDTO[];
 }
 
 export type ChallengeType = 'FLASHCARD' | 'CROSSWORD' | string;
@@ -837,14 +767,6 @@ const isLibraryItemLikeRecord = (value: unknown): value is Record<string, unknow
     return isLibraryItemType(value.itemType) && toFiniteNumber(value.itemId) !== null;
 };
 
-const isCodexEntryLikeRecord = (value: unknown): value is Record<string, unknown> => {
-    if (!isRecord(value)) {
-        return false;
-    }
-
-    return typeof value.lemma === 'string' && toFiniteNumber(value.id) !== null;
-};
-
 const isWordLookupLikeRecord = (value: unknown): value is Record<string, unknown> => {
     if (!isRecord(value)) {
         return false;
@@ -1023,85 +945,13 @@ const toWordLookup = (value: Record<string, unknown>): WordLookupReadResponseDTO
         id: toFiniteNumber(value.id) ?? 0,
         wordId: toFiniteNumber(value.wordId) ?? 0,
         lemma: typeof value.lemma === 'string' ? value.lemma : '',
-        source: typeof value.source === 'string' ? value.source : null,
+        source: typeof value.source === 'string' ? value.source : '',
         definitions: value.definitions ?? null,
         phonetics: value.phonetics ?? null,
         firstLookedUpAt: typeof value.firstLookedUpAt === 'string' ? value.firstLookedUpAt : '',
         lastLookedUpAt: typeof value.lastLookedUpAt === 'string' ? value.lastLookedUpAt : '',
         lookupCount: Math.max(0, toFiniteNumber(value.lookupCount) ?? 0),
     };
-};
-
-const toCodexEntry = (value: Record<string, unknown>): CodexEntryReadResponseDTO => {
-    return {
-        id: toFiniteNumber(value.id) ?? 0,
-        wordId: toFiniteNumber(value.wordId) ?? 0,
-        sourceSessionId: value.sourceSessionId == null ? null : (toFiniteNumber(value.sourceSessionId) ?? null),
-        lemma: typeof value.lemma === 'string' ? value.lemma : '',
-        specificDefinition: typeof value.specificDefinition === 'string' ? value.specificDefinition : null,
-        xpValue: toFiniteNumber(value.xpValue),
-        createdAt: typeof value.createdAt === 'string' ? value.createdAt : '',
-        rarityScore: toFiniteNumber(value.rarityScore),
-        rarityTier: typeof value.rarityTier === 'string' ? value.rarityTier : 'COMMON',
-        source: typeof value.source === 'string' ? value.source : null,
-        definitions: toDictionaryEntries(value.definitions),
-        phonetics: toPronunciations(value.phonetics),
-    };
-};
-
-const toCodexBoardSlot = (value: unknown, fallbackSlotNumber = 0): CodexBoardSlotDTO | null => {
-    if (!isRecord(value)) {
-        return null;
-    }
-
-    const slotNumber = toFiniteNumber(value.slotNumber) ?? fallbackSlotNumber;
-
-    if (slotNumber <= 0) {
-        return null;
-    }
-
-    return {
-        slotNumber,
-        isCaptured: value.isCaptured === true,
-        lemma: typeof value.lemma === 'string' ? value.lemma : undefined,
-        rarityTier: typeof value.rarityTier === 'string' ? value.rarityTier : undefined,
-        capturedAt: typeof value.capturedAt === 'string' ? value.capturedAt : undefined,
-    };
-};
-
-const toCodexBoardPage = (value: unknown, fallbackPageNumber = 0): CodexBoardPageDTO | null => {
-    if (!isRecord(value)) {
-        return null;
-    }
-
-    const pageNumber = toFiniteNumber(value.pageNumber) ?? fallbackPageNumber;
-    const slots = Array.isArray(value.slots)
-        ? value.slots
-            .map((slot, index) => toCodexBoardSlot(slot, index + 1))
-            .filter((slot): slot is CodexBoardSlotDTO => slot !== null)
-        : [];
-
-    if (pageNumber <= 0) {
-        return null;
-    }
-
-    return {
-        pageNumber,
-        capturedCount: toFiniteNumber(value.capturedCount) ?? slots.filter((slot) => slot.isCaptured).length,
-        totalCount: toFiniteNumber(value.totalCount) ?? Math.max(25, slots.length),
-        completionPercentage: toFiniteNumber(value.completionPercentage) ?? 0,
-        slots,
-    };
-};
-
-export const normalizeRarityTier = (rarityTier: unknown): RarityTier => {
-    const upper = typeof rarityTier === 'string' ? rarityTier.toUpperCase() : '';
-
-    if (upper === 'MYTHIC' || upper === 'RARE' || upper === 'UNCOMMON') {
-        return upper;
-    }
-
-    return 'COMMON';
 };
 
 const toChallenge = (value: Record<string, unknown>): Challenge => {
@@ -1164,36 +1014,6 @@ const toXpUpdate = (value: unknown): XpUpdateResponseDTO | null => {
     };
 };
 
-const toCodexPageProgress = (value: unknown): CodexPageProgressDTO | null => {
-    if (!isRecord(value)) {
-        return null;
-    }
-
-    const totalCount = toFiniteNumber(value.totalCount) ?? toFiniteNumber(value.totalWords) ?? 25;
-    const capturedCount = toFiniteNumber(value.capturedCount) ?? toFiniteNumber(value.capturedWords) ?? 0;
-
-    return {
-        capturedCount,
-        totalCount,
-        completionPercentage: toFiniteNumber(value.completionPercentage) ?? (totalCount > 0 ? (capturedCount / totalCount) * 100 : 0),
-    };
-};
-
-const toCodexOverallProgress = (value: unknown): CodexOverallProgressDTO | null => {
-    if (!isRecord(value)) {
-        return null;
-    }
-
-    const totalWords = toFiniteNumber(value.totalWords) ?? toFiniteNumber(value.totalCount) ?? 300;
-    const capturedWords = toFiniteNumber(value.capturedWords) ?? toFiniteNumber(value.capturedCount) ?? 0;
-
-    return {
-        capturedWords,
-        totalWords,
-        completionPercentage: toFiniteNumber(value.completionPercentage) ?? (totalWords > 0 ? (capturedWords / totalWords) * 100 : 0),
-    };
-};
-
 const toProfileStats = (value: unknown): ProfileStatsResponseDTO => {
     const record = isRecord(value) ? value : {};
     const level = Math.max(1, toFiniteNumber(record.level) ?? 1);
@@ -1211,7 +1031,6 @@ const toProfileStats = (value: unknown): ProfileStatsResponseDTO => {
         totalPagesRead: toFiniteNumber(record.totalPagesRead) ?? 0,
         totalBooksRead: toFiniteNumber(record.totalBooksRead) ?? 0,
         totalSessionsCompleted: toFiniteNumber(record.totalSessionsCompleted) ?? 0,
-        totalCapturedWords: toFiniteNumber(record.totalCapturedWords) ?? 0,
         totalXpEarned: toFiniteNumber(record.totalXpEarned) ?? 0,
         totalMinutesRead: toFiniteNumber(record.totalMinutesRead) ?? 0,
         level,
@@ -1258,14 +1077,36 @@ const isStoreItemType = (value: unknown): value is StoreItemType => {
     return value === 'STREAK_FREEZE' || value === 'THEME';
 };
 
+const normalizeLegacyThemeCode = (value: unknown): string | null => {
+    if (typeof value !== 'string') {
+        return null;
+    }
+
+    const trimmed = value.trim();
+
+    if (!trimmed) {
+        return null;
+    }
+
+    return trimmed === 'forest_codex' ? 'forest_canopy' : trimmed;
+};
+
+const normalizeLegacyThemeName = (code: string, name: string) => {
+    const legacyForestName = ['Forest', 'Co' + 'dex'].join(' ');
+    return code === 'forest_canopy' && name === legacyForestName ? 'Forest Canopy' : name;
+};
+
 const toStoreItem = (value: unknown): StoreItemResponseDTO | null => {
     if (!isRecord(value) || typeof value.code !== 'string' || !isStoreItemType(value.itemType)) {
         return null;
     }
 
+    const code = normalizeLegacyThemeCode(value.code) ?? value.code;
+    const name = typeof value.name === 'string' ? value.name : code;
+
     return {
-        code: value.code,
-        name: typeof value.name === 'string' ? value.name : value.code,
+        code,
+        name: normalizeLegacyThemeName(code, name),
         description: typeof value.description === 'string' ? value.description : '',
         itemType: value.itemType,
         priceCoins: Math.max(0, toFiniteNumber(value.priceCoins) ?? 0),
@@ -1274,7 +1115,7 @@ const toStoreItem = (value: unknown): StoreItemResponseDTO | null => {
         ownedQuantity: value.ownedQuantity == null
             ? null
             : Math.max(0, toFiniteNumber(value.ownedQuantity) ?? 0),
-        themeCode: typeof value.themeCode === 'string' && value.themeCode.trim() ? value.themeCode : null,
+        themeCode: normalizeLegacyThemeCode(value.themeCode),
     };
 };
 
@@ -1409,9 +1250,17 @@ const toTheme = (value: unknown): ThemeResponseDTO | null => {
         return null;
     }
 
+    const code = normalizeLegacyThemeCode(value.code);
+
+    if (!code) {
+        return null;
+    }
+
+    const name = typeof value.name === 'string' ? value.name : code;
+
     return {
-        code: value.code,
-        name: typeof value.name === 'string' ? value.name : value.code,
+        code,
+        name: normalizeLegacyThemeName(code, name),
         description: typeof value.description === 'string' ? value.description : '',
         tone: toThemeTone(value.tone),
         sortOrder: toFiniteNumber(value.sortOrder) ?? 0,
@@ -1610,7 +1459,6 @@ const toApiSession = (value: Record<string, unknown>): ApiSession => {
         : null;
     const reflection = typeof value.reflection === 'string' ? value.reflection : '';
     const status = value.status === 'COMPLETED' ? 'COMPLETED' : 'IN_PROGRESS';
-    const capturedWordCount = toFiniteNumber(value.capturedWordCount) ?? 0;
 
     return {
         id,
@@ -1623,7 +1471,6 @@ const toApiSession = (value: Record<string, unknown>): ApiSession => {
         reflection,
         status,
         sessionDate,
-        capturedWordCount,
         xpUpdate: toXpUpdate(value.xpUpdate),
         newlyUnlockedAchievements: toAchievementArray(value.newlyUnlockedAchievements),
     };
@@ -1708,30 +1555,6 @@ const normalizeBookResponse = (value: ApiBookResponse): ApiBook => {
     throw new Error('Unexpected book response shape.');
 };
 
-const normalizeCodexEntriesResponse = (value: unknown): CodexEntryReadResponseDTO[] => {
-    if (Array.isArray(value)) {
-        return value
-            .filter(isCodexEntryLikeRecord)
-            .map(toCodexEntry);
-    }
-
-    if (!isRecord(value)) {
-        return [];
-    }
-
-    const collections = [value.codexEntries, value.words, value.content, value.data, value.items];
-
-    for (const collection of collections) {
-        if (Array.isArray(collection)) {
-            return collection
-                .filter(isCodexEntryLikeRecord)
-                .map(toCodexEntry);
-        }
-    }
-
-    return [];
-};
-
 const normalizeWordLookupsResponse = (value: unknown): WordLookupReadResponseDTO[] => {
     if (Array.isArray(value)) {
         return value
@@ -1763,40 +1586,11 @@ const normalizeWordLookupCreateResponse = (value: unknown): WordLookupCreateResp
         : outerRecord;
     const wordLookupRecord = [record.wordLookup, record.lookup, record.item]
         .find(isWordLookupLikeRecord);
-    const codexEntryRecord = isRecord(record.codexEntry) ? record.codexEntry : null;
 
     return {
         wordLookup: toWordLookup(wordLookupRecord ?? {}),
-        codexEntry: codexEntryRecord ? toCodexEntry(codexEntryRecord) : null,
         lookupSucceeded: record.lookupSucceeded !== false,
-        isCollectible: record.isCollectible === true,
         isNewLookup: record.isNewLookup === true,
-        isNewCapture: record.isNewCapture === true || record.newCapture === true,
-        alreadyCaptured: record.alreadyCaptured === true,
-        pageNumber: toFiniteNumber(record.pageNumber),
-        slotNumber: toFiniteNumber(record.slotNumber),
-        pageProgress: toCodexPageProgress(record.pageProgress),
-        overallProgress: toCodexOverallProgress(record.overallProgress),
-        rarityTier: typeof record.rarityTier === 'string' ? record.rarityTier : null,
-        xpUpdate: toXpUpdate(record.xpUpdate),
-        newlyUnlockedAchievements: toAchievementArray(record.newlyUnlockedAchievements),
-    };
-};
-
-const normalizeCodexBoardResponse = (value: unknown): CodexBoardResponseDTO => {
-    const record = isRecord(value) ? value : {};
-    const pages = Array.isArray(record.pages)
-        ? record.pages
-            .map((page, index) => toCodexBoardPage(page, index + 1))
-            .filter((page): page is CodexBoardPageDTO => page !== null)
-        : [];
-
-    return {
-        volume: typeof record.volume === 'string' ? record.volume : 'Volume 1',
-        totalWords: toFiniteNumber(record.totalWords) ?? 300,
-        capturedWords: toFiniteNumber(record.capturedWords) ?? pages.reduce((sum, page) => sum + page.capturedCount, 0),
-        completionPercentage: toFiniteNumber(record.completionPercentage) ?? 0,
-        pages,
     };
 };
 
@@ -2235,7 +2029,6 @@ const toCircleMemberSession = (value: unknown): CircleMemberSessionDTO | null =>
         reflection: typeof value.reflection === 'string' && value.reflection.trim()
             ? value.reflection
             : null,
-        capturedWordCount: Math.max(0, toFiniteNumber(value.capturedWordCount) ?? 0),
     };
 };
 
@@ -2964,20 +2757,6 @@ export const getSession = async (sessionId: string | number) => {
     }
 };
 
-export const getCodexEntries = async () => {
-    try {
-        const res = await fetch(`${API_BASE_URL}/codexEntries`, {
-            headers: await buildAuthHeaders(),
-        });
-        if (!res.ok) throw new Error('Failed to fetch codex entries');
-        const data = await res.json();
-        return normalizeCodexEntriesResponse(data);
-    } catch (error) {
-        console.error('Error fetching codex entries:', error);
-        throw error;
-    }
-};
-
 export const getWordLookups = async () => {
     try {
         const res = await fetch(`${API_BASE_URL}/word-lookups`, {
@@ -2990,22 +2769,6 @@ export const getWordLookups = async () => {
         return normalizeWordLookupsResponse(data);
     } catch (error) {
         console.error('Error fetching word lookups:', error);
-        throw error;
-    }
-};
-
-export const getCodexBoard = async () => {
-    try {
-        const res = await fetch(`${API_BASE_URL}/codex-board`, {
-            headers: await buildAuthHeaders(),
-        });
-        if (!res.ok) {
-            throw new Error(await getErrorMessage(res, 'Failed to fetch codex board'));
-        }
-        const data = await res.json();
-        return normalizeCodexBoardResponse(data);
-    } catch (error) {
-        console.error('Error fetching codex board:', error);
         throw error;
     }
 };
@@ -3085,7 +2848,8 @@ export const getMyStore = async () => {
 
 export const purchaseStoreItem = async (itemCode: string) => {
     try {
-        const res = await fetch(`${API_BASE_URL}/store/items/${encodeURIComponent(itemCode)}/purchase`, {
+        const normalizedItemCode = normalizeLegacyThemeCode(itemCode) ?? itemCode;
+        const res = await fetch(`${API_BASE_URL}/store/items/${encodeURIComponent(normalizedItemCode)}/purchase`, {
             method: 'POST',
             headers: await buildAuthHeaders(),
         });
@@ -3122,13 +2886,14 @@ export const getMyThemes = async () => {
 
 export const selectMyTheme = async (themeCode: string) => {
     try {
+        const normalizedThemeCode = normalizeLegacyThemeCode(themeCode) ?? themeCode;
         const res = await fetch(`${API_BASE_URL}/themes/me/selected`, {
             method: 'PATCH',
             headers: {
                 'Content-Type': 'application/json',
                 ...(await buildAuthHeaders()),
             },
-            body: JSON.stringify({ themeCode }),
+            body: JSON.stringify({ themeCode: normalizedThemeCode }),
         });
 
         if (!res.ok) {
@@ -4167,7 +3932,6 @@ export const getDictionaryWord = async (lemma: string) => {
         return {
             id: toFiniteNumber(data.id) ?? 0,
             lemma: typeof data.lemma === 'string' ? data.lemma : lemma,
-            rarityScore: toFiniteNumber(data.rarityScore),
             source: typeof data.source === 'string' ? data.source : null,
             definitions: isApiJsonValue(data.definitions) ? data.definitions : null,
             phonetics: isApiJsonValue(data.phonetics) ? data.phonetics : null,
@@ -4711,7 +4475,6 @@ export interface AdminDashboardSummaryDTO {
     completedBooks: number;
     completedSessions: number;
     totalMinutesRead: number;
-    capturedWords: number;
     xpAwarded: number;
     readingListsCreated: number;
     readingListSubscriptions: number;
@@ -4948,7 +4711,6 @@ const toAdminSummary = (value: unknown): AdminDashboardSummaryDTO => {
         completedBooks: Math.max(0, toFiniteNumber(record.completedBooks) ?? 0),
         completedSessions: Math.max(0, toFiniteNumber(record.completedSessions) ?? 0),
         totalMinutesRead: Math.max(0, toFiniteNumber(record.totalMinutesRead) ?? 0),
-        capturedWords: Math.max(0, toFiniteNumber(record.capturedWords) ?? 0),
         xpAwarded: Math.max(0, toFiniteNumber(record.xpAwarded) ?? 0),
         readingListsCreated: Math.max(0, toFiniteNumber(record.readingListsCreated) ?? 0),
         readingListSubscriptions: Math.max(0, toFiniteNumber(record.readingListSubscriptions) ?? 0),

@@ -328,7 +328,7 @@ export default function AdminDashboard() {
                 <KpiCard label="Total users" value={summary.totalUsers} detail={`${formatNumber(summary.newUsers)} new`} icon={Users} tone="brand" />
                 <KpiCard label="Pages read" value={summary.totalPagesRead} detail={`${formatNumber(summary.activeUsers)} active readers`} icon={FileText} tone="accent" />
                 <KpiCard label="Completed books" value={summary.completedBooks} detail={`${formatNumber(summary.completedSessions)} sessions`} icon={BookOpenCheck} tone="brand" />
-                <KpiCard label="Minutes read" value={summary.totalMinutesRead} detail={`${formatNumber(summary.capturedWords)} captured words`} icon={Clock3} tone="muted" />
+                <KpiCard label="Minutes read" value={summary.totalMinutesRead} icon={Clock3} tone="muted" />
                 <KpiCard label="XP awarded" value={summary.xpAwarded} icon={Zap} tone="accent" />
                 <KpiCard label="Lists created" value={summary.readingListsCreated} icon={BookMarked} tone="brand" />
                 <KpiCard label="Subscriptions" value={summary.readingListSubscriptions} icon={ListChecks} tone="muted" />

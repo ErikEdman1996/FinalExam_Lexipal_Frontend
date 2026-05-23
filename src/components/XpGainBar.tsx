@@ -25,10 +25,6 @@ interface XpGainBarProps {
 }
 
 const getSourceLabel = (source?: string) => {
-  if (source === 'capture') {
-    return 'Word captured';
-  }
-
   if (source === 'challenge') {
     return 'Challenge XP';
   }

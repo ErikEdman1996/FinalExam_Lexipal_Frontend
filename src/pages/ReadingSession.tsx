@@ -28,13 +28,10 @@ import {
   getActiveSessionByBook,
   getBook,
   updateSession,
-  type AchievementResponseDTO,
   type ApiBook,
   type ApiSession,
-  type RarityTier,
   type UpdateSessionPayload,
   type WordLookupReadResponseDTO,
-  type XpUpdateResponseDTO,
 } from '../api/api';
 
 const AUTOSAVE_INTERVAL_SECONDS = 15;
@@ -444,25 +441,6 @@ export default function ReadingSession() {
       console.error('Error refreshing library items after session completion:', error);
     });
     void navigate(`/book/${bookId}`);
-  };
-
-  const handleCaptureWord = (captureResult: {
-    isCollectible: boolean;
-    isNewCapture: boolean;
-    xpUpdate: XpUpdateResponseDTO | null;
-    rarityTier: RarityTier;
-    newlyUnlockedAchievements: AchievementResponseDTO[];
-  }) => {
-    if (!captureResult.isCollectible || !captureResult.isNewCapture) {
-      return;
-    }
-
-    showRewards({
-      xpUpdate: captureResult.xpUpdate,
-      source: 'capture',
-      rarityTier: captureResult.rarityTier,
-      newlyUnlockedAchievements: captureResult.newlyUnlockedAchievements,
-    });
   };
 
   const handleLookupSaved = useCallback((lookup: WordLookupReadResponseDTO) => {
@@ -875,8 +853,6 @@ export default function ReadingSession() {
         isOpen={showWordLookupModal}
         onClose={() => setShowWordLookupModal(false)}
         sessionId={activeSession?.id}
-        bookId={bookId}
-        onCapture={handleCaptureWord}
         onLookupSaved={handleLookupSaved}
       />
 

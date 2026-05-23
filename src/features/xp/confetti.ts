@@ -1,5 +1,4 @@
 import confetti, { type Options } from 'canvas-confetti';
-import type { RarityTier } from '../../api/api';
 
 const BIG_XP_THRESHOLD = 25;
 
@@ -22,10 +21,9 @@ const burst = (options: Options) => {
 interface CelebrationInput {
   leveledUp: boolean;
   gainedXp: number;
-  rarityTier?: RarityTier;
 }
 
-export const launchCelebration = ({ leveledUp, gainedXp, rarityTier }: CelebrationInput) => {
+export const launchCelebration = ({ leveledUp, gainedXp }: CelebrationInput) => {
   if (prefersReducedMotion()) {
     return;
   }
@@ -42,18 +40,6 @@ export const launchCelebration = ({ leveledUp, gainedXp, rarityTier }: Celebrati
       spread: 78,
       startVelocity: 48,
       origin: { x: 0.75, y: 0.2 },
-    });
-    return;
-  }
-
-  if (rarityTier === 'MYTHIC') {
-    burst({
-      particleCount: 120,
-      spread: 70,
-      startVelocity: 42,
-      scalar: 1.1,
-      origin: { x: 0.5, y: 0.28 },
-      colors: ['#ff7a59', '#ffd866', '#8be8ff', '#b084f5'],
     });
     return;
   }

@@ -1,6 +1,6 @@
 # Lexipal Frontend
 
-Frontend for Lexipal, a React + TypeScript reading companion with library tracking, reading sessions, BookCircles, Codex capture, challenges, XP progression, and Keycloak-based sign-in.
+Frontend for Lexipal, a React + TypeScript reading companion with library tracking, reading sessions, BookCircles, word lookup history, challenges, XP progression, and Keycloak-based sign-in.
 
 ## Stack
 
@@ -99,8 +99,7 @@ npm run build
 
 - Library search, card navigation, and add-book flow
 - Book details, notes, and reading-session entry
-- Reading session reflection, word lookup, and note capture
+- Reading session reflection, word lookup, and saved notes
 - BookCircles create, join, copy-code, and member-details flows
-- Codex page navigation and captured-word detail modal
-- Challenge and flashcard flows
+- Challenge, flashcard, crossword, and looked-up word flows
 - Profile nickname update, streaks, and recent activity

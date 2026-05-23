@@ -4,7 +4,6 @@ import {
   Award,
   BadgeCheck,
   BookOpen,
-  Brain,
   CheckCircle2,
   Clock3,
   Coins,
@@ -170,7 +169,6 @@ const isNewUserProfile = (stats: ProfileStatsResponseDTO) => {
     stats.totalPagesRead === 0
     && stats.totalBooksRead === 0
     && stats.totalSessionsCompleted === 0
-    && stats.totalCapturedWords === 0
     && stats.totalXpEarned === 0
   );
 };
@@ -842,7 +840,6 @@ export default function Profile() {
   const showNewUserState = isNewUserProfile(stats);
   const currentStreak = streak?.currentStreak ?? 0;
   const longestStreak = streak?.longestStreak ?? 0;
-  const lastActive = streak?.lastActivityDate ? formatActivityDate(streak.lastActivityDate) : 'No activity yet';
   const lastFreezeProtection = streak?.freezeProtectedThroughDate
     ? formatActivityDate(streak.freezeProtectedThroughDate)
     : null;
@@ -968,12 +965,6 @@ export default function Profile() {
       tone: 'brand' as const,
     },
     {
-      label: 'Words Captured',
-      value: stats.totalCapturedWords,
-      icon: Brain,
-      tone: 'accent' as const,
-    },
-    {
       label: 'Sessions',
       value: stats.totalSessionsCompleted,
       icon: Zap,
@@ -996,25 +987,15 @@ export default function Profile() {
         ))}
       </section>
 
-      <section className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <DetailCard
-          title="Last Active"
-          value={lastActive}
-          description="Your most recent recorded reading activity."
-        />
-        <DetailCard
-          title="Reading Momentum"
-          value={currentStreak > 0 ? `${formatStreakDays(currentStreak)} streak` : 'Start your streak'}
-          description="Read on consecutive days to build consistency and improve your longest run."
-        />
-        {lastFreezeProtection ? (
+      {lastFreezeProtection ? (
+        <section className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           <DetailCard
             title="Last Freeze Protection"
             value={lastFreezeProtection}
             description="The most recent missed reading day a freeze protected automatically."
           />
-        ) : null}
-      </section>
+        </section>
+      ) : null}
 
       <div className="mt-6">
         <RecentActivitySection activities={recentDailyActivities} />
