@@ -333,7 +333,7 @@ function MemberDetailsPanelContent({
                         <span>{formatCircleDateTime(note.createdAt)}</span>
                         {note.sourceSessionId != null ? (
                           <span className="rounded-full bg-surface-alt px-3 py-1">
-                            Session #{note.sourceSessionId}
+                            Reading session
                           </span>
                         ) : null}
                       </div>

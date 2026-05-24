@@ -428,7 +428,7 @@ export default function AdminDashboard() {
                         <tbody>
                           {dashboard.topUsers.map((user) => (
                             <tr key={user.userId} className="border-b border-border last:border-0">
-                              <td className="py-3 font-medium text-text">{user.nickname ?? `User ${user.userId}`}</td>
+                              <td className="py-3 font-medium text-text">{user.nickname ?? 'Unnamed user'}</td>
                               <td className="py-3 text-right text-text-muted">{formatNumber(user.totalPagesRead)}</td>
                               <td className="py-3 text-right text-text-muted">{formatNumber(user.completedBooks)}</td>
                               <td className="py-3 text-right text-text-muted">{formatNumber(user.completedSessions)}</td>

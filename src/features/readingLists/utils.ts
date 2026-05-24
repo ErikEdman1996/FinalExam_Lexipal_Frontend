@@ -58,11 +58,11 @@ export const getReadingListStatusTone = (status: ReadingListStatus): 'brand' | '
 
 export const getOwnerDisplayName = (
   ownerNickname: string | null,
-  ownerUserId: number,
+  _ownerUserId: number,
 ) => {
   const trimmed = ownerNickname?.trim();
   if (trimmed) return trimmed;
-  return `User #${ownerUserId}`;
+  return 'Unnamed reader';
 };
 
 export const truncateDescription = (value: string | null, limit = 160) => {

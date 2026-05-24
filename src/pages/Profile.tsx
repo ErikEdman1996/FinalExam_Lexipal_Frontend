@@ -260,7 +260,6 @@ function RecentActivitySection({ activities }: RecentActivitySectionProps) {
                 <p className="text-sm font-medium text-text">{toReadableActivityLabel(activity.activityType)}</p>
                 <p className="mt-1 text-sm text-text-muted">
                   {formatActivityDate(activity.activityDate)}
-                  {activity.sessionId != null ? ` - Session #${activity.sessionId}` : ''}
                 </p>
               </div>
               <span className="shrink-0 rounded-full bg-accent-soft px-3 py-1 text-sm font-medium text-accent-strong">
