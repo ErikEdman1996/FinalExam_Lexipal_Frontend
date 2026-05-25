@@ -1,5 +1,5 @@
 import { createContext } from 'react';
-import type { AchievementResponseDTO, XpUpdateResponseDTO } from '../../api/api';
+import type { AchievementResponseDTO, DailyQuestResponseDTO, XpUpdateResponseDTO } from '../../api/api';
 
 export type RewardSource = 'challenge' | 'session';
 
@@ -15,6 +15,7 @@ export interface RewardTrigger {
   xpUpdate?: XpUpdateResponseDTO | null;
   source?: RewardSource;
   newlyUnlockedAchievements?: AchievementResponseDTO[];
+  dailyQuest?: DailyQuestResponseDTO | null;
 }
 
 export interface XpGainContextValue {

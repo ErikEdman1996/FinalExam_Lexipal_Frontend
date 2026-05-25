@@ -1,6 +1,7 @@
 import { Navigate, Outlet } from 'react-router-dom';
 import { Button } from '../../components/Button';
 import { BooksProvider } from '../books/BooksProvider';
+import { DailyQuestProvider } from '../dailyQuests/DailyQuestProvider';
 import { XpGainProvider } from '../xp/XpGainProvider';
 import { NicknameOnboardingScreen } from '../onboarding/NicknameOnboardingScreen';
 import { useAuth } from './useAuth';
@@ -67,9 +68,11 @@ export function ProtectedRoute() {
 
   return (
     <XpGainProvider>
-      <BooksProvider>
-        <Outlet />
-      </BooksProvider>
+      <DailyQuestProvider>
+        <BooksProvider>
+          <Outlet />
+        </BooksProvider>
+      </DailyQuestProvider>
     </XpGainProvider>
   );
 }

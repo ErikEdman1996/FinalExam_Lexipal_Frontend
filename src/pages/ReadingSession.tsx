@@ -16,6 +16,7 @@ import { NoteModal } from '../components/NoteModal';
 import { WordLookupDetailsDialog } from '../components/WordLookupDetailsDialog';
 import { WordLookupModal } from '../components/WordLookupModal';
 import { useBooks } from '../features/books/useBooks';
+import { useDailyQuest } from '../features/dailyQuests/useDailyQuest';
 import { ReadingMusicPlayer } from '../features/music/ReadingMusicPlayer';
 import { useNoteTags } from '../features/noteTags';
 import { useScreenWakeLock } from '../features/wakeLock/useScreenWakeLock';
@@ -167,6 +168,7 @@ export default function ReadingSession() {
   const [selectedLookup, setSelectedLookup] = useState<WordLookupReadResponseDTO | null>(null);
   const [activeSession, setActiveSession] = useState<ApiSession | null>(null);
   const { refreshBooks, refreshLibraryItems } = useBooks();
+  const { cacheDailyQuest, refreshDailyQuest } = useDailyQuest();
   const noteTags = useNoteTags();
   const { refreshCoinGain, showRewards } = useXpGain();
   const wakeLock = useScreenWakeLock(isRunning && keepScreenAwake);
@@ -422,13 +424,23 @@ export default function ReadingSession() {
       reflection: trimmedReflection,
     });
 
+    if (completedSession.dailyQuest) {
+      cacheDailyQuest(completedSession.dailyQuest, {
+        suppressCompletionProfileRefresh: true,
+      });
+    }
+
     showRewards({
       xpUpdate: completedSession.xpUpdate,
       source: 'session',
+      dailyQuest: completedSession.dailyQuest,
       newlyUnlockedAchievements: completedSession.newlyUnlockedAchievements,
     });
     void refreshCoinGain('session').catch((error) => {
       console.error('Error refreshing coins after session completion:', error);
+    });
+    void refreshDailyQuest({ silent: true }).catch((error) => {
+      console.error('Error refreshing daily quest after session completion:', error);
     });
 
     activeSessionRef.current = null;

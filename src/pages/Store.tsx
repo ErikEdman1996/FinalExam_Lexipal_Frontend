@@ -137,6 +137,19 @@ export default function Store() {
     return () => window.cancelAnimationFrame(animationFrame);
   }, [isLoading, location.hash]);
 
+  useEffect(() => {
+    if (!profile?.wallet) {
+      return;
+    }
+
+    setStore((currentStore) => currentStore
+      ? {
+        ...currentStore,
+        wallet: profile.wallet,
+      }
+      : currentStore);
+  }, [profile?.wallet]);
+
   const themeStoreItems = useMemo(() => {
     if (!store) {
       return new Map<string, StoreItemResponseDTO>();

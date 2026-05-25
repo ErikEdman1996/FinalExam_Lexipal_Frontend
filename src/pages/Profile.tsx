@@ -47,6 +47,7 @@ import {
   type ProfileStatsResponseDTO,
   type StreakLeaderboardResponseDTO,
 } from '../api/api';
+import { DailyQuestCard } from '../features/dailyQuests/DailyQuestCard';
 
 const NICKNAME_PATTERN = /^[a-zA-Z0-9_]{3,20}$/;
 
@@ -1116,6 +1117,8 @@ export default function Profile() {
                       <p className="mt-2 text-xs text-text-muted">{xpIntoLevel}/{xpPerLevel} XP — {stats.xpToNextLevel} to next level</p>
                     )}
                   </div>
+
+                  <DailyQuestCard className="mt-5 shadow-none" />
 
                   <div className="mt-5 flex flex-wrap items-center justify-center gap-2 text-sm text-text-muted md:justify-start">
                     <span className="rounded-full bg-surface-muted px-3 py-1.5">Member since {formatMemberSince(createdAt)}</span>

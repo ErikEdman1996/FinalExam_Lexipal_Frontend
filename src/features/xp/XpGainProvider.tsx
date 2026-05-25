@@ -5,7 +5,7 @@ import {
   useState,
   type PropsWithChildren,
 } from 'react';
-import { getProfile, type AchievementResponseDTO } from '../../api/api';
+import { getProfile, type AchievementResponseDTO, type DailyQuestResponseDTO } from '../../api/api';
 import {
   AchievementUnlockBar,
   type AchievementUnlockPresentation,
@@ -14,6 +14,10 @@ import {
   CoinGainBar,
   type CoinGainPresentation,
 } from '../../components/CoinGainBar';
+import {
+  DailyQuestRewardBar,
+  type DailyQuestRewardPresentation,
+} from '../../components/DailyQuestRewardBar';
 import { XpGainBar, type XpGainPresentation } from '../../components/XpGainBar';
 import { useAuth } from '../auth/useAuth';
 import { launchCelebration } from './confetti';
@@ -36,6 +40,10 @@ type RewardQueueItem =
   | {
     type: 'achievement';
     achievement: AchievementResponseDTO;
+  }
+  | {
+    type: 'dailyQuest';
+    dailyQuest: DailyQuestResponseDTO;
   };
 
 type ActiveRewardPresentation =
@@ -50,6 +58,10 @@ type ActiveRewardPresentation =
   | {
     type: 'achievement';
     item: AchievementUnlockPresentation;
+  }
+  | {
+    type: 'dailyQuest';
+    item: DailyQuestRewardPresentation;
   };
 
 export function XpGainProvider({ children }: PropsWithChildren) {
@@ -131,6 +143,21 @@ export function XpGainProvider({ children }: PropsWithChildren) {
         continue;
       }
 
+      if (nextItem.type === 'dailyQuest') {
+        await new Promise<void>((resolve) => {
+          presentationResolverRef.current = resolve;
+          setActivePresentation({
+            type: 'dailyQuest',
+            item: {
+              id: presentationIdRef.current,
+              dailyQuest: nextItem.dailyQuest,
+            },
+          });
+          presentationIdRef.current += 1;
+        });
+        continue;
+      }
+
       const { xpUpdate } = nextItem;
       const fromTotalXp = Math.max(0, xpUpdate.previousTotalXp);
       const toTotalXp = Math.max(fromTotalXp, xpUpdate.newTotalXp);
@@ -181,6 +208,13 @@ export function XpGainProvider({ children }: PropsWithChildren) {
         type: 'xp',
         xpUpdate: input.xpUpdate,
         source: input.source,
+      });
+    }
+
+    if (input.dailyQuest) {
+      queueRef.current.push({
+        type: 'dailyQuest',
+        dailyQuest: input.dailyQuest,
       });
     }
 
@@ -273,6 +307,10 @@ export function XpGainProvider({ children }: PropsWithChildren) {
       />
       <CoinGainBar
         item={activePresentation?.type === 'coin' ? activePresentation.item : null}
+        onComplete={handlePresentationComplete}
+      />
+      <DailyQuestRewardBar
+        item={activePresentation?.type === 'dailyQuest' ? activePresentation.item : null}
         onComplete={handlePresentationComplete}
       />
       <AchievementUnlockBar

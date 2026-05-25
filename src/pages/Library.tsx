@@ -25,6 +25,7 @@ import { inputClassName } from '../components/form/inputStyles';
 import { ProgressBar } from '../components/ProgressBar.tsx';
 import { useBookTransition } from '../features/bookTransition/useBookTransition.ts';
 import { useBooks } from '../features/books/useBooks.ts';
+import { DailyQuestCard } from '../features/dailyQuests/DailyQuestCard.tsx';
 
 type ShelfTab = 'active' | 'completed' | 'archived' | 'all';
 type BookStatus = 'active' | 'completed' | 'archived';
@@ -503,6 +504,8 @@ export default function Library() {
               <span>Add Book</span>
             </button>
           </div>
+
+          <DailyQuestCard className="mt-6 max-w-xl" />
 
           <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
             <StatTile label="Total Books" value={bookItems.length} tone="brand" icon={LibraryIcon} />

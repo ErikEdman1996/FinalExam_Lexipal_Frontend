@@ -90,14 +90,6 @@ function CoinGainBarContent({
         </div>
       </div>
 
-      <div className="mt-4 h-3 overflow-hidden rounded-full bg-surface-muted">
-        <div
-          className="h-full w-full rounded-full"
-          style={{
-            background: 'linear-gradient(90deg, var(--t-accent) 0%, var(--t-brand) 100%)',
-          }}
-        />
-      </div>
     </>
   );
 }

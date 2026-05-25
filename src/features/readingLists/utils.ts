@@ -60,6 +60,7 @@ export const getOwnerDisplayName = (
   ownerNickname: string | null,
   _ownerUserId: number,
 ) => {
+  void _ownerUserId;
   const trimmed = ownerNickname?.trim();
   if (trimmed) return trimmed;
   return 'Unnamed reader';

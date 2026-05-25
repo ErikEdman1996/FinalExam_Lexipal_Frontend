@@ -19,6 +19,7 @@ export interface ApiSession {
     status: 'IN_PROGRESS' | 'COMPLETED';
     xpUpdate?: XpUpdateResponseDTO | null;
     newlyUnlockedAchievements: AchievementResponseDTO[];
+    dailyQuest: DailyQuestResponseDTO | null;
 }
 
 type ApiSessionResponse = unknown;
@@ -434,6 +435,27 @@ export interface WalletResponseDTO {
     availableStreakFreezes: number;
 }
 
+export type DailyQuestType = 'READ_MINUTES' | 'READ_PAGES';
+
+export type DailyQuestUnit = 'minutes' | 'pages';
+
+export type DailyQuestStatus = 'ACTIVE' | 'COMPLETED';
+
+export interface DailyQuestResponseDTO {
+    id: number;
+    questDate: string;
+    type: DailyQuestType;
+    title: string;
+    description: string;
+    targetValue: number;
+    progressValue: number;
+    unit: DailyQuestUnit;
+    status: DailyQuestStatus;
+    xpReward: number;
+    coinReward: number;
+    completedAt: string | null;
+}
+
 export type StoreItemType = 'STREAK_FREEZE' | 'THEME';
 
 export interface StoreItemResponseDTO {
@@ -542,6 +564,7 @@ export interface ProfileReadResponseDTO {
     selectedPortrait: PortraitResponseDTO | null;
     selectedTheme: ThemeResponseDTO | null;
     wallet: WalletResponseDTO;
+    dailyQuest: DailyQuestResponseDTO | null;
 }
 
 export interface XpUpdateResponseDTO {
@@ -733,6 +756,58 @@ const toFiniteNumber = (value: unknown): number | null => {
     }
 
     return null;
+};
+
+const isDailyQuestType = (value: unknown): value is DailyQuestType => {
+    return value === 'READ_MINUTES' || value === 'READ_PAGES';
+};
+
+const isDailyQuestUnit = (value: unknown): value is DailyQuestUnit => {
+    return value === 'minutes' || value === 'pages';
+};
+
+const isDailyQuestStatus = (value: unknown): value is DailyQuestStatus => {
+    return value === 'ACTIVE' || value === 'COMPLETED';
+};
+
+const toDailyQuest = (value: unknown): DailyQuestResponseDTO | null => {
+    if (!isRecord(value)) {
+        return null;
+    }
+
+    const type = isDailyQuestType(value.type) ? value.type : 'READ_MINUTES';
+    const unit = isDailyQuestUnit(value.unit)
+        ? value.unit
+        : type === 'READ_PAGES'
+            ? 'pages'
+            : 'minutes';
+
+    return {
+        id: toFiniteNumber(value.id) ?? 0,
+        questDate: typeof value.questDate === 'string' ? value.questDate : '',
+        type,
+        title: typeof value.title === 'string' ? value.title : '',
+        description: typeof value.description === 'string' ? value.description : '',
+        targetValue: Math.max(0, toFiniteNumber(value.targetValue) ?? 0),
+        progressValue: Math.max(0, toFiniteNumber(value.progressValue) ?? 0),
+        unit,
+        status: isDailyQuestStatus(value.status) ? value.status : 'ACTIVE',
+        xpReward: Math.max(0, toFiniteNumber(value.xpReward) ?? 0),
+        coinReward: Math.max(0, toFiniteNumber(value.coinReward) ?? 0),
+        completedAt: typeof value.completedAt === 'string' && value.completedAt.trim()
+            ? value.completedAt
+            : null,
+    };
+};
+
+const normalizeDailyQuestResponse = (value: unknown): DailyQuestResponseDTO => {
+    const dailyQuest = toDailyQuest(value);
+
+    if (!dailyQuest) {
+        throw new Error('Unexpected daily quest response shape.');
+    }
+
+    return dailyQuest;
 };
 
 const isLeaderboardLimit = (value: number): value is LeaderboardLimit => {
@@ -1473,6 +1548,7 @@ const toApiSession = (value: Record<string, unknown>): ApiSession => {
         sessionDate,
         xpUpdate: toXpUpdate(value.xpUpdate),
         newlyUnlockedAchievements: toAchievementArray(value.newlyUnlockedAchievements),
+        dailyQuest: toDailyQuest(value.dailyQuest),
     };
 };
 
@@ -1674,6 +1750,7 @@ const normalizeProfileResponse = (value: unknown): ProfileReadResponseDTO => {
         selectedPortrait: toPortrait(value.selectedPortrait),
         selectedTheme: toTheme(value.selectedTheme),
         wallet: toWallet(value.wallet),
+        dailyQuest: toDailyQuest(value.dailyQuest),
     };
 };
 
@@ -1868,7 +1945,20 @@ const normalizeSessionResponse = (value: ApiSessionResponse): ApiSession => {
     const candidate = findSessionLikeRecord(value);
 
     if (candidate) {
-        return toApiSession(candidate);
+        const session = toApiSession(candidate);
+
+        if (!isRecord(value) || candidate === value) {
+            return session;
+        }
+
+        return {
+            ...session,
+            xpUpdate: session.xpUpdate ?? toXpUpdate(value.xpUpdate),
+            newlyUnlockedAchievements: session.newlyUnlockedAchievements.length > 0
+                ? session.newlyUnlockedAchievements
+                : toAchievementArray(value.newlyUnlockedAchievements),
+            dailyQuest: session.dailyQuest ?? toDailyQuest(value.dailyQuest),
+        };
     }
 
     console.error('Unexpected session response shape. Raw payload:', value);
@@ -2783,6 +2873,24 @@ export const getProfile = async () => {
         return normalizeProfileResponse(data);
     } catch (error) {
         console.error('Error fetching profile:', error);
+        throw error;
+    }
+};
+
+export const getTodayDailyQuest = async () => {
+    try {
+        const res = await fetch(`${API_BASE_URL}/daily-quests/me/today`, {
+            headers: await buildAuthHeaders(),
+        });
+
+        if (!res.ok) {
+            throw new Error(await getErrorMessage(res, 'Failed to fetch daily quest'));
+        }
+
+        const data = await res.json();
+        return normalizeDailyQuestResponse(data);
+    } catch (error) {
+        console.error('Error fetching daily quest:', error);
         throw error;
     }
 };
