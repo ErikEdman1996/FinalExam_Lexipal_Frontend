@@ -428,6 +428,24 @@ export interface ProfileStatsResponseDTO {
     xpToNextLevel: number;
 }
 
+export type ProfileReadingSeriesRange = 'THIS_WEEK' | 'THIS_MONTH' | 'THIS_YEAR' | 'ALL_TIME';
+
+export type ProfileReadingSeriesBucketType = 'DAY' | 'MONTH';
+
+export interface ProfileReadingSeriesPointDTO {
+    date: string;
+    pagesRead: number;
+}
+
+export interface ProfileReadingSeriesResponseDTO {
+    range: ProfileReadingSeriesRange;
+    startDate: string | null;
+    endDate: string;
+    timezone: string;
+    bucketType: ProfileReadingSeriesBucketType;
+    points: ProfileReadingSeriesPointDTO[];
+}
+
 export type LeaderboardLimit = 10 | 50 | 100;
 
 export interface WalletResponseDTO {
@@ -1115,6 +1133,53 @@ const toProfileStats = (value: unknown): ProfileStatsResponseDTO => {
         currentLevelMinXp,
         nextLevelMinXp,
         xpToNextLevel,
+    };
+};
+
+const toProfileReadingSeriesRange = (value: unknown): ProfileReadingSeriesRange => {
+    if (
+        value === 'THIS_WEEK'
+        || value === 'THIS_MONTH'
+        || value === 'THIS_YEAR'
+        || value === 'ALL_TIME'
+    ) {
+        return value;
+    }
+
+    return 'THIS_WEEK';
+};
+
+const toProfileReadingSeriesBucketType = (value: unknown): ProfileReadingSeriesBucketType => {
+    return value === 'MONTH' ? 'MONTH' : 'DAY';
+};
+
+const toProfileReadingSeriesPoint = (value: unknown): ProfileReadingSeriesPointDTO | null => {
+    if (!isRecord(value) || typeof value.date !== 'string') {
+        return null;
+    }
+
+    return {
+        date: value.date,
+        pagesRead: Math.max(0, toFiniteNumber(value.pagesRead) ?? 0),
+    };
+};
+
+const toProfileReadingSeries = (value: unknown): ProfileReadingSeriesResponseDTO => {
+    const record = isRecord(value) ? value : {};
+
+    return {
+        range: toProfileReadingSeriesRange(record.range),
+        startDate: typeof record.startDate === 'string' ? record.startDate : null,
+        endDate: typeof record.endDate === 'string' ? record.endDate : '',
+        timezone: typeof record.timezone === 'string' && record.timezone.trim()
+            ? record.timezone
+            : 'Europe/Stockholm',
+        bucketType: toProfileReadingSeriesBucketType(record.bucketType),
+        points: Array.isArray(record.points)
+            ? record.points
+                .map(toProfileReadingSeriesPoint)
+                .filter((point): point is ProfileReadingSeriesPointDTO => point !== null)
+            : [],
     };
 };
 
@@ -2873,6 +2938,29 @@ export const getProfile = async () => {
         return normalizeProfileResponse(data);
     } catch (error) {
         console.error('Error fetching profile:', error);
+        throw error;
+    }
+};
+
+export const getProfileReadingSeries = async (range: ProfileReadingSeriesRange = 'THIS_WEEK') => {
+    try {
+        const params = new URLSearchParams({ range });
+        const res = await fetch(`${API_BASE_URL}/profile/me/reading-series?${params.toString()}`, {
+            headers: await buildAuthHeaders(),
+        });
+
+        if (!res.ok) {
+            throw toApiResponseError(
+                await readErrorPayload(res),
+                'Could not load your reading trend.',
+                res.status,
+            );
+        }
+
+        const data = await res.json();
+        return toProfileReadingSeries(data);
+    } catch (error) {
+        console.error('Error fetching profile reading series:', error);
         throw error;
     }
 };

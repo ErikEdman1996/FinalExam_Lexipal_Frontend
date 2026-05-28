@@ -17,6 +17,15 @@ import {
   Trophy,
   Zap,
 } from 'lucide-react';
+import {
+  CartesianGrid,
+  Line,
+  LineChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { toast } from 'sonner';
 import { BottomNav } from '../components/BottomNav';
 import { Button } from '../components/Button';
@@ -36,6 +45,7 @@ import {
   getMyAchievements,
   getMyPortraits,
   getProfile,
+  getProfileReadingSeries,
   getStreakLeaderboard,
   selectPortrait,
   updateNickname,
@@ -43,6 +53,9 @@ import {
   type DailyActivityReadResponseDTO,
   type LeaderboardLimit,
   type PortraitResponseDTO,
+  type ProfileReadingSeriesBucketType,
+  type ProfileReadingSeriesRange,
+  type ProfileReadingSeriesResponseDTO,
   type ProfileReadResponseDTO,
   type ProfileStatsResponseDTO,
   type StreakLeaderboardResponseDTO,
@@ -71,6 +84,32 @@ const PROFILE_TABS: { value: ProfileTab; label: string; mobileOnly?: boolean }[]
 ];
 
 const LEADERBOARD_LIMIT_OPTIONS = [10, 50, 100] as const satisfies readonly LeaderboardLimit[];
+const DEFAULT_READING_SERIES_RANGE: ProfileReadingSeriesRange = 'THIS_WEEK';
+
+const READING_SERIES_RANGE_OPTIONS: Array<{ key: ProfileReadingSeriesRange; label: string }> = [
+  { key: 'THIS_WEEK', label: 'This week' },
+  { key: 'THIS_MONTH', label: 'This month' },
+  { key: 'THIS_YEAR', label: 'This year' },
+  { key: 'ALL_TIME', label: 'All time' },
+];
+
+const numberFormatter = new Intl.NumberFormat(undefined);
+const compactNumberFormatter = new Intl.NumberFormat(undefined, {
+  notation: 'compact',
+  maximumFractionDigits: 1,
+});
+const dayBucketFormatter = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
+const monthBucketFormatter = new Intl.DateTimeFormat(undefined, { month: 'short', year: 'numeric' });
+
+type ReadingSeriesCache = Partial<Record<ProfileReadingSeriesRange, ProfileReadingSeriesResponseDTO>>;
+type ReadingSeriesErrors = Partial<Record<ProfileReadingSeriesRange, string | null>>;
+
+interface ReadingChartPoint {
+  date: string;
+  label: string;
+  pagesRead: number;
+  cumulativePagesRead: number;
+}
 
 const getIsProfileDesktop = () => (
   typeof window !== 'undefined'
@@ -146,6 +185,49 @@ const formatStreakDays = (value: number) => {
   return `${safeValue} ${safeValue === 1 ? 'day' : 'days'}`;
 };
 
+const formatNumber = (value: number) => {
+  return numberFormatter.format(value);
+};
+
+const formatCompactNumber = (value: number) => {
+  return compactNumberFormatter.format(value);
+};
+
+const formatReadingTime = (totalMinutes: number) => {
+  const safeMinutes = Math.max(0, Math.floor(totalMinutes));
+
+  if (safeMinutes < 60) {
+    return `${safeMinutes}m`;
+  }
+
+  const hours = Math.floor(safeMinutes / 60);
+  const minutes = safeMinutes % 60;
+
+  return minutes === 0 ? `${hours}h` : `${hours}h ${minutes}m`;
+};
+
+const parseDateOnly = (value: string) => {
+  const [rawYear, rawMonth, rawDay] = value.split('-').map(Number);
+
+  if (!rawYear || !rawMonth || !rawDay) {
+    return null;
+  }
+
+  return new Date(rawYear, rawMonth - 1, rawDay);
+};
+
+const formatReadingSeriesDate = (value: string, bucketType: ProfileReadingSeriesBucketType) => {
+  const date = parseDateOnly(value);
+
+  if (!date) {
+    return value;
+  }
+
+  return bucketType === 'MONTH'
+    ? monthBucketFormatter.format(date)
+    : dayBucketFormatter.format(date);
+};
+
 const toReadableActivityLabel = (activityType: string) => {
   return activityType
     .toLowerCase()
@@ -209,6 +291,164 @@ function ProfileStatCard({
       </div>
       <p className="mt-5 text-[2rem] font-semibold leading-none text-text">{value}</p>
       <p className="mt-2 text-sm text-text-muted">{label}</p>
+    </div>
+  );
+}
+
+interface ReadingChartTooltipProps {
+  active?: boolean;
+  payload?: Array<{ payload?: ReadingChartPoint }>;
+}
+
+function ReadingChartTooltip({ active, payload }: ReadingChartTooltipProps) {
+  const point = payload?.[0]?.payload;
+
+  if (!active || !point) {
+    return null;
+  }
+
+  return (
+    <div className="rounded-[16px] border border-border bg-surface px-3 py-2 text-sm shadow-[0_14px_30px_rgba(31,41,55,0.12)]">
+      <p className="font-semibold text-text">{point.label}</p>
+      <p className="mt-1 text-text-muted">
+        Read: <span className="font-medium text-text">{formatNumber(point.pagesRead)} pages</span>
+      </p>
+      <p className="text-text-muted">
+        Total: <span className="font-medium text-text">{formatNumber(point.cumulativePagesRead)} pages</span>
+      </p>
+    </div>
+  );
+}
+
+interface ReadingPagesChartCardProps {
+  activeRange: ProfileReadingSeriesRange;
+  chartData: ReadingChartPoint[];
+  errorMessage: string | null;
+  isLoading: boolean;
+  series: ProfileReadingSeriesResponseDTO | null;
+  totalPagesRead: number;
+  onRangeChange: (range: ProfileReadingSeriesRange) => void;
+  onRetry: () => void;
+}
+
+function ReadingPagesChartCard({
+  activeRange,
+  chartData,
+  errorMessage,
+  isLoading,
+  series,
+  totalPagesRead,
+  onRangeChange,
+  onRetry,
+}: ReadingPagesChartCardProps) {
+  const timezone = series?.timezone ?? 'Europe/Stockholm';
+  const rangeLabel = series?.startDate && series.endDate
+    ? `${formatReadingSeriesDate(series.startDate, series.bucketType)} - ${formatReadingSeriesDate(series.endDate, series.bucketType)}`
+    : null;
+
+  return (
+    <div className="min-w-0 rounded-[28px] border border-border bg-surface p-5 shadow-[0_14px_30px_rgba(31,41,55,0.06)] sm:col-span-2 lg:col-span-2">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="min-w-0">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-[16px] bg-accent-soft">
+              <Target size={22} className="text-accent-strong" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm text-text-muted">Pages Read</p>
+              <p className="mt-1 text-[2rem] font-semibold leading-none text-text">
+                {formatNumber(totalPagesRead)}
+              </p>
+            </div>
+          </div>
+          <p className="mt-3 text-xs text-text-subtle">
+            {rangeLabel ? `${rangeLabel} - ` : ''}{timezone}
+          </p>
+        </div>
+
+        <div className="grid grid-cols-2 gap-1 rounded-[18px] border border-border bg-surface-muted p-1 sm:inline-grid sm:grid-cols-4 lg:shrink-0">
+          {READING_SERIES_RANGE_OPTIONS.map((option) => {
+            const isActive = option.key === activeRange;
+
+            return (
+              <button
+                key={option.key}
+                type="button"
+                aria-pressed={isActive}
+                disabled={isLoading && isActive}
+                onClick={() => onRangeChange(option.key)}
+                className={`min-w-0 rounded-[14px] px-3 py-2 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand ${
+                  isActive
+                    ? 'bg-brand text-text-on-brand'
+                    : 'text-text-muted hover:text-text'
+                } disabled:cursor-wait disabled:opacity-80`}
+              >
+                <span className="block truncate">{option.label}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      <div className="mt-5 h-64 min-h-64">
+        {errorMessage ? (
+          <div className="flex h-full flex-col items-center justify-center rounded-[22px] bg-surface-muted px-4 text-center">
+            <p className="text-sm font-medium text-text">{errorMessage}</p>
+            <button
+              type="button"
+              onClick={onRetry}
+              className="mt-3 rounded-full bg-brand px-4 py-2 text-sm font-medium text-text-on-brand transition-colors hover:bg-brand-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand"
+            >
+              Retry
+            </button>
+          </div>
+        ) : isLoading && chartData.length === 0 ? (
+          <div className="flex h-full items-center justify-center rounded-[22px] bg-surface-muted px-4 text-sm text-text-muted">
+            Loading reading trend...
+          </div>
+        ) : chartData.length > 0 ? (
+          <ResponsiveContainer width="100%" height="100%">
+            <LineChart data={chartData} margin={{ top: 12, right: 12, bottom: 4, left: 0 }}>
+              <CartesianGrid stroke="var(--t-border)" strokeDasharray="3 3" />
+              <XAxis
+                dataKey="label"
+                stroke="var(--t-text-subtle)"
+                fontSize={12}
+                tickLine={false}
+                axisLine={false}
+                minTickGap={14}
+              />
+              <YAxis
+                stroke="var(--t-text-subtle)"
+                fontSize={12}
+                tickLine={false}
+                axisLine={false}
+                tickFormatter={(value) => formatCompactNumber(Number(value))}
+                width={46}
+                allowDecimals={false}
+              />
+              <Tooltip content={<ReadingChartTooltip />} cursor={{ stroke: 'var(--t-border)' }} />
+              <Line
+                type="monotone"
+                dataKey="cumulativePagesRead"
+                name="Pages read"
+                stroke="var(--t-accent)"
+                strokeWidth={3}
+                dot={false}
+                activeDot={{ r: 5 }}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        ) : (
+          <div className="flex h-full items-center justify-center rounded-[22px] bg-surface-muted px-4 text-center text-sm text-text-muted">
+            No reading data for this range yet.
+          </div>
+        )}
+      </div>
+
+      {isLoading && chartData.length > 0 ? (
+        <p className="mt-3 text-xs text-text-subtle">Updating trend...</p>
+      ) : null}
     </div>
   );
 }
@@ -711,8 +951,37 @@ export default function Profile() {
   const [nicknameError, setNicknameError] = useState<string | null>(null);
   const [isSavingNickname, setIsSavingNickname] = useState(false);
   const [activeTab, setActiveTab] = useState<ProfileTab>('overview');
+  const [activeReadingSeriesRange, setActiveReadingSeriesRange] = useState<ProfileReadingSeriesRange>(DEFAULT_READING_SERIES_RANGE);
+  const [readingSeriesByRange, setReadingSeriesByRange] = useState<ReadingSeriesCache>({});
+  const [loadingReadingSeriesRange, setLoadingReadingSeriesRange] = useState<ProfileReadingSeriesRange | null>(DEFAULT_READING_SERIES_RANGE);
+  const [readingSeriesErrorsByRange, setReadingSeriesErrorsByRange] = useState<ReadingSeriesErrors>({});
   const isProfileDesktop = useIsProfileDesktop();
   const activeProfileTab = isProfileDesktop && activeTab === 'stats' ? 'overview' : activeTab;
+
+  const loadReadingSeries = async (range: ProfileReadingSeriesRange) => {
+    setLoadingReadingSeriesRange(range);
+    setReadingSeriesErrorsByRange((current) => ({
+      ...current,
+      [range]: null,
+    }));
+
+    try {
+      const nextSeries = await getProfileReadingSeries(range);
+
+      setReadingSeriesByRange((current) => ({
+        ...current,
+        [range]: nextSeries,
+      }));
+    } catch (error) {
+      console.error('Error loading reading series:', error);
+      setReadingSeriesErrorsByRange((current) => ({
+        ...current,
+        [range]: 'Could not load your reading trend right now.',
+      }));
+    } finally {
+      setLoadingReadingSeriesRange((current) => (current === range ? null : current));
+    }
+  };
 
   useEffect(() => {
     if (!isProfileDesktop) {
@@ -732,10 +1001,42 @@ export default function Profile() {
       setAchievementsError(null);
       setIsPortraitsLoading(true);
       setPortraitsError(null);
+      setLoadingReadingSeriesRange(DEFAULT_READING_SERIES_RANGE);
+      setReadingSeriesErrorsByRange({});
 
       const profilePromise = getProfile();
+      const readingSeriesPromise = getProfileReadingSeries(DEFAULT_READING_SERIES_RANGE);
       const achievementsPromise = getMyAchievements();
       const portraitsPromise = getMyPortraits();
+
+      void readingSeriesPromise
+        .then((nextSeries) => {
+          if (!isMounted) {
+            return;
+          }
+
+          setReadingSeriesByRange((current) => ({
+            ...current,
+            [DEFAULT_READING_SERIES_RANGE]: nextSeries,
+          }));
+        })
+        .catch((error) => {
+          console.error('Error loading reading series:', error);
+
+          if (isMounted) {
+            setReadingSeriesErrorsByRange((current) => ({
+              ...current,
+              [DEFAULT_READING_SERIES_RANGE]: 'Could not load your reading trend right now.',
+            }));
+          }
+        })
+        .finally(() => {
+          if (isMounted) {
+            setLoadingReadingSeriesRange((current) => (
+              current === DEFAULT_READING_SERIES_RANGE ? null : current
+            ));
+          }
+        });
 
       void achievementsPromise
         .then((nextAchievements) => {
@@ -807,6 +1108,39 @@ export default function Profile() {
       isMounted = false;
     };
   }, []);
+
+  const activeReadingSeries = readingSeriesByRange[activeReadingSeriesRange] ?? null;
+  const activeReadingSeriesError = readingSeriesErrorsByRange[activeReadingSeriesRange] ?? null;
+  const isActiveReadingSeriesLoading = loadingReadingSeriesRange === activeReadingSeriesRange;
+  const readingChartData = useMemo(() => {
+    if (!activeReadingSeries) {
+      return [];
+    }
+
+    let cumulativePagesRead = 0;
+    const { bucketType } = activeReadingSeries;
+
+    return activeReadingSeries.points.map((point) => {
+      cumulativePagesRead += point.pagesRead;
+
+      return {
+        date: point.date,
+        label: formatReadingSeriesDate(point.date, bucketType),
+        pagesRead: point.pagesRead,
+        cumulativePagesRead,
+      };
+    });
+  }, [activeReadingSeries]);
+
+  const handleReadingSeriesRangeChange = (nextRange: ProfileReadingSeriesRange) => {
+    setActiveReadingSeriesRange(nextRange);
+
+    if (readingSeriesByRange[nextRange] || loadingReadingSeriesRange === nextRange) {
+      return;
+    }
+
+    void loadReadingSeries(nextRange);
+  };
 
   if (isLoading) {
     return (
@@ -953,14 +1287,8 @@ export default function Profile() {
       tone: 'brand' as const,
     },
     {
-      label: 'Pages Read',
-      value: stats.totalPagesRead,
-      icon: Target,
-      tone: 'accent' as const,
-    },
-    {
-      label: 'Minutes Read',
-      value: stats.totalMinutesRead,
+      label: 'Time Read',
+      value: formatReadingTime(stats.totalMinutesRead),
       icon: Clock3,
       tone: 'brand' as const,
     },
@@ -975,7 +1303,7 @@ export default function Profile() {
   const statsSections = (
     <>
       <section className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {statCards.map((card, index) => (
+        {statCards.slice(0, 3).map((card, index) => (
           <ProfileStatCard
             key={card.label}
             label={card.label}
@@ -983,6 +1311,26 @@ export default function Profile() {
             icon={card.icon}
             tone={card.tone}
             delayMs={index * 80}
+          />
+        ))}
+        <ReadingPagesChartCard
+          activeRange={activeReadingSeriesRange}
+          chartData={readingChartData}
+          errorMessage={activeReadingSeriesError}
+          isLoading={isActiveReadingSeriesLoading}
+          series={activeReadingSeries}
+          totalPagesRead={stats.totalPagesRead}
+          onRangeChange={handleReadingSeriesRangeChange}
+          onRetry={() => void loadReadingSeries(activeReadingSeriesRange)}
+        />
+        {statCards.slice(3).map((card, index) => (
+          <ProfileStatCard
+            key={card.label}
+            label={card.label}
+            value={card.value}
+            icon={card.icon}
+            tone={card.tone}
+            delayMs={(index + 4) * 80}
           />
         ))}
       </section>
