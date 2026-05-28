@@ -299,14 +299,12 @@ function SessionExpandedDetails({
 
 interface SessionsTabProps {
   sessions: SessionData[];
-  bookTotalPages: number;
   expandedSessionId: string | null;
   onToggleSession: (sessionId: string) => void;
 }
 
 function SessionsTab({
   sessions,
-  bookTotalPages,
   expandedSessionId,
   onToggleSession,
 }: SessionsTabProps) {
@@ -321,6 +319,7 @@ function SessionsTab({
     ),
     [sessions],
   );
+  const pagesReadLabel = `${sessionSummary.totalPagesRead} ${sessionSummary.totalPagesRead === 1 ? 'page' : 'pages'}`;
 
   return (
     <section className="px-4 pb-6 md:rounded-[28px] md:border md:border-border md:bg-surface md:p-6 md:shadow-[0_16px_32px_rgba(31,41,55,0.06)]">
@@ -341,7 +340,7 @@ function SessionsTab({
             </span>
             <span className="h-1 w-1 rounded-full bg-text-subtle" aria-hidden="true" />
             <span>
-              <span className="font-semibold text-text">{sessionSummary.totalPagesRead} / {bookTotalPages}</span> pp
+              <span className="font-semibold text-text">{pagesReadLabel}</span>
             </span>
           </div>
         </div>
@@ -351,7 +350,7 @@ function SessionsTab({
       <div className="mt-5 grid grid-cols-3 gap-2 md:hidden">
         <SessionsSummaryStat label="Sessions" value={sessions.length} />
         <SessionsSummaryStat label="Total" value={formatCompactDuration(sessionSummary.totalDurationSeconds)} />
-        <SessionsSummaryStat label="Pages" value={`${sessionSummary.totalPagesRead} / ${bookTotalPages}`} />
+        <SessionsSummaryStat label="Pages" value={pagesReadLabel} />
       </div>
 
       {sessions.length === 0 ? (
@@ -1511,7 +1510,6 @@ function BookDetailsContent({ bookId }: { bookId?: string }) {
           {activeTab === 'sessions' ? (
             <SessionsTab
               sessions={sessions}
-              bookTotalPages={book.totalPages}
               expandedSessionId={expandedSessionId}
               onToggleSession={handleToggleSession}
             />
