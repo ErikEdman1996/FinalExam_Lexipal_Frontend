@@ -80,7 +80,7 @@ function AddBookModalContent({ onClose, onAdd }: Omit<AddBookModalProps, 'isOpen
       isOpen
       onClose={onClose}
       canClose={!isSubmitting}
-      contentClassName="w-full max-w-md rounded-[28px] border border-border bg-surface p-6 shadow-[0_8px_32px_rgba(0,0,0,0.12)] animate-in fade-in zoom-in duration-200"
+      contentClassName="mt-2 w-[calc(100vw-1rem)] max-w-md self-start max-h-[calc(100dvh-1rem)] overflow-y-auto rounded-[28px] border border-border bg-surface p-6 shadow-[0_8px_32px_rgba(0,0,0,0.12)] animate-in fade-in zoom-in duration-200 sm:mt-0 sm:w-full sm:self-auto sm:max-h-none sm:overflow-visible"
     >
       <div className="flex items-start justify-between gap-4">
         <AppDialogTitle className="text-xl font-semibold text-text">

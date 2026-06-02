@@ -5,7 +5,13 @@ import {
   useState,
   type PropsWithChildren,
 } from 'react';
-import { getProfile, type AchievementResponseDTO, type DailyQuestResponseDTO } from '../../api/api';
+import {
+  getProfile,
+  getStreakLeaderboard,
+  type AchievementResponseDTO,
+  type DailyQuestResponseDTO,
+  type StreakLeaderboardEntryDTO,
+} from '../../api/api';
 import {
   AchievementUnlockBar,
   type AchievementUnlockPresentation,
@@ -18,6 +24,10 @@ import {
   DailyQuestRewardBar,
   type DailyQuestRewardPresentation,
 } from '../../components/DailyQuestRewardBar';
+import {
+  LeaderboardRankChangeBar,
+  type LeaderboardRankChangePresentation,
+} from '../../components/LeaderboardRankChangeBar';
 import { XpGainBar, type XpGainPresentation } from '../../components/XpGainBar';
 import { useAuth } from '../auth/useAuth';
 import { launchCelebration } from './confetti';
@@ -44,6 +54,9 @@ type RewardQueueItem =
   | {
     type: 'dailyQuest';
     dailyQuest: DailyQuestResponseDTO;
+  }
+  | {
+    type: 'leaderboardRankCheck';
   };
 
 type ActiveRewardPresentation =
@@ -62,7 +75,14 @@ type ActiveRewardPresentation =
   | {
     type: 'dailyQuest';
     item: DailyQuestRewardPresentation;
+  }
+  | {
+    type: 'leaderboardRankChange';
+    item: LeaderboardRankChangePresentation;
   };
+
+const LEADERBOARD_REWARD_LIMIT = 100;
+type KnownTop100Rank = number | null | undefined;
 
 export function XpGainProvider({ children }: PropsWithChildren) {
   const { profile: authProfile, refreshProfile } = useAuth();
@@ -78,6 +98,52 @@ export function XpGainProvider({ children }: PropsWithChildren) {
   const isProcessingRef = useRef(false);
   const presentationIdRef = useRef(1);
   const presentationResolverRef = useRef<(() => void) | null>(null);
+  const currentUserId = typeof authProfile?.id === 'number' && authProfile.id > 0 ? authProfile.id : null;
+  const lastKnownTop100RankRef = useRef<KnownTop100Rank>(undefined);
+  const leaderboardBaselineRequestIdRef = useRef(0);
+
+  const getCurrentTop100LeaderboardEntry = useCallback(async (): Promise<StreakLeaderboardEntryDTO | null> => {
+    if (currentUserId == null) {
+      return null;
+    }
+
+    const leaderboard = await getStreakLeaderboard(LEADERBOARD_REWARD_LIMIT);
+    return leaderboard.entries.find((entry) => entry.userId === currentUserId) ?? null;
+  }, [currentUserId]);
+
+  const checkLeaderboardRankChange = useCallback(async (): Promise<Omit<LeaderboardRankChangePresentation, 'id'> | null> => {
+    if (currentUserId == null) {
+      lastKnownTop100RankRef.current = null;
+      return null;
+    }
+
+    try {
+      const previousRank = lastKnownTop100RankRef.current;
+      const currentEntry = await getCurrentTop100LeaderboardEntry();
+      const currentRank = currentEntry?.rank ?? null;
+
+      leaderboardBaselineRequestIdRef.current += 1;
+      lastKnownTop100RankRef.current = currentRank;
+
+      if (previousRank === undefined || currentEntry == null) {
+        return null;
+      }
+
+      const { rank: nextRank, currentStreak } = currentEntry;
+
+      if (previousRank == null || nextRank < previousRank) {
+        return {
+          previousRank,
+          currentRank: nextRank,
+          currentStreak,
+        };
+      }
+    } catch (error) {
+      console.error('Error checking streak leaderboard rank:', error);
+    }
+
+    return null;
+  }, [currentUserId, getCurrentTop100LeaderboardEntry]);
 
   const refreshProfileXp = useCallback(async () => {
     const profile = await getProfile();
@@ -158,6 +224,26 @@ export function XpGainProvider({ children }: PropsWithChildren) {
         continue;
       }
 
+      if (nextItem.type === 'leaderboardRankCheck') {
+        const rankChange = await checkLeaderboardRankChange();
+
+        if (rankChange) {
+          await new Promise<void>((resolve) => {
+            presentationResolverRef.current = resolve;
+            setActivePresentation({
+              type: 'leaderboardRankChange',
+              item: {
+                id: presentationIdRef.current,
+                ...rankChange,
+              },
+            });
+            presentationIdRef.current += 1;
+          });
+        }
+
+        continue;
+      }
+
       const { xpUpdate } = nextItem;
       const fromTotalXp = Math.max(0, xpUpdate.previousTotalXp);
       const toTotalXp = Math.max(fromTotalXp, xpUpdate.newTotalXp);
@@ -200,7 +286,7 @@ export function XpGainProvider({ children }: PropsWithChildren) {
     }
 
     isProcessingRef.current = false;
-  }, []);
+  }, [checkLeaderboardRankChange]);
 
   const showRewards = useCallback((input: RewardTrigger) => {
     if (input.xpUpdate) {
@@ -224,6 +310,12 @@ export function XpGainProvider({ children }: PropsWithChildren) {
         achievement,
       });
     });
+
+    if (input.source === 'session') {
+      queueRef.current.push({
+        type: 'leaderboardRankCheck',
+      });
+    }
 
     void processQueue();
   }, [processQueue]);
@@ -269,6 +361,35 @@ export function XpGainProvider({ children }: PropsWithChildren) {
   }, [authCoinBalance]);
 
   useEffect(() => {
+    const requestId = leaderboardBaselineRequestIdRef.current + 1;
+    leaderboardBaselineRequestIdRef.current = requestId;
+    lastKnownTop100RankRef.current = undefined;
+
+    if (currentUserId == null) {
+      lastKnownTop100RankRef.current = null;
+      return undefined;
+    }
+
+    let isMounted = true;
+
+    getCurrentTop100LeaderboardEntry()
+      .then((entry) => {
+        if (!isMounted || leaderboardBaselineRequestIdRef.current !== requestId) {
+          return;
+        }
+
+        lastKnownTop100RankRef.current = entry?.rank ?? null;
+      })
+      .catch((error) => {
+        console.error('Failed to load initial streak leaderboard rank:', error);
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [currentUserId, getCurrentTop100LeaderboardEntry]);
+
+  useEffect(() => {
     let isMounted = true;
 
     getProfile()
@@ -311,6 +432,10 @@ export function XpGainProvider({ children }: PropsWithChildren) {
       />
       <DailyQuestRewardBar
         item={activePresentation?.type === 'dailyQuest' ? activePresentation.item : null}
+        onComplete={handlePresentationComplete}
+      />
+      <LeaderboardRankChangeBar
+        item={activePresentation?.type === 'leaderboardRankChange' ? activePresentation.item : null}
         onComplete={handlePresentationComplete}
       />
       <AchievementUnlockBar
