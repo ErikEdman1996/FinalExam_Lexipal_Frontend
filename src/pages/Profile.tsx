@@ -262,6 +262,8 @@ interface ProfileStatCardProps {
   icon: ComponentType<{ size?: number; className?: string }>;
   tone: 'brand' | 'accent';
   delayMs: number;
+  className?: string;
+  isCompact?: boolean;
 }
 
 function ProfileStatCard({
@@ -270,6 +272,8 @@ function ProfileStatCard({
   icon: Icon,
   tone,
   delayMs,
+  className,
+  isCompact = false,
 }: ProfileStatCardProps) {
   const toneClasses = tone === 'accent'
     ? {
@@ -280,16 +284,28 @@ function ProfileStatCard({
       chip: 'bg-brand-soft',
       icon: 'text-brand-strong',
     };
+  const cardClassName = [
+    'rounded-[28px] border border-border bg-surface shadow-[0_14px_30px_rgba(31,41,55,0.06)]',
+    isCompact ? 'flex flex-col justify-center p-4' : 'p-5',
+    className,
+  ].filter(Boolean).join(' ');
+  const iconClassName = isCompact
+    ? `flex h-11 w-11 items-center justify-center rounded-[14px] ${toneClasses.chip}`
+    : `flex h-12 w-12 items-center justify-center rounded-[16px] ${toneClasses.chip}`;
+  const valueClassName = isCompact
+    ? 'mt-4 text-[1.75rem] font-semibold leading-none text-text'
+    : 'mt-5 text-[2rem] font-semibold leading-none text-text';
+  const iconSize = isCompact ? 20 : 22;
 
   return (
     <div
-      className="rounded-[28px] border border-border bg-surface p-5 shadow-[0_14px_30px_rgba(31,41,55,0.06)]"
+      className={cardClassName}
       style={{ animationDelay: `${delayMs}ms` }}
     >
-      <div className={`flex h-12 w-12 items-center justify-center rounded-[16px] ${toneClasses.chip}`}>
-        <Icon size={22} className={toneClasses.icon} />
+      <div className={iconClassName}>
+        <Icon size={iconSize} className={toneClasses.icon} />
       </div>
-      <p className="mt-5 text-[2rem] font-semibold leading-none text-text">{value}</p>
+      <p className={valueClassName}>{value}</p>
       <p className="mt-2 text-sm text-text-muted">{label}</p>
     </div>
   );
@@ -1131,6 +1147,9 @@ export default function Profile() {
       };
     });
   }, [activeReadingSeries]);
+  const activeReadingSeriesPagesRead = activeReadingSeries
+    ? (readingChartData.at(-1)?.cumulativePagesRead ?? 0)
+    : null;
 
   const handleReadingSeriesRangeChange = (nextRange: ProfileReadingSeriesRange) => {
     setActiveReadingSeriesRange(nextRange);
@@ -1266,6 +1285,7 @@ export default function Profile() {
 
   const unlockedAchievementsCount = achievements.filter((achievement) => achievement.unlocked).length;
   const totalAchievementsCount = achievements.length;
+  const displayedReadingPagesRead = activeReadingSeriesPagesRead ?? stats.totalPagesRead;
 
   const statCards = [
     {
@@ -1302,7 +1322,7 @@ export default function Profile() {
 
   const statsSections = (
     <>
-      <section className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <section className="mt-6 grid grid-cols-1 items-stretch gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {statCards.slice(0, 3).map((card, index) => (
           <ProfileStatCard
             key={card.label}
@@ -1319,20 +1339,36 @@ export default function Profile() {
           errorMessage={activeReadingSeriesError}
           isLoading={isActiveReadingSeriesLoading}
           series={activeReadingSeries}
-          totalPagesRead={stats.totalPagesRead}
+          totalPagesRead={displayedReadingPagesRead}
           onRangeChange={handleReadingSeriesRangeChange}
           onRetry={() => void loadReadingSeries(activeReadingSeriesRange)}
         />
-        {statCards.slice(3).map((card, index) => (
-          <ProfileStatCard
-            key={card.label}
-            label={card.label}
-            value={card.value}
-            icon={card.icon}
-            tone={card.tone}
-            delayMs={(index + 4) * 80}
-          />
-        ))}
+        <div className="hidden min-h-0 lg:grid lg:h-full lg:grid-rows-2 lg:gap-4">
+          {statCards.slice(3).map((card, index) => (
+            <ProfileStatCard
+              key={card.label}
+              label={card.label}
+              value={card.value}
+              icon={card.icon}
+              tone={card.tone}
+              delayMs={(index + 4) * 80}
+              className="h-full min-h-0"
+              isCompact
+            />
+          ))}
+        </div>
+        <div className="contents lg:hidden">
+          {statCards.slice(3).map((card, index) => (
+            <ProfileStatCard
+              key={card.label}
+              label={card.label}
+              value={card.value}
+              icon={card.icon}
+              tone={card.tone}
+              delayMs={(index + 4) * 80}
+            />
+          ))}
+        </div>
       </section>
 
       {lastFreezeProtection ? (
