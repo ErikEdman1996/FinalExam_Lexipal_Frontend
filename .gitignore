@@ -26,3 +26,11 @@ dist-ssr
 .agents/
 .augment/
 .claude/
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+src/main/resources/application-local.properties
+src/main/resources/application-local.yml
+*.log

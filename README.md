@@ -1,74 +1,81 @@
 # Lexipal Frontend
+### A personal reading space built with React and TypeScript
 
-Frontend for Lexipal, a React + TypeScript reading companion with library tracking, reading sessions, BookCircles, word lookup history, challenges, XP progression, and Keycloak-based sign-in.
+The web interface for **Lexipal**, my graduation project and reading companion. Readers can organise their library, track reading sessions, save notes and vocabulary, and follow their progress over time.
 
-## Stack
+[Backend and project overview](https://github.com/ErikEdman1996/FinalExam_Lexipal) · [Application entry point](src/main.tsx) · [API client](src/api/api.ts)
 
-- React 18
-- TypeScript
-- Vite
-- Tailwind CSS v4
-- React Router
-- Keycloak
+## Features
 
-## Requirements
+- Personal library, book details and reading lists.
+- Reading sessions with reflections, notes and word lookups.
+- Book circles with shared reading and chat.
+- Challenges, flashcards, crosswords, XP and streaks.
+- Keycloak authentication and profile onboarding.
+- Responsive application shell and bottom navigation.
 
-- Node.js 22+
-- npm 10+
-- A running Lexipal backend
-- A running Keycloak instance
+## Technology
 
-## Setup
+| Area | Stack |
+| --- | --- |
+| UI | React 18, TypeScript |
+| Build | Vite 8 |
+| Styling | Tailwind CSS 4 |
+| Navigation | React Router |
+| Authentication | Keycloak JS |
+| Quality checks | ESLint, TypeScript compiler |
 
-1. Install dependencies:
+## Run locally
+
+Use a current **Node.js 22 LTS** release (the major version is pinned in [.nvmrc](.nvmrc)) and npm. Start the [backend](https://github.com/ErikEdman1996/FinalExam_Lexipal#run-locally), PostgreSQL and Keycloak first.
 
 ```bash
-npm install
+git clone https://github.com/ErikEdman1996/FinalExam_Lexipal_Frontend.git
+cd FinalExam_Lexipal_Frontend
+npm ci
+cp .env.example .env.local
+npm run dev
 ```
 
-2. Start the backend services the frontend expects:
+On PowerShell, use `Copy-Item .env.example .env.local` instead of `cp`. Open **http://localhost:5173**.
 
-- Backend API at `http://localhost:8585`
-- Keycloak at `http://localhost:8080`
-- Frontend dev server at `http://localhost:5173`
+### Environment
 
-3. Review authentication settings in `src/features/auth/keycloak.ts`.
+The application reads its configuration from Vite environment variables. See [.env.example](.env.example).
 
-Current defaults:
+| Variable | Local value |
+| --- | --- |
+| `VITE_API_ROOT_URL` | `http://localhost:8585` |
+| `VITE_KEYCLOAK_URL` | `http://localhost:8080` |
+| `VITE_KEYCLOAK_REALM` | `Lexipal_Realm` |
+| `VITE_KEYCLOAK_CLIENT_ID` | `Lexipal_Frontend` |
+| `VITE_KEYCLOAK_BACKEND_CLIENT_ID` | `Lexipal_Backend` |
 
-- `url`: `http://localhost:8080`
-- `realm`: `Lexipal_Realm`
-- `clientId`: `Lexipal_Frontend`
+Vite variables are part of the browser bundle: they must not contain secrets. Restart the dev server after changing them. When no API root is supplied, Vite forwards `/lexipal` requests (including WebSockets) to port 8585.
 
-The Keycloak `Lexipal_Frontend` client must allow the local frontend origin:
+### Keycloak configuration
+
+Configure a public OpenID Connect client named `Lexipal_Frontend` in `Lexipal_Realm`, with Standard Flow enabled:
 
 - Valid redirect URIs: `http://localhost:5173/*`
-- Valid post logout redirect URIs: `http://localhost:5173/*`
+- Valid post-logout redirect URIs: `http://localhost:5173/*`
 - Web origins: `http://localhost:5173`
 
-Vite is configured with `strictPort: true` so the dev server fails instead of silently moving to another port. This keeps Keycloak redirect URIs predictable.
+The frontend uses `check-sso`, then loads the user's backend profile and displays nickname onboarding when needed. Configure backend roles and token claims consistently with the backend JWT converter.
 
-4. Optionally set `VITE_API_ROOT_URL` if the API is not served from the same origin.
+Vite uses `strictPort: true` to keep redirect URLs predictable. Free port 5173 rather than silently starting on another port.
 
-Example `.env.local`:
+## Development commands
 
-```bash
-VITE_API_ROOT_URL=http://localhost:8585
-```
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Start the development server |
+| `npm run lint` | Run ESLint |
+| `npm run typecheck` | Check application TypeScript |
+| `npm run build` | Type-check and produce the production bundle |
+| `npm run preview` | Preview the built bundle locally |
 
-If `VITE_API_ROOT_URL` is omitted, Vite proxy rules in `vite.config.ts` forward `/lexipal` and `/test` to `http://localhost:8585` during local development.
-
-## Scripts
-
-- `npm run dev` starts the Vite dev server
-- `npm run build` runs the production build
-- `npm run lint` runs ESLint
-- `npm run typecheck` runs `tsc --noEmit -p tsconfig.app.json`
-- `npm run preview` serves the built app locally
-
-## Quality Gates
-
-Run these before shipping changes:
+Before submitting a change:
 
 ```bash
 npm run lint
@@ -76,30 +83,22 @@ npm run typecheck
 npm run build
 ```
 
-## Project Notes
+These are static/build checks; the repository does not define an automated frontend test command.
 
-- The main app entry is `src/main.tsx`.
-- API access lives in `src/api/api.ts`.
-- App-wide auth state is managed from `src/features/auth/AuthProvider.tsx`.
-- Bottom navigation and responsive shell UI live in `src/components/BottomNav.tsx`.
+## Code map
 
-## Authentication Flow
+| Path | Responsibility |
+| --- | --- |
+| [src/main.tsx](src/main.tsx) | Application bootstrap |
+| [src/api/api.ts](src/api/api.ts) | Backend API access |
+| [src/features/auth](src/features/auth) | Keycloak and authentication state |
+| [src/components](src/components) | Shared UI components |
+| [vite.config.ts](vite.config.ts) | Development server and proxies |
 
-- The app initializes Keycloak with `check-sso`.
-- After authentication, the frontend bootstraps the current profile from the backend.
-- If the user still needs onboarding, the nickname flow is shown before normal app usage.
+## Manual checks
 
-## Current Development Assumptions
+After a change, verify sign-in and sign-out, book search and creation, reading sessions and notes, vocabulary practice, book circles and chat, and profile progress.
 
-- Backend routes are served under `/lexipal/api/v1`
-- Dictionary lookups also use `/test`
-- Keycloak configuration is currently checked into source rather than loaded from env
+This repository is the frontend portion of a graduation project with continued development. A working backend and a configured Keycloak realm are required; a realm export is not included.
 
-## Manual Regression Checklist
-
-- Library search, card navigation, and add-book flow
-- Book details, notes, and reading-session entry
-- Reading session reflection, word lookup, and saved notes
-- BookCircles create, join, copy-code, and member-details flows
-- Challenge, flashcard, crossword, and looked-up word flows
-- Profile nickname update, streaks, and recent activity
+Built by **Erik Edman** · [LinkedIn](https://www.linkedin.com/in/erik-edman-b98a12395/)
